@@ -1,0 +1,270 @@
+<?php
+
+declare(strict_types=1);
+
+function app_container(string $key = null)
+{
+    if (!isset($GLOBALS['__gemdata_container'])) {
+        $GLOBALS['__gemdata_container'] = [];
+    }
+    if ($key === null) {
+        return $GLOBALS['__gemdata_container'];
+    }
+    if (!array_key_exists($key, $GLOBALS['__gemdata_container'])) {
+        throw new RuntimeException("Service {$key} is not registered.");
+    }
+    return $GLOBALS['__gemdata_container'][$key];
+}
+
+function register_service(string $key, $value): void
+{
+    $GLOBALS['__gemdata_container'][$key] = $value;
+}
+
+function app(string $key)
+{
+    return app_container($key);
+}
+
+function config(?string $path = null, $default = null)
+{
+    $config = app_container('config');
+    if ($path === null) {
+        return $config;
+    }
+    $segments = explode('.', $path);
+    $value = $config;
+    foreach ($segments as $segment) {
+        if (!is_array($value) || !array_key_exists($segment, $value)) {
+            return $default;
+        }
+        $value = $value[$segment];
+    }
+    return $value;
+}
+
+function base_url(string $path = ''): string
+{
+    $base = rtrim((string) config('app.base_url', ''), '/');
+    $path = ltrim($path, '/');
+    return $path === '' ? $base : $base . '/' . $path;
+}
+
+function app_origin(): string
+{
+    return rtrim((string) config('app.public_origin', ''), '/');
+}
+
+function absolute_url(string $path = ''): string
+{
+    return app_origin() . base_url($path);
+}
+
+function is_https_request(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+
+    if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
+        return true;
+    }
+
+    return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+}
+
+function e(?string $value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function redirect(string $path): void
+{
+    header('Location: ' . $path);
+    exit;
+}
+
+function is_post(): bool
+{
+    return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
+}
+
+function is_get(): bool
+{
+    return strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET';
+}
+
+function csrf_token(): string
+{
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verify_csrf(): void
+{
+    $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', (string) $token)) {
+        http_response_code(419);
+        exit('Invalid CSRF token.');
+    }
+}
+
+function old(string $key, string $default = ''): string
+{
+    return e($_POST[$key] ?? $default);
+}
+
+function flash(string $key, ?string $message = null): ?string
+{
+    if ($message !== null) {
+        $_SESSION['flash'][$key] = $message;
+        return null;
+    }
+    $value = $_SESSION['flash'][$key] ?? null;
+    unset($_SESSION['flash'][$key]);
+    return $value;
+}
+
+function money($amount): string
+{
+    return 'NGN ' . number_format((float) $amount, 2);
+}
+
+function human_datetime(?string $value): string
+{
+    if (!$value) {
+        return '-';
+    }
+
+    try {
+        $date = new DateTimeImmutable($value);
+        $now = new DateTimeImmutable('now');
+        $diffSeconds = $now->getTimestamp() - $date->getTimestamp();
+
+        if ($diffSeconds >= 0 && $diffSeconds < 60) {
+            return 'Just now';
+        }
+
+        if ($diffSeconds >= 60 && $diffSeconds < 3600) {
+            $minutes = (int) floor($diffSeconds / 60);
+            return $minutes . ' min' . ($minutes === 1 ? '' : 's') . ' ago';
+        }
+
+        if ($date->format('Y-m-d') === $now->format('Y-m-d')) {
+            return 'Today, ' . $date->format('g:i A');
+        }
+
+        $yesterday = $now->sub(new DateInterval('P1D'));
+        if ($date->format('Y-m-d') === $yesterday->format('Y-m-d')) {
+            return 'Yesterday, ' . $date->format('g:i A');
+        }
+
+        return $date->format('M j, Y g:i A');
+    } catch (Throwable $throwable) {
+        return (string) $value;
+    }
+}
+
+function client_ip(): string
+{
+    $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));
+    $trustedProxies = array_map('trim', (array) config('app.trusted_proxies', []));
+    $allowForwarded = $trustedProxies !== [] && in_array($remoteAddr, $trustedProxies, true);
+
+    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'] as $key) {
+        if (!$allowForwarded && in_array($key, ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR'], true)) {
+            continue;
+        }
+        $value = trim((string) ($_SERVER[$key] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        if ($key === 'HTTP_X_FORWARDED_FOR') {
+            $parts = array_map('trim', explode(',', $value));
+            return $parts[0] ?? '127.0.0.1';
+        }
+        return $value;
+    }
+
+    return '127.0.0.1';
+}
+
+function fresh_idempotency_key(string $prefix = 'req'): string
+{
+    return $prefix . ':' . bin2hex(random_bytes(16));
+}
+
+function current_user_agent(): string
+{
+    return substr(trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown')), 0, 255);
+}
+
+function json_decode_array(?string $json): array
+{
+    if (!$json) {
+        return [];
+    }
+    $decoded = json_decode($json, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function current_path_with_base(): string
+{
+    return (string) ($_SERVER['REQUEST_URI'] ?? base_url());
+}
+
+function query_except(array $keysToRemove = []): array
+{
+    $query = $_GET;
+    foreach ($keysToRemove as $key) {
+        unset($query[$key]);
+    }
+
+    return array_filter($query, static fn($value): bool => $value !== '' && $value !== null);
+}
+
+function pagination_meta(int $total, int $page, int $perPage): array
+{
+    $perPage = max(1, $perPage);
+    $totalPages = max(1, (int) ceil($total / $perPage));
+    $page = max(1, min($page, $totalPages));
+
+    return [
+        'total' => $total,
+        'page' => $page,
+        'per_page' => $perPage,
+        'total_pages' => $totalPages,
+        'offset' => ($page - 1) * $perPage,
+        'has_prev' => $page > 1,
+        'has_next' => $page < $totalPages,
+    ];
+}
+
+function render_pagination(array $meta, string $path, array $query = []): void
+{
+    if (($meta['total_pages'] ?? 1) <= 1) {
+        return;
+    }
+
+    $current = (int) ($meta['page'] ?? 1);
+    $totalPages = (int) ($meta['total_pages'] ?? 1);
+    $start = max(1, $current - 2);
+    $end = min($totalPages, $current + 2);
+    ?>
+    <nav class="pagination-shell" aria-label="Pagination">
+        <?php
+        $prevQuery = array_merge($query, ['page' => max(1, $current - 1)]);
+        $nextQuery = array_merge($query, ['page' => min($totalPages, $current + 1)]);
+        ?>
+        <a class="pagination-link<?= !empty($meta['has_prev']) ? '' : ' is-disabled'; ?>" href="<?= !empty($meta['has_prev']) ? e(base_url($path . '?' . http_build_query($prevQuery))) : '#'; ?>">Previous</a>
+        <div class="pagination-pages">
+            <?php for ($page = $start; $page <= $end; $page++): ?>
+                <a class="pagination-link<?= $page === $current ? ' is-active' : ''; ?>" href="<?= e(base_url($path . '?' . http_build_query(array_merge($query, ['page' => $page])))); ?>"><?= $page; ?></a>
+            <?php endfor; ?>
+        </div>
+        <a class="pagination-link<?= !empty($meta['has_next']) ? '' : ' is-disabled'; ?>" href="<?= !empty($meta['has_next']) ? e(base_url($path . '?' . http_build_query($nextQuery))) : '#'; ?>">Next</a>
+    </nav>
+    <?php
+}

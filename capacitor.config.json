@@ -1,0 +1,9 @@
+{
+  "appId": "com.gemdata.app",
+  "appName": "GemData",
+  "webDir": ".",
+  "server": {
+    "url": "https://example.com/gemdata",
+    "cleartext": false
+  }
+}

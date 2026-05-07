@@ -1,0 +1,378 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/bootstrap.php';
+
+if (admin_user()) {
+    redirect(base_url('admin/dashboard.php'));
+}
+
+if (user()) {
+    redirect(base_url('user/dashboard.php'));
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GemData | Fast, Secure & Affordable VTU Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gem: {
+                            50: '#f4f5ff',
+                            100: '#eaecff',
+                            500: '#5b61ff',
+                            600: '#474ee5',
+                            700: '#353db8',
+                            900: '#0f172a',
+                        }
+                    },
+                    boxShadow: {
+                        soft: '0 24px 70px rgba(15, 23, 42, 0.10)',
+                        float: '0 18px 42px rgba(91, 97, 255, 0.18)',
+                    },
+                    borderRadius: {
+                        '4xl': '2rem',
+                    }
+                }
+            }
+        };
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.querySelector('[data-public-nav-toggle]');
+            var panel = document.querySelector('[data-public-nav-panel]');
+            if (!toggle || !panel) {
+                return;
+            }
+            toggle.addEventListener('click', function () {
+                panel.classList.toggle('hidden');
+            });
+        });
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+    <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(91,97,255,0.12),_transparent_28%),radial-gradient(circle_at_right,_rgba(45,212,191,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#f5f7ff_52%,#eef2ff_100%)]">
+        <header class="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+                <a href="<?= e(base_url()); ?>" class="flex items-center gap-3">
+                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-gem-500 to-cyan-400 text-lg font-black text-white shadow-float">G</span>
+                    <span>
+                        <span class="block text-lg font-black tracking-tight">GemData</span>
+                        <span class="block text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">GemData Workspace</span>
+                    </span>
+                </a>
+                <nav class="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">
+                    <a class="transition hover:text-slate-950" href="#home">Home</a>
+                    <a class="transition hover:text-slate-950" href="#services">Services</a>
+                    <a class="transition hover:text-slate-950" href="#about">About</a>
+                    <a class="transition hover:text-slate-950" href="<?= e(base_url('docs/api.php')); ?>">API</a>
+                    <a class="transition hover:text-slate-950" href="<?= e(base_url('user/login.php')); ?>">Login</a>
+                    <a class="rounded-full bg-slate-950 px-5 py-3 text-white shadow-soft transition hover:bg-gem-600" href="<?= e(base_url('user/register.php')); ?>">Register</a>
+                </nav>
+                <button class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-soft md:hidden" type="button" data-public-nav-toggle aria-label="Toggle navigation">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                </button>
+            </div>
+            <div class="hidden border-t border-slate-200/70 bg-white/90 px-4 py-4 md:hidden" data-public-nav-panel>
+                <nav class="grid gap-3 text-sm font-semibold text-slate-700">
+                    <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="#home">Home</a>
+                    <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="#services">Services</a>
+                    <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="#about">About</a>
+                    <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="<?= e(base_url('docs/api.php')); ?>">API</a>
+                    <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="<?= e(base_url('user/login.php')); ?>">Login</a>
+                    <a class="rounded-2xl bg-slate-950 px-4 py-3 text-white" href="<?= e(base_url('user/register.php')); ?>">Register</a>
+                </nav>
+            </div>
+        </header>
+
+        <main>
+            <section id="home" class="mx-auto max-w-7xl px-4 pb-20 pt-12 sm:px-6 lg:px-8 lg:pb-28 lg:pt-20">
+                <div class="grid items-center gap-12 lg:grid-cols-[1.05fr,0.95fr]">
+                    <div>
+                        <span class="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-gem-700">Nigeria-ready VTU platform</span>
+                        <h1 class="mt-6 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">Fast, secure, and repeat-friendly VTU for everyday users and resellers.</h1>
+                        <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+                            Sell SME data, airtime, electricity, cable TV, exam PINs, and developer API services from one polished GemData Workspace built to feel trustworthy at every step.
+                        </p>
+                        <div class="mt-8 flex flex-wrap gap-4">
+                            <a class="rounded-full bg-gem-600 px-6 py-3.5 text-sm font-bold text-white shadow-float transition hover:bg-gem-700" href="<?= e(base_url('user/register.php')); ?>">Get Started</a>
+                            <a class="rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-soft transition hover:border-slate-400" href="<?= e(base_url('user/login.php')); ?>">Login</a>
+                            <a class="rounded-full border border-cyan-200 bg-cyan-50 px-6 py-3.5 text-sm font-bold text-cyan-800 transition hover:bg-cyan-100" href="#download">Download App</a>
+                        </div>
+                        <div class="mt-10 grid gap-4 sm:grid-cols-3">
+                            <div class="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-soft">
+                                <p class="text-2xl font-black text-slate-950">MTN, Airtel, Glo, 9mobile</p>
+                                <p class="mt-2 text-sm text-slate-600">Network-ready airtime and data delivery.</p>
+                            </div>
+                            <div class="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-soft">
+                                <p class="text-2xl font-black text-slate-950">Tracked wallet funding</p>
+                                <p class="mt-2 text-sm text-slate-600">Requests are verified before wallet credit to build confidence.</p>
+                            </div>
+                            <div class="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-soft">
+                                <p class="text-2xl font-black text-slate-950">API for resellers</p>
+                                <p class="mt-2 text-sm text-slate-600">Authenticated JSON endpoints for business scale.</p>
+                            </div>
+                        </div>
+                        <div class="mt-8 flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-600">
+                            <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-700">Wallet-safe funding flow</span>
+                            <span class="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-cyan-800">Real-time transaction visibility</span>
+                            <span class="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-gem-700">Optimized for Nigerian VTU buyers</span>
+                        </div>
+                    </div>
+
+                    <div class="relative">
+                        <div class="absolute -left-6 top-8 hidden h-28 w-28 rounded-full bg-cyan-300/30 blur-3xl lg:block"></div>
+                        <div class="absolute -right-8 bottom-6 hidden h-32 w-32 rounded-full bg-indigo-300/30 blur-3xl lg:block"></div>
+                        <div class="relative mx-auto max-w-md rounded-[2rem] border border-white/70 bg-white/85 p-5 shadow-soft backdrop-blur">
+                            <div class="rounded-[1.7rem] bg-slate-950 p-5 text-white shadow-2xl">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs uppercase tracking-[0.22em] text-cyan-300">GemData Workspace</p>
+                                        <h2 class="mt-2 text-2xl font-black">NGN 12,480.00</h2>
+                                    </div>
+                                    <span class="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-300">All services active</span>
+                                </div>
+                                <div class="mt-6 grid grid-cols-3 gap-3">
+                                    <div class="rounded-2xl bg-white/5 p-3">
+                                        <p class="text-xs text-slate-400">Today</p>
+                                        <p class="mt-2 text-lg font-bold">24 txns</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-white/5 p-3">
+                                        <p class="text-xs text-slate-400">Commission</p>
+                                        <p class="mt-2 text-lg font-bold">NGN 820</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-white/5 p-3">
+                                        <p class="text-xs text-slate-400">API</p>
+                                        <p class="mt-2 text-lg font-bold">Ready</p>
+                                    </div>
+                                </div>
+                                <div class="mt-6 rounded-3xl bg-white p-4 text-slate-900">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-bold">Quick Purchase</p>
+                                            <p class="mt-1 text-xs text-slate-500">MTN 1GB SME</p>
+                                        </div>
+                                        <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-gem-700">NGN 620</span>
+                                    </div>
+                                    <div class="mt-4 grid grid-cols-2 gap-3">
+                                        <button class="rounded-2xl bg-slate-100 px-4 py-3 text-left text-sm font-semibold">Buy Airtime</button>
+                                        <button class="rounded-2xl bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-cyan-800">Fund Wallet</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="services" class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-14">
+                <div class="mb-10 text-center">
+                    <span class="text-sm font-bold uppercase tracking-[0.22em] text-gem-700">Services</span>
+                    <h2 class="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Everything you need in one place</h2>
+                </div>
+                <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                        <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-blue-50 text-sky-700">
+                            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9a8 8 0 0 1 16 0"/><path d="M7 12a5 5 0 0 1 10 0"/><path d="M10 15a2 2 0 0 1 4 0"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/></svg>
+                        </div>
+                        <h3 class="mt-5 text-xl font-black text-slate-950">Data Bundles</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-600">SME and direct plans for MTN, Airtel, Glo, and 9mobile with fast delivery.</p>
+                    </article>
+                    <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                        <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-rose-50 text-rose-700">
+                            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 5.5h4"/><path d="M10.5 18h3"/></svg>
+                        </div>
+                        <h3 class="mt-5 text-xl font-black text-slate-950">Airtime VTU</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-600">Top up any Nigerian line instantly with a wallet-backed purchase flow.</p>
+                    </article>
+                    <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                        <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-amber-50 text-amber-700">
+                            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 5 14h6l-1 8 8-12h-6z"/></svg>
+                        </div>
+                        <h3 class="mt-5 text-xl font-black text-slate-950">Bills Payment</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-600">Handle electricity token payments and cable TV renewals in one dashboard.</p>
+                    </article>
+                    <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                        <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-indigo-50 text-gem-700">
+                            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h8"/></svg>
+                        </div>
+                        <h3 class="mt-5 text-xl font-black text-slate-950">API Integration</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-600">Developer-ready reseller API with wallet, transaction, and status visibility.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+                <div class="mb-8 flex items-end justify-between gap-4">
+                    <div>
+                        <span class="text-sm font-bold uppercase tracking-[0.22em] text-gem-700">Sample pricing</span>
+                        <h2 class="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Popular data cards</h2>
+                    </div>
+                    <a class="text-sm font-bold text-gem-700" href="<?= e(base_url('user/register.php')); ?>">Open your wallet</a>
+                </div>
+                <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <?php
+                    $plans = [
+                        ['name' => 'MTN 1GB SME', 'price' => 'NGN 620', 'validity' => '30 days', 'tone' => 'bg-yellow-50 text-yellow-700'],
+                        ['name' => 'Airtel 1GB', 'price' => 'NGN 650', 'validity' => '30 days', 'tone' => 'bg-red-50 text-red-700'],
+                        ['name' => 'Glo 1GB', 'price' => 'NGN 640', 'validity' => '30 days', 'tone' => 'bg-emerald-50 text-emerald-700'],
+                        ['name' => '9mobile 1GB', 'price' => 'NGN 670', 'validity' => '30 days', 'tone' => 'bg-green-50 text-green-700'],
+                    ];
+                    ?>
+                    <?php foreach ($plans as $plan): ?>
+                        <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                            <span class="inline-flex rounded-full px-3 py-1 text-xs font-bold <?= e($plan['tone']); ?>"><?= e($plan['validity']); ?></span>
+                            <h3 class="mt-5 text-xl font-black text-slate-950"><?= e($plan['name']); ?></h3>
+                            <p class="mt-2 text-3xl font-black text-slate-950"><?= e($plan['price']); ?></p>
+                            <p class="mt-3 text-sm text-slate-600">Best for agents, retailers, and daily customer delivery.</p>
+                            <a class="mt-6 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-gem-600" href="<?= e(base_url('user/register.php')); ?>">Buy Now</a>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+
+            <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+                <div class="grid gap-5 rounded-[2rem] border border-white/80 bg-white/80 p-6 shadow-soft sm:grid-cols-2 xl:grid-cols-4">
+                    <div><p class="text-4xl font-black text-slate-950">500K+</p><p class="mt-2 text-sm font-semibold text-slate-600">Transactions</p></div>
+                    <div><p class="text-4xl font-black text-slate-950">10K+</p><p class="mt-2 text-sm font-semibold text-slate-600">Users</p></div>
+                    <div><p class="text-4xl font-black text-slate-950">99.9%</p><p class="mt-2 text-sm font-semibold text-slate-600">Uptime</p></div>
+                    <div><p class="text-4xl font-black text-slate-950">24/7</p><p class="mt-2 text-sm font-semibold text-slate-600">Support</p></div>
+                </div>
+            </section>
+
+            <section class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+                <div class="grid gap-5 rounded-[2rem] border border-slate-200/70 bg-white/85 p-6 shadow-soft lg:grid-cols-3">
+                    <div class="rounded-3xl bg-slate-50 p-5">
+                        <p class="text-sm font-bold uppercase tracking-[0.18em] text-gem-700">Why users stay</p>
+                        <p class="mt-3 text-lg font-black text-slate-950">One wallet, one dashboard, one clear purchase flow.</p>
+                    </div>
+                    <div class="rounded-3xl bg-slate-50 p-5">
+                        <p class="text-sm font-bold uppercase tracking-[0.18em] text-gem-700">Trust cue</p>
+                        <p class="mt-3 text-base leading-7 text-slate-600">Funding requests are tracked and verified before wallet credit, so the money flow feels safer and easier to understand.</p>
+                    </div>
+                    <div class="rounded-3xl bg-slate-50 p-5">
+                        <p class="text-sm font-bold uppercase tracking-[0.18em] text-gem-700">Fast repeat usage</p>
+                        <p class="mt-3 text-base leading-7 text-slate-600">Frequent actions like buying data and airtime are designed for a short, repeatable flow.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="download" class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-16">
+                <div class="grid items-center gap-8 rounded-[2rem] bg-slate-950 px-6 py-8 text-white shadow-soft lg:grid-cols-[1fr,0.9fr] lg:px-10 lg:py-12">
+                    <div>
+                        <span class="text-sm font-bold uppercase tracking-[0.22em] text-cyan-300">Mobile access</span>
+                        <h2 class="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Download GemData App</h2>
+                        <p class="mt-4 max-w-2xl text-base leading-8 text-slate-300">Monitor wallet balance, buy VTU services, and track delivery on the go with the GemData mobile experience.</p>
+                        <a class="mt-8 inline-flex rounded-full bg-cyan-400 px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300" href="<?= e(base_url('user/register.php')); ?>">Install App</a>
+                    </div>
+                    <div class="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
+                        <div class="rounded-[1.4rem] bg-white p-5 text-slate-900">
+                            <p class="text-sm font-bold text-gem-700">GemData App</p>
+                            <div class="mt-5 space-y-4">
+                                <div class="rounded-3xl bg-slate-50 p-4">
+                                    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Wallet balance</p>
+                                    <p class="mt-2 text-2xl font-black">NGN 8,240.00</p>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="rounded-3xl bg-indigo-50 p-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-gem-700">Data</p>
+                                        <p class="mt-2 text-lg font-black">MTN 2GB</p>
+                                    </div>
+                                    <div class="rounded-3xl bg-emerald-50 p-4">
+                                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Bills</p>
+                                        <p class="mt-2 text-lg font-black">EKEDC</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="about" class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+                <div class="mb-10 text-center">
+                    <span class="text-sm font-bold uppercase tracking-[0.22em] text-gem-700">Why GemData</span>
+                    <h2 class="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Trust is our only currency</h2>
+                </div>
+                <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <?php
+                    $reasons = [
+                        ['title' => 'Instant Delivery', 'copy' => 'Fast fulfillment for data, airtime, and bill requests.', 'icon' => 'delivery'],
+                        ['title' => 'Secure Wallet', 'copy' => 'Structured wallet controls and auditable transaction records.', 'icon' => 'secure'],
+                        ['title' => 'Affordable Pricing', 'copy' => 'Competitive pricing designed for agents and end users.', 'icon' => 'pricing'],
+                        ['title' => 'Priority Support', 'copy' => 'Operational support and onboarding for resellers and partners.', 'icon' => 'support'],
+                    ];
+                    ?>
+                    <?php foreach ($reasons as $reason): ?>
+                        <article class="rounded-4xl border border-white/80 bg-white p-6 shadow-soft">
+                            <div class="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-100 text-slate-700">
+                                <?php if ($reason['icon'] === 'delivery'): ?>
+                                    <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 5 14h6l-1 8 8-12h-6z"/></svg>
+                                <?php elseif ($reason['icon'] === 'secure'): ?>
+                                    <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z"/></svg>
+                                <?php elseif ($reason['icon'] === 'pricing'): ?>
+                                    <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22"/><path d="M17 5.5c0-1.93-2.24-3.5-5-3.5S7 3.57 7 5.5 9.24 9 12 9s5 1.57 5 3.5S14.76 16 12 16s-5-1.57-5-3.5"/></svg>
+                                <?php else: ?>
+                                    <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16v10H7l-3 3z"/><path d="M8 10h8"/></svg>
+                                <?php endif; ?>
+                            </div>
+                            <h3 class="mt-5 text-xl font-black text-slate-950"><?= e($reason['title']); ?></h3>
+                            <p class="mt-3 text-sm leading-7 text-slate-600"><?= e($reason['copy']); ?></p>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+        </main>
+
+        <footer class="border-t border-slate-200/70 bg-white/80">
+            <div class="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr,0.8fr,0.8fr,0.8fr] lg:px-8">
+                <div>
+                    <p class="text-xl font-black text-slate-950">GemData</p>
+                    <p class="mt-3 max-w-xs text-sm leading-7 text-slate-600">Premium Nigerian VTU delivery for airtime, data, bills, and reseller API operations.</p>
+                </div>
+                <div>
+                    <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Links</p>
+                    <div class="mt-4 space-y-3 text-sm text-slate-600">
+                        <a class="block hover:text-slate-950" href="#home">Home</a>
+                        <a class="block hover:text-slate-950" href="#services">Services</a>
+                        <a class="block hover:text-slate-950" href="<?= e(base_url('docs/api.php')); ?>">API</a>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Access</p>
+                    <div class="mt-4 space-y-3 text-sm text-slate-600">
+                        <a class="block hover:text-slate-950" href="<?= e(base_url('user/login.php')); ?>">Login</a>
+                        <a class="block hover:text-slate-950" href="<?= e(base_url('user/register.php')); ?>">Register</a>
+                        <a class="block hover:text-slate-950" href="<?= e(base_url('admin/login.php')); ?>">Admin</a>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Contact</p>
+                    <div class="mt-4 space-y-3 text-sm text-slate-600">
+                        <p>support@gemdata.local</p>
+                        <p>+234 800 000 0000</p>
+                        <div class="flex gap-3 pt-1 text-slate-500">
+                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 4.01c-.77.35-1.6.58-2.47.69a4.27 4.27 0 0 0 1.88-2.36 8.4 8.4 0 0 1-2.7 1.03 4.22 4.22 0 0 0-7.32 2.89c0 .33.04.65.11.96A11.97 11.97 0 0 1 3 3.86a4.22 4.22 0 0 0 1.31 5.63 4.18 4.18 0 0 1-1.91-.53v.05a4.22 4.22 0 0 0 3.39 4.14 4.27 4.27 0 0 1-1.9.07 4.23 4.23 0 0 0 3.95 2.93A8.47 8.47 0 0 1 2 18.58 11.94 11.94 0 0 0 8.48 20.5c7.78 0 12.03-6.44 12.03-12.02 0-.18 0-.37-.01-.55A8.54 8.54 0 0 0 22 4.01z"/></svg>
+                            </span>
+                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+                            </span>
+                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/></svg>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

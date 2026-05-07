@@ -1,0 +1,22 @@
+{
+  "name": "gemdata-mobile-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor wrapper scaffold for the hosted GemData PHP application.",
+  "scripts": {
+    "build:web-assets": "cleancss -o assets/css/site.min.css assets/css/site.css && terser assets/js/app.js -o assets/js/app.min.js --compress --mangle",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "clean-css-cli": "^5.6.3",
+    "terser": "^5.39.2"
+  }
+}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Verification</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: #f8fbff;
+      color: #0f172a;
+    }
+
+    .card {
+      width: min(30rem, calc(100vw - 2rem));
+      padding: 2rem;
+      border-radius: 1.25rem;
+      background: #ffffff;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Verifying payment...</h1>
+    <p id="status">Please wait while we confirm your payment and update your wallet.</p>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const reference = new URLSearchParams(window.location.search).get('reference');
+
+    if (!reference) {
+      statusEl.textContent = 'No Paystack reference was found in the callback URL.';
+    } else {
+      fetch(`/api/verify/${encodeURIComponent(reference)}`)
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.message || 'Verification failed.');
+          }
+
+          statusEl.textContent = payload.message + (payload.walletBalance !== undefined ? ` New balance: NGN ${Number(payload.walletBalance).toFixed(2)}.` : '');
+        })
+        .catch((error) => {
+          statusEl.textContent = error.message;
+        });
+    }
+  </script>
+</body>
+</html>

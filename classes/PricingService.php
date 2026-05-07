@@ -1,0 +1,169 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GemData\Classes;
+
+class PricingService
+{
+    public function __construct(private Database $db)
+    {
+    }
+
+    public function normalizeNetwork(?string $network): ?string
+    {
+        $network = strtolower(trim((string) $network));
+        if ($network === '') {
+            return null;
+        }
+
+        return match ($network) {
+            'mtn' => 'mtn',
+            'airtel' => 'airtel',
+            'glo' => 'glo',
+            '9mobile', 'etisalat' => '9mobile',
+            default => $network,
+        };
+    }
+
+    public function resolveUserTier(array $user, bool $isApiUser = false): string
+    {
+        $tier = strtoupper((string) ($user['tier'] ?? 'USER'));
+        if ($isApiUser && $tier === 'USER') {
+            return 'API_RESELLER';
+        }
+
+        return in_array($tier, ['USER', 'RESELLER', 'AGENT', 'API_RESELLER'], true) ? $tier : 'USER';
+    }
+
+    public function resolve(int $userId, int $serviceId, ?string $network, float $requestedAmount, bool $isApiUser = false): array
+    {
+        $user = $this->db->first('SELECT * FROM users WHERE id = :id LIMIT 1', ['id' => $userId]) ?? [];
+        $tier = $this->resolveUserTier($user, $isApiUser);
+        $networkCode = $this->normalizeNetwork($network);
+
+        $custom = $this->db->first(
+            'SELECT selling_price
+             FROM user_custom_prices
+             WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+             LIMIT 1',
+            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+        );
+        if ($custom) {
+            $selling = (float) $custom['selling_price'];
+            return [
+                'tier' => $tier,
+                'network_code' => $networkCode,
+                'selling_price' => $requestedAmount > 0 ? $requestedAmount : $selling,
+                'cost_price' => $selling,
+                'profit_amount' => max(0, ($requestedAmount > 0 ? $requestedAmount : $selling) - $selling),
+                'pricing_source' => 'user_override',
+            ];
+        }
+
+        $price = $this->db->first(
+            'SELECT *
+             FROM service_prices
+             WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+             LIMIT 1',
+            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+        );
+        if (!$price && $tier !== 'USER') {
+            $price = $this->db->first(
+                'SELECT *
+                 FROM service_prices
+                 WHERE service_id = :service_id AND tier = :tier AND network_code IS NULL
+                 LIMIT 1',
+                ['service_id' => $serviceId, 'tier' => 'USER']
+            );
+        }
+
+        $configuredSelling = (float) ($price['selling_price'] ?? 0);
+        $costPrice = (float) ($price['cost_price'] ?? 0);
+        $sellingPrice = $requestedAmount > 0 ? $requestedAmount : $configuredSelling;
+        $profitAmount = max(0, $sellingPrice - ($costPrice > 0 ? $costPrice : $sellingPrice));
+
+        return [
+            'tier' => $tier,
+            'network_code' => $networkCode,
+            'selling_price' => $sellingPrice,
+            'cost_price' => $costPrice > 0 ? $costPrice : $sellingPrice,
+            'profit_amount' => $profitAmount,
+            'pricing_source' => $price ? 'tier' : 'legacy',
+        ];
+    }
+
+    public function tierPricesByService(int $serviceId): array
+    {
+        return $this->db->query(
+            'SELECT * FROM service_prices WHERE service_id = :service_id ORDER BY network_code IS NULL DESC, network_code, tier',
+            ['service_id' => $serviceId]
+        );
+    }
+
+    public function upsertTierPrice(int $serviceId, ?string $networkCode, string $tier, float $costPrice, float $sellingPrice): void
+    {
+        $networkCode = $this->normalizeNetwork($networkCode);
+        $existing = $this->db->first(
+            'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
+            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+        );
+
+        $profitMargin = $sellingPrice - $costPrice;
+        if ($existing) {
+            $this->db->execute(
+                'UPDATE service_prices
+                 SET cost_price = :cost_price, selling_price = :selling_price, profit_margin = :profit_margin
+                 WHERE id = :id',
+                [
+                    'cost_price' => $costPrice,
+                    'selling_price' => $sellingPrice,
+                    'profit_margin' => $profitMargin,
+                    'id' => $existing['id'],
+                ]
+            );
+            return;
+        }
+
+        $this->db->execute(
+            'INSERT INTO service_prices (service_id, network_code, tier, cost_price, selling_price, profit_margin)
+             VALUES (:service_id, :network_code, :tier, :cost_price, :selling_price, :profit_margin)',
+            [
+                'service_id' => $serviceId,
+                'network_code' => $networkCode,
+                'tier' => $tier,
+                'cost_price' => $costPrice,
+                'selling_price' => $sellingPrice,
+                'profit_margin' => $profitMargin,
+            ]
+        );
+    }
+
+    public function upsertUserPrice(int $userId, int $serviceId, ?string $networkCode, float $sellingPrice): void
+    {
+        $networkCode = $this->normalizeNetwork($networkCode);
+        $existing = $this->db->first(
+            'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
+            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+        );
+
+        if ($existing) {
+            $this->db->execute('UPDATE user_custom_prices SET selling_price = :selling_price WHERE id = :id', [
+                'selling_price' => $sellingPrice,
+                'id' => $existing['id'],
+            ]);
+            return;
+        }
+
+        $this->db->execute(
+            'INSERT INTO user_custom_prices (user_id, service_id, network_code, selling_price)
+             VALUES (:user_id, :service_id, :network_code, :selling_price)',
+            [
+                'user_id' => $userId,
+                'service_id' => $serviceId,
+                'network_code' => $networkCode,
+                'selling_price' => $sellingPrice,
+            ]
+        );
+    }
+}

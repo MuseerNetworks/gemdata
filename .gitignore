@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.*
+!.env.example
+build/
+dist/
+logs/
+*.log
+includes/config.local.php
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.secrets*
+.DS_Store
+Thumbs.db
