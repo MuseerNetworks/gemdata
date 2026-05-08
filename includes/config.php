@@ -5,8 +5,8 @@ declare(strict_types=1);
 $config = [
     'app' => [
         'name' => 'GemData',
-        'base_url' => '/gemdata',
-        'public_origin' => 'http://localhost',
+        'base_url' => '',
+        'public_origin' => '',
         'currency' => 'NGN',
         'rate_limit_per_minute' => 60,
         'timezone' => 'Africa/Lagos',
@@ -61,7 +61,7 @@ $config = [
         'background_color' => '#f8fbff',
         'display' => 'standalone',
         'orientation' => 'portrait',
-        'offline_page' => '/gemdata/offline.html',
+        'offline_page' => '/offline.html',
     ],
     'mobile' => [
         'capacitor_app_id' => 'com.gemdata.app',
@@ -72,6 +72,14 @@ $config = [
         'web_push_enabled' => false,
     ],
 ];
+
+$privateOverride = dirname(__DIR__, 2) . '/gemdata-config.php';
+if (is_file($privateOverride)) {
+    $privateConfig = require $privateOverride;
+    if (is_array($privateConfig)) {
+        $config = array_replace_recursive($config, $privateConfig);
+    }
+}
 
 $localOverride = __DIR__ . '/config.local.php';
 if (is_file($localOverride)) {

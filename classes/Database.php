@@ -6,6 +6,7 @@ namespace GemData\Classes;
 
 use PDO;
 use PDOException;
+use RuntimeException;
 
 class Database
 {
@@ -13,19 +14,35 @@ class Database
 
     public function __construct(array $config)
     {
+        foreach (['host', 'port', 'dbname', 'username', 'password', 'charset'] as $key) {
+            if (!array_key_exists($key, $config)) {
+                throw new RuntimeException('Database configuration is incomplete.');
+            }
+        }
+
+        $charset = (string) $config['charset'];
+        if ($charset === '') {
+            throw new RuntimeException('Database configuration is incomplete.');
+        }
+
         $dsn = sprintf(
             'mysql:host=%s;port=%s;dbname=%s;charset=%s',
             $config['host'],
             $config['port'],
             $config['dbname'],
-            $config['charset']
+            $charset
         );
 
-        $this->pdo = new PDO($dsn, $config['username'], $config['password'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]);
+        try {
+            $this->pdo = new PDO($dsn, (string) $config['username'], (string) $config['password'], [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_STRINGIFY_FETCHES => false,
+            ]);
+        } catch (PDOException $exception) {
+            throw new RuntimeException('Database connection failed.', 0, $exception);
+        }
     }
 
     public function pdo(): PDO
