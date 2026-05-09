@@ -20,23 +20,30 @@ return [
     ],
     'providers' => [
         'mock_main' => [
+            'label' => 'Mock VTU Provider',
+            'driver' => 'mock',
+            'base_url' => 'local',
             'api_key' => '',
             'api_secret' => '',
+            'enabled' => true,
+            'sandbox' => true,
         ],
         'smeplug' => [
             'label' => 'SMEPlug',
-            'driver' => 'mock',
+            'driver' => 'smeplug',
             'base_url' => 'https://example.test',
             'api_key' => '',
             'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
         ],
     ],
     'webhooks' => [
         'shared_secret' => 'replace-with-a-long-random-string',
-        'allowed_sources' => ['generic', 'provider_a'],
+        'allowed_sources' => ['paystack'],
     ],
     'payments' => [
-        'default_gateway' => 'paystack',
+        'default_gateway' => 'bank_transfer',
         'display_gateway_name' => 'Paystack',
         'auto_verify_mock_funding' => false,
         'auto_assign_dedicated_account' => true,

@@ -19,24 +19,31 @@ return [
         'charset' => 'utf8mb4',
     ],
     'providers' => [
-        'mock_main' => [
-            'api_key' => '',
-            'api_secret' => '',
-        ],
         'smeplug' => [
             'label' => 'SMEPlug',
-            'driver' => 'mock',
+            'driver' => 'smeplug',
             'base_url' => 'https://example.test',
             'api_key' => '',
             'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'vtpass' => [
+            'label' => 'VTpass',
+            'driver' => 'vtpass',
+            'base_url' => 'https://example.test',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
         ],
     ],
     'webhooks' => [
         'shared_secret' => 'replace-with-a-long-random-string',
-        'allowed_sources' => ['generic', 'provider_a'],
+        'allowed_sources' => ['paystack'],
     ],
     'payments' => [
-        'default_gateway' => 'paystack',
+        'default_gateway' => 'bank_transfer',
         'display_gateway_name' => 'Paystack',
         'auto_verify_mock_funding' => false,
         'auto_assign_dedicated_account' => true,

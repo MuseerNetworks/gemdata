@@ -1,45 +1,39 @@
 # GemData Deployment Checklist
 
-## Configuration
-- Create a private production config at `/home/<cpanel_user>/gemdata-config.php`.
-- Use `includes/config.local.php` only for local development or non-cPanel overrides.
-- Set `app.environment` correctly.
-- Set `app.base_url` to `''` when the app is hosted at the domain root.
-- Set `app.public_origin` to `https://gemdata.com.ng`.
-- Replace local database credentials with cPanel credentials:
-  - database: `yyrigitd_gemdata`
-  - user: `yyrigitd_admin`
-  - password: the password you create in cPanel
-  - host: usually `localhost`
-  - port: usually `3306`
-- Set a strong `webhooks.shared_secret`.
-- Disable `mail.debug_display_reset_links` in production.
-- Keep provider credentials only in the local override file.
-- Use restrictive permissions on `/home/<cpanel_user>/gemdata-config.php`, ideally `600`.
+## Before deploy
+- Confirm `.cpanel.yml` exists at repo root.
+- Confirm production secrets exist only in `/home/<cpanel_user>/gemdata-config.php`.
+- Confirm `includes/config.local.php` is absent on production.
+- Back up the live database before every release.
+- Enable maintenance mode from Admin Settings before any schema import or repair.
 
-## Payments and recovery
-- Set the live payment gateway identifier in `payments.default_gateway`.
-- Set `payments.paystack_secret_key` and, if needed, `payments.dva_preferred_bank`.
-- Decide whether `payments.auto_assign_dedicated_account` should be enabled in that environment.
-- Make the payment callback endpoint publicly reachable.
-- Configure a real mail transport for password reset delivery.
+## Database
+- Import `database/database.sql` for fresh installs only.
+- For existing or partially migrated databases, import `database/production-repair.sql` first.
+- Verify `schema_migrations`, `provider_accounts`, `webhook_events`, `transaction_events`, and `system_settings` exist after import.
+- Keep all provider rows inactive until credentials are configured and tested.
 
-## Operations
-- Apply the latest SQL migrations before release.
-- Schedule `cron/process-pending.php` to run at a short interval, for example:
-  - `*/2 * * * * /usr/local/bin/php /home/<cpanel_user>/public_html/cron/process-pending.php`
-- Keep `cron/retry-failed.php` enabled only if automated retry policy is intended.
-- If retry automation is enabled, schedule it explicitly:
-  - `*/5 * * * * /usr/local/bin/php /home/<cpanel_user>/public_html/cron/retry-failed.php`
-- Verify admin login, user login, wallet funding, and one service purchase.
-- Register a new user and confirm the dedicated transfer account shows as assigned or pending on the wallet funding page.
-- Check provider balances, webhook validation, and retry behavior.
+## cPanel
+- Use `Git Version Control > Update from Remote`.
+- Use `Deploy HEAD Commit` only after the repo is clean and the latest changes are present.
+- Confirm deployed files land in `/home/<cpanel_user>/public_html/`.
+- Confirm `paystack-node/` is not copied into `public_html/`.
 
-## Safety
-- Back up the database before deployment.
-- Ensure PHP and webserver error logs are enabled.
-- Keep cron and local-only tools inaccessible from public web routes.
-- Keep files and folders on shared hosting at standard permissions:
-  - directories `755`
-  - public PHP files `644`
-  - private config outside webroot `600` where supported
+## Production config
+- Set `app.environment = 'production'`.
+- Set `app.public_origin = 'https://gemdata.com.ng'`.
+- Set real cPanel database credentials.
+- Set `payments.default_gateway = 'bank_transfer'`.
+- Set `payments.paystack_secret_key`.
+- Set `webhooks.shared_secret`.
+- Keep every provider `enabled => false` until live verification is complete.
+
+## Cron
+- `*/2 * * * * /usr/local/bin/php /home/<cpanel_user>/public_html/cron/process-pending.php`
+- `*/5 * * * * /usr/local/bin/php /home/<cpanel_user>/public_html/cron/retry-failed.php`
+- `*/10 * * * * /usr/local/bin/php /home/<cpanel_user>/public_html/cron/reconcile.php`
+
+## After deploy
+- Disable maintenance mode only after schema import and smoke checks pass.
+- Confirm admin login, user login, dashboard, provider page, wallet page, and webhook endpoint return clean responses.
+- Confirm PHP logs show no exposed secrets and no bootstrap/config failures.

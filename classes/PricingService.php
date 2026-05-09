@@ -6,7 +6,7 @@ namespace GemData\Classes;
 
 class PricingService
 {
-    public function __construct(private Database $db)
+    public function __construct(private Database $db, private ?SimpleCache $cache = null)
     {
     }
 
@@ -38,6 +38,14 @@ class PricingService
 
     public function resolve(int $userId, int $serviceId, ?string $network, float $requestedAmount, bool $isApiUser = false): array
     {
+        $cacheKey = 'pricing:resolve:' . $userId . ':' . $serviceId . ':' . ($network ?? 'none') . ':' . ($isApiUser ? 'api' : 'web');
+        if ($requestedAmount <= 0 && $this->cache) {
+            $cached = $this->cache->get($cacheKey);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
         $user = $this->db->first('SELECT * FROM users WHERE id = :id LIMIT 1', ['id' => $userId]) ?? [];
         $tier = $this->resolveUserTier($user, $isApiUser);
         $networkCode = $this->normalizeNetwork($network);
@@ -51,7 +59,7 @@ class PricingService
         );
         if ($custom) {
             $selling = (float) $custom['selling_price'];
-            return [
+            $resolved = [
                 'tier' => $tier,
                 'network_code' => $networkCode,
                 'selling_price' => $requestedAmount > 0 ? $requestedAmount : $selling,
@@ -59,6 +67,10 @@ class PricingService
                 'profit_amount' => max(0, ($requestedAmount > 0 ? $requestedAmount : $selling) - $selling),
                 'pricing_source' => 'user_override',
             ];
+            if ($requestedAmount <= 0 && $this->cache) {
+                $this->cache->put($cacheKey, $resolved, 120);
+            }
+            return $resolved;
         }
 
         $price = $this->db->first(
@@ -83,7 +95,7 @@ class PricingService
         $sellingPrice = $requestedAmount > 0 ? $requestedAmount : $configuredSelling;
         $profitAmount = max(0, $sellingPrice - ($costPrice > 0 ? $costPrice : $sellingPrice));
 
-        return [
+        $resolved = [
             'tier' => $tier,
             'network_code' => $networkCode,
             'selling_price' => $sellingPrice,
@@ -91,14 +103,27 @@ class PricingService
             'profit_amount' => $profitAmount,
             'pricing_source' => $price ? 'tier' : 'legacy',
         ];
+        if ($requestedAmount <= 0 && $this->cache) {
+            $this->cache->put($cacheKey, $resolved, 120);
+        }
+
+        return $resolved;
     }
 
     public function tierPricesByService(int $serviceId): array
     {
-        return $this->db->query(
+        $cacheKey = 'pricing:tier-prices:' . $serviceId;
+        $cached = $this->cache?->get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $rows = $this->db->query(
             'SELECT * FROM service_prices WHERE service_id = :service_id ORDER BY network_code IS NULL DESC, network_code, tier',
             ['service_id' => $serviceId]
         );
+        $this->cache?->put($cacheKey, $rows, 120);
+        return $rows;
     }
 
     public function upsertTierPrice(int $serviceId, ?string $networkCode, string $tier, float $costPrice, float $sellingPrice): void
@@ -122,6 +147,7 @@ class PricingService
                     'id' => $existing['id'],
                 ]
             );
+            $this->cache?->forget('pricing:tier-prices:' . $serviceId);
             return;
         }
 
@@ -137,6 +163,7 @@ class PricingService
                 'profit_margin' => $profitMargin,
             ]
         );
+        $this->cache?->forget('pricing:tier-prices:' . $serviceId);
     }
 
     public function upsertUserPrice(int $userId, int $serviceId, ?string $networkCode, float $sellingPrice): void
@@ -152,6 +179,7 @@ class PricingService
                 'selling_price' => $sellingPrice,
                 'id' => $existing['id'],
             ]);
+            $this->cache?->forget('pricing:tier-prices:' . $serviceId);
             return;
         }
 
@@ -165,5 +193,6 @@ class PricingService
                 'selling_price' => $sellingPrice,
             ]
         );
+        $this->cache?->forget('pricing:tier-prices:' . $serviceId);
     }
 }

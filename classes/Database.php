@@ -11,9 +11,11 @@ use RuntimeException;
 class Database
 {
     private PDO $pdo;
+    private ?AppLogger $logger;
 
-    public function __construct(array $config)
+    public function __construct(array $config, ?AppLogger $logger = null)
     {
+        $this->logger = $logger;
         foreach (['host', 'port', 'dbname', 'username', 'password', 'charset'] as $key) {
             if (!array_key_exists($key, $config)) {
                 throw new RuntimeException('Database configuration is incomplete.');
@@ -41,6 +43,12 @@ class Database
                 PDO::ATTR_STRINGIFY_FETCHES => false,
             ]);
         } catch (PDOException $exception) {
+            $this->logger?->error('Database connection failed.', [
+                'host' => (string) $config['host'],
+                'port' => (string) $config['port'],
+                'dbname' => (string) $config['dbname'],
+                'exception' => $exception->getMessage(),
+            ]);
             throw new RuntimeException('Database connection failed.', 0, $exception);
         }
     }

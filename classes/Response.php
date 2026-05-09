@@ -10,6 +10,7 @@ class Response
     {
         http_response_code($code);
         header('Content-Type: application/json');
+        $meta['request_id'] = $meta['request_id'] ?? app(\GemData\Classes\AppLogger::class)->requestId();
         $payload = [
             'status' => $status,
             'message' => $message,

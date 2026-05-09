@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $service = app(\GemData\Classes\TransactionService::class);
+$recovered = $service->recoverStaleProcessingLocks();
 $processed = $service->processPendingTransactions(20);
 
+echo "Recovered stale locks: {$recovered}\n";
 echo "Processed pending transactions: {$processed}\n";

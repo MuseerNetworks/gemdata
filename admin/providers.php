@@ -9,11 +9,15 @@ if (is_post()) {
     $action = $_POST['action'] ?? '';
     if ($action === 'save') {
         $providers->upsertProvider($_POST);
-        app(\GemData\Classes\ActivityLogger::class)->log('admin', (int) $admin['id'], 'provider_saved', 'Updated provider configuration.', ['code' => $_POST['code'] ?? '']);
+        app(\GemData\Classes\ActivityLogger::class)->log('admin', (int) $admin['id'], 'provider_switch', 'Updated provider configuration.', [
+            'code' => $_POST['code'] ?? '',
+            'status' => $_POST['status'] ?? 'active',
+            'driver' => $_POST['driver'] ?? 'mock',
+        ]);
         flash('success', 'Provider saved successfully.');
     } elseif ($action === 'test') {
         $result = $providers->testConnection((int) $_POST['provider_id']);
-        flash('success', $result['message'] . ' (' . $result['provider'] . ')');
+        flash('success', $result['message'] . ' (' . $result['provider'] . ') health=' . ($result['health']['status'] ?? 'unknown'));
     }
     redirect(base_url('admin/providers.php'));
 }
@@ -29,17 +33,30 @@ render_header('Providers', 'admin');
             <input type="hidden" name="action" value="save">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="code" placeholder="provider code">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="name" placeholder="provider name">
+            <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="driver">
+                <option value="smeplug">SMEPlug</option>
+                <option value="vtpass">VTpass</option>
+                <option value="clubkonnect">ClubKonnect</option>
+                <option value="alrahuzdata">AlrahuzData</option>
+                <option value="easyaccessapi">EasyAccessAPI</option>
+                <option value="mock">Mock</option>
+            </select>
+            <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="priority_order" placeholder="priority">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="credentials_key" placeholder="credentials key">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="supported_services" placeholder="comma-separated supported services">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="low_balance_threshold" placeholder="low balance threshold">
+            <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" name="supports_fallback" value="1" checked> Supports fallback</label>
             <button class="primary-action" type="submit">Save Provider</button>
         </form>
     </section>
     <section class="surface-card p-6">
         <div class="table-shell">
             <table>
-                <thead><tr class="text-slate-400"><th>Name</th><th>Code</th><th>Driver</th><th>Status</th><th>Priority</th><th>Action</th></tr></thead>
+                <thead><tr class="text-slate-400"><th>Name</th><th>Code</th><th>Driver</th><th>Status</th><th>Priority</th><th>Threshold</th><th>Action</th></tr></thead>
                 <tbody>
                     <?php foreach ($rows as $row): ?>
                         <tr>
@@ -48,6 +65,7 @@ render_header('Providers', 'admin');
                             <td><?= e($row['driver']); ?></td>
                             <td><?= e($row['status']); ?></td>
                             <td><?= (int) $row['priority_order']; ?></td>
+                            <td><?= e(money($row['low_balance_threshold'] ?? 0)); ?></td>
                             <td>
                                 <form method="post">
                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">

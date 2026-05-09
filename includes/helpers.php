@@ -43,6 +43,12 @@ function config(?string $path = null, $default = null)
     return $value;
 }
 
+function config_meta(string $key, $default = null)
+{
+    $meta = app_container('config')['__meta'] ?? [];
+    return array_key_exists($key, $meta) ? $meta[$key] : $default;
+}
+
 function base_url(string $path = ''): string
 {
     $base = rtrim((string) config('app.base_url', ''), '/');
@@ -213,6 +219,11 @@ function json_decode_array(?string $json): array
 function current_path_with_base(): string
 {
     return (string) ($_SERVER['REQUEST_URI'] ?? base_url());
+}
+
+function app_logger(): \GemData\Classes\AppLogger
+{
+    return app(\GemData\Classes\AppLogger::class);
 }
 
 function query_except(array $keysToRemove = []): array

@@ -6,6 +6,26 @@ namespace GemData\Classes;
 
 class MockVtuProvider implements VtuProviderInterface
 {
+    public function code(): string
+    {
+        return 'mock';
+    }
+
+    public function isConfigured(): bool
+    {
+        return true;
+    }
+
+    public function healthCheck(): array
+    {
+        return [
+            'provider' => 'mock',
+            'status' => 'sandbox',
+            'sandbox' => true,
+            'checked_at' => date('c'),
+        ];
+    }
+
     public function purchase(string $serviceSlug, array $payload): array
     {
         $recipient = (string) ($payload['recipient'] ?? '');

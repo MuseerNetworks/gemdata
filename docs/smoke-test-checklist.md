@@ -1,22 +1,29 @@
 # GemData Smoke Test Checklist
 
 ## Public entry
-- Landing page loads on mobile and desktop.
-- Hero and CTA links route correctly.
+- `https://gemdata.com.ng/` loads without HTTP 500
+- `https://gemdata.com.ng/offline.html` loads
+- No broken `/gemdata` path assumptions appear in navigation
 
-## User flows
-- Register a user account.
-- Log in successfully.
-- Start forgot-password flow and open the reset link.
-- Create a wallet funding request.
-- Confirm the wallet is credited only after callback processing.
-- Complete one airtime or data purchase.
+## Auth
+- Admin login works
+- User registration works
+- User login works
+- Forgot-password flow does not expose debug reset links in production
 
-## Admin flows
-- Log in as admin.
-- Open dashboard, users, transactions, providers, and reports.
-- Confirm wallet activity reflects the verified funding credit.
+## Funding
+- User wallet page shows dedicated transfer account state correctly
+- No mock funding button appears in production
+- A Paystack webhook can be accepted without exposing secrets in the response
+- A duplicate webhook is ignored cleanly
 
-## API
-- Call one authenticated API endpoint with valid headers.
-- Confirm invalid credentials are rejected cleanly.
+## Transactions
+- One transaction can be queued successfully
+- `cron/process-pending.php` runs without fatal errors
+- `cron/reconcile.php` runs without fatal errors
+- Failed transactions can be reviewed safely from the admin panel
+
+## Providers
+- Provider health section loads
+- Provider connection test returns a safe status message
+- Disabled providers do not process live traffic

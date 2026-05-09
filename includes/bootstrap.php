@@ -7,6 +7,8 @@ require_once __DIR__ . '/helpers.php';
 $config = require __DIR__ . '/config.php';
 $GLOBALS['__gemdata_container'] = ['config' => $config];
 $environment = (string) config('app.environment', 'local');
+require_once __DIR__ . '/../classes/AppLogger.php';
+require_once __DIR__ . '/../classes/SimpleCache.php';
 
 error_reporting(E_ALL);
 if ($environment === 'production') {
@@ -56,13 +58,16 @@ use GemData\Classes\ApiHandler;
 use GemData\Classes\ActivityLogger;
 use GemData\Classes\AdminService;
 use GemData\Classes\AdminOpsService;
+use GemData\Classes\AppLogger;
 use GemData\Classes\Commission;
 use GemData\Classes\Database;
 use GemData\Classes\FraudService;
+use GemData\Classes\MaintenanceService;
 use GemData\Classes\MockVtuProvider;
 use GemData\Classes\NotificationService;
 use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
+use GemData\Classes\PaystackWebhookService;
 use GemData\Classes\PricingService;
 use GemData\Classes\ProviderManager;
 use GemData\Classes\RateLimiter;
@@ -70,17 +75,26 @@ use GemData\Classes\ReportService;
 use GemData\Classes\Response;
 use GemData\Classes\SessionAuth;
 use GemData\Classes\SettingsService;
+use GemData\Classes\SimpleCache;
 use GemData\Classes\TransactionService;
 use GemData\Classes\UserSecurityService;
 use GemData\Classes\Validator;
 use GemData\Classes\Wallet;
 
 try {
-    $database = new Database(config('db'));
+    $appLogger = new AppLogger();
+    register_service(AppLogger::class, $appLogger);
+    $cache = new SimpleCache((string) config('app.cache_dir', dirname(__DIR__) . '/storage/cache'));
+    register_service(SimpleCache::class, $cache);
+
+    enforce_production_safety($environment);
+
+    $database = new Database(config('db'), $appLogger);
     $validator = new Validator();
     $response = new Response();
-    $activityLogger = new ActivityLogger($database);
+    $activityLogger = new ActivityLogger($database, $appLogger);
     $settings = new SettingsService($database);
+    $maintenance = new MaintenanceService($settings, $response);
     $adminService = new AdminService($database, $activityLogger);
     $userSecurity = new UserSecurityService($database, $activityLogger);
     $auth = new SessionAuth($database, $activityLogger);
@@ -88,11 +102,12 @@ try {
     $notifications = new NotificationService($database);
     $dedicatedAccounts = new PaystackDedicatedAccountService($database, $activityLogger, $notifications);
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger);
+    $paystackWebhooks = new PaystackWebhookService($database, $payments, $activityLogger, $appLogger);
     $commission = new Commission($database);
     $mockProvider = new MockVtuProvider();
-    $pricing = new PricingService($database);
+    $pricing = new PricingService($database, $cache);
     $fraud = new FraudService($database);
-    $providerManager = new ProviderManager($database, $mockProvider);
+    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache);
     $reportService = new ReportService($database);
     $adminOps = new AdminOpsService($database, $activityLogger, $providerManager);
     $transactionService = new TransactionService($database, $wallet, $commission, $notifications, $providerManager, $pricing, $fraud, $activityLogger);
@@ -104,6 +119,7 @@ try {
     register_service(Validator::class, $validator);
     register_service(Response::class, $response);
     register_service(ActivityLogger::class, $activityLogger);
+    register_service(MaintenanceService::class, $maintenance);
     register_service(SettingsService::class, $settings);
     register_service(AdminService::class, $adminService);
     register_service(AdminOpsService::class, $adminOps);
@@ -113,6 +129,7 @@ try {
     register_service(NotificationService::class, $notifications);
     register_service(PaystackDedicatedAccountService::class, $dedicatedAccounts);
     register_service(PaymentGatewayService::class, $payments);
+    register_service(PaystackWebhookService::class, $paystackWebhooks);
     register_service(Commission::class, $commission);
     register_service(PricingService::class, $pricing);
     register_service(FraudService::class, $fraud);
@@ -122,13 +139,24 @@ try {
     register_service(RateLimiter::class, $rateLimiter);
     register_service(ApiAuth::class, $apiAuth);
     register_service(ApiHandler::class, $apiHandler);
+
+    $maintenance->enforce();
 } catch (Throwable $exception) {
-    error_log(sprintf(
-        '[GemData bootstrap] %s in %s:%d',
-        $exception->getMessage(),
-        $exception->getFile(),
-        $exception->getLine()
-    ));
+    $logger = $GLOBALS['__gemdata_container'][AppLogger::class] ?? null;
+    if ($logger instanceof AppLogger) {
+        $logger->error('Bootstrap failed.', [
+            'message' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+        ]);
+    } else {
+        error_log(sprintf(
+            '[GemData bootstrap] %s in %s:%d',
+            $exception->getMessage(),
+            $exception->getFile(),
+            $exception->getLine()
+        ));
+    }
 
     if (!headers_sent()) {
         http_response_code(503);
@@ -187,3 +215,41 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/api_auth.php';
 require_once __DIR__ . '/view.php';
+
+function enforce_production_safety(string $environment): void
+{
+    if ($environment !== 'production') {
+        return;
+    }
+
+    if (!config_meta('private_override_loaded', false)) {
+        throw new RuntimeException('Production config file is missing.');
+    }
+
+    if (config_meta('local_override_loaded', false)) {
+        throw new RuntimeException('Local override must not load in production.');
+    }
+
+    $dbHost = (string) config('db.host', '');
+    $dbName = (string) config('db.dbname', '');
+    $dbUser = (string) config('db.username', '');
+    $dbPassword = (string) config('db.password', '');
+    $gateway = (string) config('payments.default_gateway', '');
+    $webhookSecret = trim((string) config('webhooks.shared_secret', ''));
+
+    if ($dbName === 'gemdata_api' || $dbUser === 'root' || $dbPassword === '' || $dbHost === '127.0.0.1') {
+        throw new RuntimeException('Production database configuration is unsafe.');
+    }
+
+    if ($gateway === 'mock_paystack' || $gateway === 'mock') {
+        throw new RuntimeException('Mock payment gateway cannot run in production.');
+    }
+
+    if ($webhookSecret === '') {
+        throw new RuntimeException('Webhook secret is required in production.');
+    }
+
+    if ((bool) config('mail.debug_display_reset_links', false)) {
+        throw new RuntimeException('Reset-link debug output must be disabled in production.');
+    }
+}

@@ -22,6 +22,13 @@ if (is_post()) {
     }
 
     header('Content-Type: application/json');
+    if ($payments->isProductionBankTransferOnly()) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Production wallet funding uses your dedicated bank transfer account only.',
+        ]);
+        exit;
+    }
     $amount = (float) ($_POST['amount'] ?? 0);
     if ($amount <= 0) {
         echo json_encode(['status' => 'error', 'message' => 'Enter a valid funding amount.']);
@@ -50,6 +57,7 @@ $gatewayName = (string) config('payments.display_gateway_name', 'Paystack');
 $requestStatus = (string) ($selectedRequest['status'] ?? '');
 $dedicatedAccount = $dedicatedAccounts->getForUser((int) $user['id']);
 $accountStatus = (string) ($dedicatedAccount['status'] ?? '');
+$showMockFunding = !$payments->isProductionBankTransferOnly();
 
 render_header('Fund Wallet', 'user');
 ?>
@@ -127,16 +135,20 @@ render_header('Fund Wallet', 'user');
                 <div class="notice notice-error">Dedicated transfer account assignment has not started yet for this profile. Use the retry button to request it when Paystack credentials are configured.</div>
             <?php endif; ?>
         </div>
-        <div id="wallet-feedback" class="mt-6"></div>
-        <form class="mt-6 grid gap-4 md:grid-cols-[1fr,auto]" method="post" data-ajax-form data-target="#wallet-feedback" data-reset-on-success="true" data-offline-queue="false">
-            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-            <input type="hidden" name="idempotency_key" value="" data-idempotency-field data-idempotency-prefix="fund">
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="amount" placeholder="Enter amount e.g. 5000">
-            <button class="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-slate-950" type="submit">Create Funding Request</button>
-        </form>
+        <?php if ($showMockFunding): ?>
+            <div id="wallet-feedback" class="mt-6"></div>
+            <form class="mt-6 grid gap-4 md:grid-cols-[1fr,auto]" method="post" data-ajax-form data-target="#wallet-feedback" data-reset-on-success="true" data-offline-queue="false">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                <input type="hidden" name="idempotency_key" value="" data-idempotency-field data-idempotency-prefix="fund">
+                <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="amount" placeholder="Enter amount e.g. 5000">
+                <button class="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-slate-950" type="submit">Create Funding Request</button>
+            </form>
+        <?php else: ?>
+            <div class="notice notice-success mt-6">Production funding is bank-transfer-only. Send funds to your dedicated account above and wait for Paystack verification before wallet credit appears.</div>
+        <?php endif; ?>
     </section>
 
-    <?php if ($selectedRequest): ?>
+    <?php if ($selectedRequest && $showMockFunding): ?>
         <section class="surface-card p-8">
             <div class="dashboard-section-header dashboard-section-header-start">
                 <div>

@@ -18,6 +18,8 @@ $config = [
         'user_login_attempt_limit' => 5,
         'user_login_attempt_window_minutes' => 15,
         'trusted_proxies' => [],
+        'cache_dir' => dirname(__DIR__) . '/storage/cache',
+        'maintenance_bypass_paths' => ['/admin/', '/api/webhook.php'],
     ],
     'db' => [
         'host' => '127.0.0.1',
@@ -34,14 +36,61 @@ $config = [
             'base_url' => 'local',
             'api_key' => '',
             'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'smeplug' => [
+            'label' => 'SMEPlug',
+            'driver' => 'smeplug',
+            'base_url' => '',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'vtpass' => [
+            'label' => 'VTpass',
+            'driver' => 'vtpass',
+            'base_url' => '',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'clubkonnect' => [
+            'label' => 'ClubKonnect',
+            'driver' => 'clubkonnect',
+            'base_url' => '',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'alrahuzdata' => [
+            'label' => 'AlrahuzData',
+            'driver' => 'alrahuzdata',
+            'base_url' => '',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
+        ],
+        'easyaccessapi' => [
+            'label' => 'EasyAccessAPI',
+            'driver' => 'easyaccessapi',
+            'base_url' => '',
+            'api_key' => '',
+            'api_secret' => '',
+            'enabled' => false,
+            'sandbox' => true,
         ],
     ],
     'webhooks' => [
         'shared_secret' => '',
-        'allowed_sources' => ['generic'],
+        'allowed_sources' => ['paystack'],
     ],
     'payments' => [
-        'default_gateway' => 'mock_paystack',
+        'default_gateway' => 'bank_transfer',
         'display_gateway_name' => 'Paystack',
         'auto_verify_mock_funding' => false,
         'auto_assign_dedicated_account' => false,
@@ -74,18 +123,26 @@ $config = [
 ];
 
 $privateOverride = dirname(__DIR__, 2) . '/gemdata-config.php';
+$config['__meta'] = [
+    'private_override_path' => $privateOverride,
+    'private_override_loaded' => false,
+    'local_override_loaded' => false,
+];
+
 if (is_file($privateOverride)) {
     $privateConfig = require $privateOverride;
     if (is_array($privateConfig)) {
         $config = array_replace_recursive($config, $privateConfig);
+        $config['__meta']['private_override_loaded'] = true;
     }
 }
 
 $localOverride = __DIR__ . '/config.local.php';
-if (is_file($localOverride)) {
+if (($config['app']['environment'] ?? 'local') !== 'production' && is_file($localOverride)) {
     $localConfig = require $localOverride;
     if (is_array($localConfig)) {
         $config = array_replace_recursive($config, $localConfig);
+        $config['__meta']['local_override_loaded'] = true;
     }
 }
 

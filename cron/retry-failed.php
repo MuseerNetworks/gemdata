@@ -16,6 +16,7 @@ if (!$settings->bool('auto_retry_enabled', false)) {
 }
 
 $service = app(\GemData\Classes\TransactionService::class);
+$recovered = $service->recoverStaleProcessingLocks();
 $processed = $service->processPendingTransactions(20);
 
 $rows = db()->query(
@@ -37,5 +38,6 @@ foreach ($rows as $row) {
     }
 }
 
+echo "Recovered stale locks: {$recovered}\n";
 echo "Processed pending: {$processed}\n";
 echo "Queued retries: {$queued}\n";

@@ -199,6 +199,8 @@ class TransactionService
 
     public function processPendingTransactions(int $limit = 20): int
     {
+        $this->recoverStaleProcessingLocks();
+
         $rows = $this->db->query(
             'SELECT id FROM transactions
              WHERE status = "pending" AND processing_started_at IS NULL
@@ -219,6 +221,109 @@ class TransactionService
         }
 
         return $processed;
+    }
+
+    public function recoverStaleProcessingLocks(int $ageMinutes = 10): int
+    {
+        $rows = $this->db->query(
+            'SELECT id, reference
+             FROM transactions
+             WHERE status = "pending"
+               AND processing_started_at IS NOT NULL
+               AND processed_at IS NULL
+               AND processing_started_at < DATE_SUB(NOW(), INTERVAL ' . max(1, $ageMinutes) . ' MINUTE)
+             ORDER BY id ASC
+             LIMIT 50'
+        );
+
+        $count = 0;
+        foreach ($rows as $row) {
+            $this->db->execute(
+                'UPDATE transactions
+                 SET processing_started_at = NULL, failure_code = :failure_code
+                 WHERE id = :id',
+                [
+                    'failure_code' => 'processing_lock_recovered',
+                    'id' => $row['id'],
+                ]
+            );
+            $this->event((int) $row['id'], 'transaction_processing_recovered', 'system', null, 'Recovered stale transaction processing lock.');
+            $count++;
+        }
+
+        return $count;
+    }
+
+    public function reconcileTransactions(int $limit = 20): array
+    {
+        $recoveredLocks = $this->recoverStaleProcessingLocks();
+        $timedOut = 0;
+        $refunded = 0;
+
+        $rows = $this->db->query(
+            'SELECT t.*, s.name AS service_name
+             FROM transactions t
+             INNER JOIN services s ON s.id = t.service_id
+             WHERE t.status = "pending"
+               AND t.created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+             ORDER BY t.id ASC
+             LIMIT ' . max(1, (int) $limit)
+        );
+
+        foreach ($rows as $row) {
+            $hasRefund = $this->db->first(
+                'SELECT id FROM transaction_events WHERE transaction_id = :transaction_id AND event_type = :event_type LIMIT 1',
+                ['transaction_id' => $row['id'], 'event_type' => 'transaction_refunded']
+            );
+            if ($hasRefund) {
+                continue;
+            }
+
+            $this->db->beginTransaction();
+            try {
+                $locked = $this->db->first('SELECT * FROM transactions WHERE id = :id FOR UPDATE', ['id' => $row['id']]);
+                if (!$locked || ($locked['status'] ?? '') !== 'pending') {
+                    $this->db->commit();
+                    continue;
+                }
+
+                $this->wallet->refund(
+                    (int) $locked['user_id'],
+                    (float) $locked['amount'],
+                    'Automatic timeout refund for transaction ' . $locked['reference'],
+                    (string) $locked['channel'],
+                    ['reason' => 'provider_timeout_reconciliation'],
+                    'refund',
+                    (int) $locked['id'],
+                    'wallet-timeout-refund:' . ($locked['idempotency_key'] ?? $locked['reference']),
+                    'provider_timeout'
+                );
+
+                $this->db->execute(
+                    'UPDATE transactions
+                     SET status = :status, processed_at = NOW(), failure_code = :failure_code, is_retryable = 0
+                     WHERE id = :id',
+                    [
+                        'status' => 'failed',
+                        'failure_code' => 'provider_timeout',
+                        'id' => $locked['id'],
+                    ]
+                );
+                $this->event((int) $locked['id'], 'transaction_refunded', 'system', null, 'Wallet refunded during timeout reconciliation.', ['amount' => (float) $locked['amount']]);
+                $this->event((int) $locked['id'], 'transaction_reconciled_timeout', 'system', null, 'Transaction reconciled after timeout.');
+                $this->db->commit();
+                $timedOut++;
+                $refunded++;
+            } catch (Throwable $throwable) {
+                $this->db->rollBack();
+            }
+        }
+
+        return [
+            'recovered_locks' => $recoveredLocks,
+            'timed_out' => $timedOut,
+            'refunded' => $refunded,
+        ];
     }
 
     public function processPendingTransaction(int $transactionId): array

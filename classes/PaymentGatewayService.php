@@ -16,8 +16,17 @@ class PaymentGatewayService
     ) {
     }
 
+    public function isProductionBankTransferOnly(): bool
+    {
+        return config('app.environment', 'local') === 'production';
+    }
+
     public function createFundingRequest(int $userId, float $amount, string $provider = 'mock_paystack'): array
     {
+        if ($this->isProductionBankTransferOnly()) {
+            throw new RuntimeException('Production wallet funding is handled through your dedicated transfer account.');
+        }
+
         if ($amount <= 0) {
             throw new RuntimeException('Enter a valid funding amount.');
         }
@@ -201,5 +210,195 @@ class PaymentGatewayService
         }
 
         return $this->db->first('SELECT * FROM wallet_funding_requests WHERE id = :id', ['id' => $request['id']]) ?? $request;
+    }
+
+    public function reconcileIncomingFunding(array $payload): array
+    {
+        $providerReference = trim((string) ($payload['provider_reference'] ?? ''));
+        $reference = trim((string) ($payload['reference'] ?? ''));
+        $accountNumber = trim((string) ($payload['account_number'] ?? ''));
+        $email = strtolower(trim((string) ($payload['customer_email'] ?? '')));
+        $amount = round((float) ($payload['amount'] ?? 0), 2);
+
+        if ($providerReference === '' || $amount <= 0) {
+            throw new RuntimeException('Incoming funding payload is incomplete.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $request = null;
+            if ($reference !== '') {
+                $request = $this->db->first(
+                    'SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1',
+                    ['reference' => $reference]
+                );
+            }
+
+            if (!$request && $providerReference !== '') {
+                $request = $this->db->first(
+                    'SELECT * FROM wallet_funding_requests WHERE provider_reference = :provider_reference LIMIT 1',
+                    ['provider_reference' => $providerReference]
+                );
+            }
+
+            if (!$request) {
+                $account = null;
+                if ($accountNumber !== '') {
+                    $account = $this->db->first(
+                        'SELECT * FROM user_funding_accounts WHERE dedicated_account_number = :account_number LIMIT 1',
+                        ['account_number' => $accountNumber]
+                    );
+                }
+
+                if (!$account && $email !== '') {
+                    $account = $this->db->first(
+                        'SELECT ufa.* FROM user_funding_accounts ufa
+                         INNER JOIN users u ON u.id = ufa.user_id
+                         WHERE LOWER(u.email) = :email
+                         LIMIT 1',
+                        ['email' => $email]
+                    );
+                }
+
+                if (!$account) {
+                    throw new RuntimeException('Could not match funding webhook to a user funding account.');
+                }
+
+                $reference = $reference !== '' ? $reference : 'WFH' . strtoupper(bin2hex(random_bytes(5)));
+                $this->db->execute(
+                    'INSERT INTO wallet_funding_requests
+                        (user_id, reference, provider, provider_reference, amount, currency, status, callback_token_hash, verified_at, credited_at, meta_json)
+                     VALUES
+                        (:user_id, :reference, :provider, :provider_reference, :amount, :currency, :status, :callback_token_hash, NOW(), NOW(), :meta_json)',
+                    [
+                        'user_id' => $account['user_id'],
+                        'reference' => $reference,
+                        'provider' => 'paystack_bank_transfer',
+                        'provider_reference' => $providerReference,
+                        'amount' => $amount,
+                        'currency' => (string) ($payload['currency'] ?? config('app.currency', 'NGN')),
+                        'status' => 'initiated',
+                        'callback_token_hash' => password_hash(bin2hex(random_bytes(24)), PASSWORD_DEFAULT),
+                        'meta_json' => (string) ($payload['meta_json'] ?? '{}'),
+                    ]
+                );
+                $request = $this->db->first('SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1', ['reference' => $reference]);
+            }
+
+            if (!$request) {
+                throw new RuntimeException('Funding request could not be loaded.');
+            }
+
+            if (($request['status'] ?? '') === 'credited') {
+                $this->db->commit();
+                return ['credited' => false, 'reference' => $request['reference'], 'linked_transaction_id' => null];
+            }
+
+            $this->db->execute(
+                'UPDATE wallet_funding_requests
+                 SET provider_reference = :provider_reference, status = :status, verified_at = NOW(), credited_at = NOW(), meta_json = :meta_json
+                 WHERE id = :id',
+                [
+                    'provider_reference' => $providerReference,
+                    'status' => 'credited',
+                    'meta_json' => (string) ($payload['meta_json'] ?? '{}'),
+                    'id' => $request['id'],
+                ]
+            );
+
+            $walletRecord = $this->wallet->credit(
+                (int) $request['user_id'],
+                (float) $request['amount'],
+                'Wallet funding confirmed via bank transfer',
+                'system',
+                [
+                    'provider' => $request['provider'],
+                    'funding_reference' => $request['reference'],
+                    'provider_reference' => $providerReference,
+                    'event_key' => $payload['event_key'] ?? null,
+                ],
+                'funding',
+                (int) $request['id'],
+                'wallet-funding:' . ($providerReference !== '' ? $providerReference : (string) $request['reference']),
+                'paystack_bank_transfer'
+            );
+
+            $this->notifications->create(
+                (int) $request['user_id'],
+                'Wallet funded',
+                'Your wallet has been credited after Paystack bank transfer verification.',
+                'success'
+            );
+
+            $this->logger->log('system', 0, 'wallet_funding_webhook_credited', 'Credited wallet from Paystack webhook.', [
+                'reference' => $request['reference'],
+                'provider_reference' => $providerReference,
+                'wallet_transaction_id' => $walletRecord['id'] ?? null,
+            ]);
+
+            $this->db->commit();
+
+            return [
+                'credited' => true,
+                'reference' => $request['reference'],
+                'linked_transaction_id' => null,
+            ];
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
+    public function reconcileFundingCredits(int $limit = 20): array
+    {
+        $rows = $this->db->query(
+            'SELECT *
+             FROM wallet_funding_requests
+             WHERE status = "credited"
+             ORDER BY id ASC
+             LIMIT ' . max(1, (int) $limit)
+        );
+
+        $repaired = 0;
+        foreach ($rows as $row) {
+            $existingWalletTx = $this->db->first(
+                'SELECT id FROM wallet_transactions
+                 WHERE source_type = :source_type AND source_id = :source_id
+                 LIMIT 1',
+                [
+                    'source_type' => 'funding',
+                    'source_id' => $row['id'],
+                ]
+            );
+            if ($existingWalletTx) {
+                continue;
+            }
+
+            try {
+                $this->wallet->credit(
+                    (int) $row['user_id'],
+                    (float) $row['amount'],
+                    'Funding credit repaired during reconciliation',
+                    'system',
+                    [
+                        'provider' => $row['provider'],
+                        'funding_reference' => $row['reference'],
+                        'provider_reference' => $row['provider_reference'],
+                    ],
+                    'funding',
+                    (int) $row['id'],
+                    'wallet-funding-repair:' . ($row['provider_reference'] ?: $row['reference']),
+                    'funding_repair'
+                );
+                $repaired++;
+            } catch (\Throwable $throwable) {
+                $this->logger->log('system', 0, 'wallet_funding_repair_failed', 'Funding credit repair failed.', [
+                    'reference' => $row['reference'],
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
+        }
+
+        return ['repaired' => $repaired];
     }
 }

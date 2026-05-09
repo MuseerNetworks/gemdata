@@ -11,6 +11,10 @@ $status = trim((string) ($_GET['status'] ?? $_POST['status'] ?? 'success'));
 $providerReference = trim((string) ($_GET['provider_reference'] ?? $_POST['provider_reference'] ?? ''));
 
 try {
+    if ($service->isProductionBankTransferOnly()) {
+        throw new RuntimeException('Mock payment callback is disabled in production.');
+    }
+
     if ($reference === '' || $token === '') {
         throw new RuntimeException('Missing callback reference or token.');
     }

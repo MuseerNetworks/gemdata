@@ -196,20 +196,18 @@ class AdminOpsService
              ORDER BY t.id DESC LIMIT 5'
         );
 
-        $providerHealth = [];
-        foreach ($this->providerManager->allProviders() as $provider) {
-            $latest = $this->providerManager->latestBalanceLog((int) $provider['id']);
-            $balance = (float) ($latest['balance_amount'] ?? 0);
-            $providerHealth[] = [
-                'id' => (int) $provider['id'],
-                'name' => $provider['name'],
-                'code' => $provider['code'],
-                'status' => $provider['status'],
-                'balance' => $balance,
-                'threshold' => (float) $provider['low_balance_threshold'],
-                'is_low' => $balance <= (float) $provider['low_balance_threshold'],
+        $providerHealth = array_map(static function (array $provider): array {
+            return [
+                'id' => (int) ($provider['id'] ?? 0),
+                'name' => (string) ($provider['provider_name'] ?? $provider['provider'] ?? ''),
+                'code' => (string) ($provider['provider_code'] ?? $provider['provider'] ?? ''),
+                'status' => (string) ($provider['status'] ?? 'unknown'),
+                'balance' => (float) ($provider['balance_amount'] ?? 0),
+                'threshold' => (float) ($provider['threshold'] ?? 0),
+                'is_low' => (bool) ($provider['is_low_balance'] ?? false),
+                'sandbox' => !empty($provider['sandbox']),
             ];
-        }
+        }, $this->providerManager->providerHealthSummary());
 
         return [
             'pending_queue' => $pendingQueue,
