@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace GemData\Classes;
 
+use DateInterval;
+use DateTimeImmutable;
+
 class ReportService
 {
     public function __construct(private Database $db)
@@ -25,15 +28,20 @@ class ReportService
 
     public function dailySeries(int $days = 7): array
     {
+        $days = max(1, $days);
+        $cutoff = (new DateTimeImmutable('today'))
+            ->sub(new DateInterval('P' . $days . 'D'))
+            ->format('Y-m-d H:i:s');
+
         return $this->db->query(
             'SELECT DATE(created_at) AS period, COUNT(*) AS total_transactions,
                     COALESCE(SUM(CASE WHEN status = "successful" THEN selling_price ELSE 0 END), 0) AS revenue,
                     COALESCE(SUM(CASE WHEN status = "successful" THEN profit_amount ELSE 0 END), 0) AS profit
              FROM transactions
-             WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL :days DAY)
+             WHERE created_at >= :cutoff
              GROUP BY DATE(created_at)
              ORDER BY DATE(created_at) ASC',
-            ['days' => $days]
+            ['cutoff' => $cutoff]
         );
     }
 
