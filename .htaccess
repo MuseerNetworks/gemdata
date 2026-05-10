@@ -1,0 +1,42 @@
+# ----------------------------------------------------------------------
+# 1. LiteSpeed / cPanel Compatibility
+# ----------------------------------------------------------------------
+<IfModule Litespeed>
+    # Disable LiteSpeed caching for dynamic PHP requests by default
+    CacheDisable public /
+</IfModule>
+
+# Do not use Options -MultiViews or Options All (Causes 500 on some shared hosts)
+Options -Indexes
+
+# ----------------------------------------------------------------------
+# 2. Security: Block Access to Sensitive Directories & Files
+# ----------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Block access to source code, configs, and internal directories
+    RewriteRule ^(includes|classes|database|storage|cron)/.*$ - [F,L]
+    RewriteRule ^(\.git|\.env|\.cpanel\.yml|composer\.|package\.) - [F,L]
+</IfModule>
+
+# Block access to hidden files/directories (except .well-known)
+<FilesMatch "^\.(?!well-known)">
+    Require all denied
+</FilesMatch>
+
+# ----------------------------------------------------------------------
+# 3. Security Headers
+# ----------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Frame-Options "SAMEORIGIN"
+    # Header always edit Set-Cookie (.*) "$1; HttpOnly; Secure"
+</IfModule>
+
+# ----------------------------------------------------------------------
+# 4. PHP Settings (Use with Caution on Shared Hosting)
+# ----------------------------------------------------------------------
+# Note: Do not use php_flag or php_value here. Use MultiPHP INI Editor or .user.ini
