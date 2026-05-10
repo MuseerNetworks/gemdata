@@ -1,7 +1,6 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/yyrigitd/public_html
-    - /usr/bin/rsync -a --exclude='.git' ./ $DEPLOYPATH/
-    - find $DEPLOYPATH -type d -exec chmod 755 {} \;
-    - find $DEPLOYPATH -type f -exec chmod 644 {} \;
+    - /usr/bin/rsync -a --exclude='.git' ./ /home/yyrigitd/public_html/
+    - find /home/yyrigitd/public_html/ -type d -exec chmod 755 {} +
+    - find /home/yyrigitd/public_html/ -type f -exec chmod 644 {} +
