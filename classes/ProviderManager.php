@@ -12,7 +12,8 @@ class ProviderManager
         private Database $db,
         private MockVtuProvider $mockProvider,
         private AppLogger $logger,
-        private SimpleCache $cache
+        private SimpleCache $cache,
+        private ProviderPlanService $planService
     ) {
     }
 
@@ -20,7 +21,7 @@ class ProviderManager
     {
         $providers = $this->db->query('SELECT * FROM provider_accounts WHERE status = "active" ORDER BY priority_order ASC, id ASC');
         return array_values(array_filter($providers, function (array $provider): bool {
-            $config = $this->providerConfig((string) $provider['code']);
+            $config = $this->providerConfig($provider);
             return !empty($config['enabled']);
         }));
     }
@@ -59,7 +60,7 @@ class ProviderManager
         foreach ($providers as $provider) {
             try {
                 $response = $this->driver($provider)->purchase($serviceSlug, $payload);
-                $response['provider_account'] = $provider;
+                $response = $this->normalizePurchaseResponse($response, $provider, $payload);
                 $attempts[] = [
                     'provider_id' => (int) $provider['id'],
                     'provider_code' => $provider['code'],
@@ -67,7 +68,7 @@ class ProviderManager
                     'provider_reference' => $response['provider_reference'] ?? null,
                 ];
 
-                if (($response['status'] ?? 'failed') === 'successful' || (int) $provider['supports_fallback'] !== 1) {
+                if (in_array(($response['status'] ?? 'failed'), ['successful', 'pending'], true) || (int) $provider['supports_fallback'] !== 1) {
                     $response['attempts'] = $attempts;
                     return $response;
                 }
@@ -113,6 +114,12 @@ class ProviderManager
             'timestamp' => date('c'),
             'health' => $health,
         ];
+    }
+
+    public function queryTransaction(array $provider, string $reference): array
+    {
+        $response = $this->driver($provider)->queryTransaction($reference);
+        return $this->normalizeProviderStatusResponse($response, $provider, $reference);
     }
 
     public function latestBalanceLog(int $providerId): ?array
@@ -192,9 +199,10 @@ class ProviderManager
     private function driver(array $provider): VtuProviderInterface
     {
         $driver = strtolower((string) ($provider['driver'] ?? 'mock'));
-        $config = $this->providerConfig((string) $provider['code']);
+        $config = $this->providerConfig($provider);
 
         return match ($driver) {
+            'albani' => new AlbaniProvider($config, $this->logger, $this->planService),
             'smeplug' => new SmeplugProvider($config, $this->logger),
             'vtpass' => new VTpassProvider($config, $this->logger),
             'clubkonnect' => new ClubKonnectProvider($config, $this->logger),
@@ -204,9 +212,21 @@ class ProviderManager
         };
     }
 
-    private function providerConfig(string $code): array
+    private function providerConfig(array|string $provider): array
     {
-        return (array) config('providers.' . strtolower($code), []);
+        if (is_array($provider)) {
+            $configKey = strtolower((string) ($provider['credentials_key'] ?: $provider['code']));
+            $config = (array) config('providers.' . $configKey, []);
+            if (!empty($provider['base_url'])) {
+                $config['base_url'] = (string) $provider['base_url'];
+            }
+            $config['label'] = $config['label'] ?? (string) ($provider['name'] ?? $configKey);
+            $config['driver'] = $config['driver'] ?? (string) ($provider['driver'] ?? 'mock');
+
+            return $config;
+        }
+
+        return (array) config('providers.' . strtolower($provider), []);
     }
 
     private function healthForProvider(array $provider): array
@@ -219,14 +239,51 @@ class ProviderManager
 
         $driver = $this->driver($provider);
         $health = $driver->healthCheck();
+        $balance = $driver->checkBalance();
+        if (($balance['status'] ?? '') === 'successful' && isset($balance['balance'])) {
+            $this->logBalance(
+                (int) $provider['id'],
+                (float) $balance['balance'],
+                'provider_api',
+                'Fetched from provider health check'
+            );
+        }
+
         $latest = $this->latestBalanceLog((int) $provider['id']);
         $health['balance_amount'] = (float) ($latest['balance_amount'] ?? 0);
         $health['provider_code'] = (string) $provider['code'];
         $health['provider_name'] = (string) $provider['name'];
         $health['threshold'] = (float) $provider['low_balance_threshold'];
         $health['is_low_balance'] = $health['balance_amount'] <= (float) $provider['low_balance_threshold'];
+        $health['balance_status'] = $balance['status'] ?? 'unknown';
         $this->cache->put($cacheKey, $health, 60);
 
         return $health;
+    }
+
+    private function normalizePurchaseResponse(array $response, array $provider, array $payload): array
+    {
+        $normalized = $this->normalizeProviderStatusResponse($response, $provider, (string) ($payload['reference'] ?? ''));
+        $normalized['amount'] = (float) ($response['amount'] ?? $payload['amount'] ?? 0);
+        $normalized['recipient'] = (string) ($response['recipient'] ?? $payload['recipient'] ?? $payload['phone'] ?? '');
+
+        return $normalized;
+    }
+
+    private function normalizeProviderStatusResponse(array $response, array $provider, string $fallbackReference): array
+    {
+        $status = strtolower((string) ($response['status'] ?? 'failed'));
+        $normalizedStatus = match ($status) {
+            'successful', 'success', 'completed' => 'successful',
+            'pending', 'processing', 'queued', 'timeout' => 'pending',
+            default => 'failed',
+        };
+
+        $response['status'] = $normalizedStatus;
+        $response['provider_reference'] = $response['provider_reference'] ?? ($fallbackReference !== '' ? $fallbackReference : null);
+        $response['provider_account'] = $provider;
+        $response['raw'] = is_array($response['raw'] ?? null) ? $response['raw'] : ['message' => 'Provider did not return a structured response.'];
+
+        return $response;
     }
 }

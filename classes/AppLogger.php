@@ -8,16 +8,7 @@ class AppLogger
 {
     public function log(string $level, string $message, array $context = []): void
     {
-        $requestId = $this->requestId();
-        $line = sprintf(
-            '[GemData][%s][%s] %s %s',
-            strtoupper($level),
-            $requestId,
-            $this->redact($message),
-            $this->formatContext($context)
-        );
-
-        error_log(trim($line));
+        error_log($this->renderLine($level, $message, $context));
     }
 
     public function info(string $message, array $context = []): void
@@ -68,6 +59,35 @@ class AppLogger
         }
 
         return $sanitized;
+    }
+
+    public function writeToFile(string $file, string $level, string $message, array $context = []): void
+    {
+        if (!(bool) config('app.provider_log_to_file', true)) {
+            return;
+        }
+
+        $directory = dirname($file);
+        if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+            return;
+        }
+
+        if (!is_writable($directory) && (!is_file($file) || !is_writable($file))) {
+            return;
+        }
+
+        @file_put_contents($file, $this->renderLine($level, $message, $context) . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
+
+    private function renderLine(string $level, string $message, array $context = []): string
+    {
+        return trim(sprintf(
+            '[GemData][%s][%s] %s %s',
+            strtoupper($level),
+            $this->requestId(),
+            $this->redact($message),
+            $this->formatContext($context)
+        ));
     }
 
     private function formatContext(array $context): string

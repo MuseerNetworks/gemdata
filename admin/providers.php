@@ -34,6 +34,7 @@ render_header('Providers', 'admin');
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="code" placeholder="provider code">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="name" placeholder="provider name">
             <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="driver">
+                <option value="albani">AlbaniAPI</option>
                 <option value="smeplug">SMEPlug</option>
                 <option value="vtpass">VTpass</option>
                 <option value="clubkonnect">ClubKonnect</option>
@@ -47,6 +48,7 @@ render_header('Providers', 'admin');
             </select>
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="priority_order" placeholder="priority">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="credentials_key" placeholder="credentials key">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="base_url" placeholder="base URL (optional override)">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="supported_services" placeholder="comma-separated supported services">
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="low_balance_threshold" placeholder="low balance threshold">
             <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" name="supports_fallback" value="1" checked> Supports fallback</label>

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $admin = require_permission('services.manage');
 $pricing = app(\GemData\Classes\PricingService::class);
+$providerPlans = app(\GemData\Classes\ProviderPlanService::class);
 
 if (is_post()) {
     verify_csrf();
@@ -27,6 +28,9 @@ if (is_post()) {
     if ($action === 'save_user_price') {
         $pricing->upsertUserPrice((int) $_POST['user_id'], $serviceId, $_POST['network_code'] ?? null, (float) $_POST['selling_price']);
     }
+    if ($action === 'save_provider_plan') {
+        $providerPlans->upsertMapping($_POST);
+    }
     app(\GemData\Classes\ActivityLogger::class)->log('admin', (int) $admin['id'], 'service_configuration_updated', 'Updated service configuration.', ['service_id' => $serviceId, 'action' => $action]);
     flash('success', 'Service settings updated.');
     redirect(base_url('admin/services.php'));
@@ -40,6 +44,8 @@ $services = db()->query(
 );
 $apiUsers = db()->query('SELECT id, full_name FROM users WHERE is_api_user = 1 ORDER BY full_name');
 $networks = db()->query('SELECT sn.*, s.name AS service_name FROM service_networks sn INNER JOIN services s ON s.id = sn.service_id ORDER BY s.name, sn.network_name');
+$providerRows = db()->query('SELECT id, name, code, driver, status FROM provider_accounts ORDER BY priority_order, name');
+$providerPlanMappings = $providerPlans->mappingsForAdmin();
 
 render_header('Services', 'admin');
 ?>
@@ -142,6 +148,54 @@ render_header('Services', 'admin');
             <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="selling_price" placeholder="custom selling price">
             <button class="rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-slate-950" type="submit">Apply Override</button>
         </form>
+    </div>
+
+    <div class="surface-card p-6">
+        <h2 class="text-2xl font-bold text-white">Provider Data Plan Mapping</h2>
+        <p class="mt-2 text-sm text-slate-400">Map GemData plan codes to the provider plan IDs Albani expects. Use the same local plan code across providers if you want fallback support later.</p>
+        <form method="post" class="mt-4 grid gap-4 md:grid-cols-4">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+            <input type="hidden" name="action" value="save_provider_plan">
+            <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_account_id">
+                <?php foreach ($providerRows as $provider): ?>
+                    <option value="<?= (int) $provider['id']; ?>"><?= e($provider['name'] . ' [' . $provider['code'] . ']'); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="service_id">
+                <?php foreach ($services as $service): ?>
+                    <?php if ($service['slug'] === 'data'): ?>
+                        <option value="<?= (int) $service['id']; ?>"><?= e($service['name']); ?></option>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </select>
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="network_code" placeholder="network code e.g. mtn">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="local_plan_code" placeholder="local plan code e.g. MTN_2GB_SME">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="local_plan_name" placeholder="local plan label e.g. MTN 2GB SME">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_id" placeholder="provider plan ID">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_name" placeholder="provider plan name">
+            <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="amount" placeholder="display amount">
+            <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" name="is_enabled" value="1" checked> Enabled</label>
+            <button class="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950" type="submit">Save Plan Mapping</button>
+        </form>
+
+        <div class="table-shell mt-6">
+            <table>
+                <thead><tr class="text-slate-400"><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody>
+                <?php foreach ($providerPlanMappings as $mapping): ?>
+                    <tr>
+                        <td><?= e($mapping['provider_name']); ?></td>
+                        <td><?= e($mapping['service_name']); ?></td>
+                        <td><?= e($mapping['network_code'] ?: 'default'); ?></td>
+                        <td><?= e($mapping['local_plan_code'] . ' - ' . $mapping['local_plan_name']); ?></td>
+                        <td><?= e($mapping['provider_plan_id'] . ($mapping['provider_plan_name'] ? ' - ' . $mapping['provider_plan_name'] : '')); ?></td>
+                        <td><?= e(money($mapping['amount'])); ?></td>
+                        <td><?= (int) $mapping['is_enabled'] === 1 ? 'Enabled' : 'Disabled'; ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 <?php render_footer(); ?>

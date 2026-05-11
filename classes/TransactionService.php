@@ -17,6 +17,7 @@ class TransactionService
         private NotificationService $notifications,
         private ProviderManager $providers,
         private PricingService $pricing,
+        private ProviderPlanService $providerPlans,
         private FraudService $fraud,
         private ActivityLogger $logger
     ) {
@@ -54,6 +55,10 @@ class TransactionService
             $errors['amount'][] = 'Amount must be greater than zero.';
         }
 
+        if (isset($payload['phone']) && trim((string) $payload['phone']) !== '' && $this->normalizePhone((string) $payload['phone']) === '') {
+            $errors['phone'][] = 'Provide a valid phone number.';
+        }
+
         if ($serviceSlug === 'bulk_sms' && !empty($payload['recipients'])) {
             $recipients = array_filter(array_map('trim', explode(',', (string) $payload['recipients'])));
             if ($recipients === []) {
@@ -88,6 +93,15 @@ class TransactionService
             if ($network && (int) $network['is_enabled'] !== 1) {
                 throw new RuntimeException('This network is currently unavailable for the selected service.');
             }
+        }
+
+        if (isset($payload['phone'])) {
+            $payload['phone'] = $this->normalizePhone((string) $payload['phone']);
+        }
+
+        if ($serviceSlug === 'data') {
+            $payload['plan'] = strtoupper(trim((string) ($payload['plan'] ?? '')));
+            $this->providerPlans->assertDataPlanAvailable((int) $service['id'], $networkCode, (string) $payload['plan']);
         }
 
         $amount = round((float) $payload['amount'], 2);
@@ -231,6 +245,7 @@ class TransactionService
              WHERE status = "pending"
                AND processing_started_at IS NOT NULL
                AND processed_at IS NULL
+               AND (failure_code IS NULL OR failure_code <> "provider_pending")
                AND processing_started_at < DATE_SUB(NOW(), INTERVAL ' . max(1, $ageMinutes) . ' MINUTE)
              ORDER BY id ASC
              LIMIT 50'
@@ -271,6 +286,40 @@ class TransactionService
         );
 
         foreach ($rows as $row) {
+            if (($row['provider_code'] ?? '') !== '' || ($row['provider_reference'] ?? '') !== '') {
+                $provider = !empty($row['provider_account_id'])
+                    ? $this->providers->getById((int) $row['provider_account_id'])
+                    : null;
+
+                if (!$provider && !empty($row['provider_code'])) {
+                    $provider = $this->db->first('SELECT * FROM provider_accounts WHERE code = :code LIMIT 1', ['code' => $row['provider_code']]);
+                }
+
+                if ($provider) {
+                    try {
+                        $providerResponse = $this->providers->queryTransaction($provider, (string) ($row['provider_reference'] ?: $row['reference']));
+                        $providerStatus = $this->normalizeProviderStatus((string) ($providerResponse['status'] ?? 'pending'));
+                        if ($providerStatus === 'successful') {
+                            $this->markTransactionSuccessfulFromReconciliation($row, $providerResponse);
+                            $timedOut++;
+                            continue;
+                        }
+
+                        if ($providerStatus === 'pending') {
+                            $this->event((int) $row['id'], 'transaction_reconciliation_pending', 'system', null, 'Provider still reports this transaction as pending.', [
+                                'provider_reference' => $providerResponse['provider_reference'] ?? null,
+                            ]);
+                            continue;
+                        }
+                    } catch (Throwable $throwable) {
+                        $this->event((int) $row['id'], 'transaction_reconciliation_error', 'system', null, 'Provider reconciliation request failed.', [
+                            'error' => $throwable->getMessage(),
+                        ]);
+                        continue;
+                    }
+                }
+            }
+
             $hasRefund = $this->db->first(
                 'SELECT id FROM transaction_events WHERE transaction_id = :transaction_id AND event_type = :event_type LIMIT 1',
                 ['transaction_id' => $row['id'], 'event_type' => 'transaction_refunded']
@@ -364,6 +413,10 @@ class TransactionService
             $providerResponse = $this->providers->purchase($service['slug'], array_merge($payload, [
                 'recipient' => $transaction['recipient'],
                 'amount' => (float) $transaction['amount'],
+                'reference' => (string) $transaction['reference'],
+                'idempotency_key' => (string) ($transaction['idempotency_key'] ?? ''),
+                'transaction_id' => $transactionId,
+                'service_id' => (int) $transaction['service_id'],
             ]));
         } catch (Throwable $throwable) {
             $providerResponse = [
@@ -374,7 +427,7 @@ class TransactionService
             ];
         }
 
-        $status = ($providerResponse['status'] ?? 'failed') === 'successful' ? 'successful' : 'failed';
+        $status = $this->normalizeProviderStatus((string) ($providerResponse['status'] ?? 'failed'));
 
         $this->db->beginTransaction();
         try {
@@ -399,7 +452,7 @@ class TransactionService
                 $this->commission->log((int) $locked['user_id'], $transactionId, (int) $locked['service_id'], $rate, (float) $locked['amount'], $commissionAmount);
             }
 
-            if ($status !== 'successful') {
+            if ($status === 'failed') {
                 $this->wallet->refund(
                     (int) $locked['user_id'],
                     (float) $locked['amount'],
@@ -418,7 +471,7 @@ class TransactionService
                 'UPDATE transactions
                  SET provider_reference = :provider_reference, provider_account_id = :provider_account_id, provider_code = :provider_code,
                      status = :status, commission_amount = :commission_amount, response_json = :response_json,
-                     processed_at = NOW(), failure_code = :failure_code
+                     processing_started_at = :processing_started_at, processed_at = :processed_at, failure_code = :failure_code
                  WHERE id = :id',
                 [
                     'provider_reference' => $providerResponse['provider_reference'] ?? null,
@@ -427,7 +480,13 @@ class TransactionService
                     'status' => $status,
                     'commission_amount' => $commissionAmount,
                     'response_json' => json_encode($providerResponse),
-                    'failure_code' => $status === 'successful' ? null : 'provider_failed',
+                    'processing_started_at' => $status === 'pending' ? date('Y-m-d H:i:s') : null,
+                    'processed_at' => $status === 'pending' ? null : date('Y-m-d H:i:s'),
+                    'failure_code' => match ($status) {
+                        'successful' => null,
+                        'pending' => 'provider_pending',
+                        default => 'provider_failed',
+                    },
                     'id' => $transactionId,
                 ]
             );
@@ -441,10 +500,16 @@ class TransactionService
             $this->notifications->create(
                 (int) $locked['user_id'],
                 $service['name'] . ' transaction',
-                $status === 'successful'
-                    ? "Your {$service['name']} request for {$locked['recipient']} was successful."
-                    : "Your {$service['name']} request for {$locked['recipient']} failed and your wallet was refunded.",
-                $status === 'successful' ? 'success' : 'error'
+                match ($status) {
+                    'successful' => "Your {$service['name']} request for {$locked['recipient']} was successful.",
+                    'pending' => "Your {$service['name']} request for {$locked['recipient']} is still awaiting provider confirmation.",
+                    default => "Your {$service['name']} request for {$locked['recipient']} failed and your wallet was refunded.",
+                },
+                match ($status) {
+                    'successful' => 'success',
+                    'pending' => 'info',
+                    default => 'error',
+                }
             );
 
             return ['processed' => true, 'status' => $status, 'provider_reference' => $providerResponse['provider_reference'] ?? null];
@@ -617,6 +682,90 @@ class TransactionService
     private function generateIdempotencyKey(string $prefix): string
     {
         return $prefix . ':' . bin2hex(random_bytes(16));
+    }
+
+    private function normalizePhone(string $phone): string
+    {
+        $normalized = preg_replace('/\D+/', '', $phone) ?? '';
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (str_starts_with($normalized, '234') && strlen($normalized) === 13) {
+            $normalized = '0' . substr($normalized, 3);
+        }
+
+        return strlen($normalized) >= 10 && strlen($normalized) <= 15 ? $normalized : '';
+    }
+
+    private function normalizeProviderStatus(string $status): string
+    {
+        return match (strtolower(trim($status))) {
+            'successful', 'success', 'completed' => 'successful',
+            'pending', 'processing', 'queued', 'timeout' => 'pending',
+            default => 'failed',
+        };
+    }
+
+    private function markTransactionSuccessfulFromReconciliation(array $transaction, array $providerResponse): void
+    {
+        $service = $this->db->first('SELECT slug, name FROM services WHERE id = :id LIMIT 1', ['id' => $transaction['service_id']]);
+        if (!$service) {
+            return;
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $locked = $this->db->first('SELECT * FROM transactions WHERE id = :id FOR UPDATE', ['id' => $transaction['id']]);
+            if (!$locked || ($locked['status'] ?? '') !== 'pending') {
+                $this->db->commit();
+                return;
+            }
+
+            $commissionAmount = (float) ($locked['commission_amount'] ?? 0);
+            if (($locked['channel'] ?? 'web') === 'api' && $commissionAmount <= 0) {
+                $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
+                $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
+                $this->commission->log((int) $locked['user_id'], (int) $locked['id'], (int) $locked['service_id'], $rate, (float) $locked['amount'], $commissionAmount);
+            }
+
+            $providerAccount = $providerResponse['provider_account'] ?? null;
+            $this->db->execute(
+                'UPDATE transactions
+                 SET status = :status,
+                     provider_reference = :provider_reference,
+                     provider_account_id = :provider_account_id,
+                     provider_code = :provider_code,
+                     commission_amount = :commission_amount,
+                     response_json = :response_json,
+                     processing_started_at = NULL,
+                     processed_at = NOW(),
+                     failure_code = NULL
+                 WHERE id = :id',
+                [
+                    'status' => 'successful',
+                    'provider_reference' => $providerResponse['provider_reference'] ?? $locked['reference'],
+                    'provider_account_id' => $providerAccount['id'] ?? ($locked['provider_account_id'] ?? null),
+                    'provider_code' => $providerAccount['code'] ?? ($locked['provider_code'] ?? null),
+                    'commission_amount' => $commissionAmount,
+                    'response_json' => json_encode($providerResponse),
+                    'id' => $locked['id'],
+                ]
+            );
+            $this->event((int) $locked['id'], 'transaction_successful', 'system', null, 'Transaction marked successful during provider reconciliation.', [
+                'provider_reference' => $providerResponse['provider_reference'] ?? null,
+            ]);
+            $this->db->commit();
+
+            $this->notifications->create(
+                (int) $locked['user_id'],
+                $service['name'] . ' transaction',
+                "Your {$service['name']} request for {$locked['recipient']} was confirmed successful after provider verification.",
+                'success'
+            );
+        } catch (Throwable $throwable) {
+            $this->db->rollBack();
+        }
     }
 
     private function event(int $transactionId, string $type, string $actorType, ?int $actorId, string $notes, array $meta = []): void

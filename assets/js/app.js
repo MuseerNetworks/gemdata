@@ -5,6 +5,7 @@ const bindAjaxForms = (scope = document) => {
         }
         form.dataset.ajaxBound = 'true';
         ensureIdempotencyKeys(form);
+        bindProviderPlanFields(form);
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
             const target = document.querySelector(form.dataset.target || '');
@@ -75,6 +76,58 @@ const ensureIdempotencyKeys = (scope = document, force = false) => {
             return;
         }
         field.value = generateIdempotencyKey(field.dataset.idempotencyPrefix || 'req');
+    });
+};
+
+const bindProviderPlanFields = (scope = document) => {
+    const forms = scope.matches && scope.matches('form')
+        ? [scope]
+        : Array.from(scope.querySelectorAll('form'));
+
+    forms.forEach((form) => {
+        if (form.dataset.providerPlanBound === 'true') {
+            return;
+        }
+
+        const networkField = form.querySelector('[data-plan-network]');
+        const planField = form.querySelector('[data-data-plan-select]');
+        const amountField = form.querySelector('[data-plan-amount]');
+        if (!networkField || !planField) {
+            return;
+        }
+
+        form.dataset.providerPlanBound = 'true';
+        const refreshPlans = () => {
+            const network = (networkField.value || '').toLowerCase();
+            let currentStillValid = false;
+
+            Array.from(planField.options).forEach((option, index) => {
+                if (index === 0) {
+                    option.hidden = false;
+                    return;
+                }
+
+                const optionNetwork = (option.dataset.network || '').toLowerCase();
+                const visible = network === '' || optionNetwork === '' || optionNetwork === network;
+                option.hidden = !visible;
+                if (visible && option.value === planField.value) {
+                    currentStillValid = true;
+                }
+            });
+
+            if (!currentStillValid) {
+                planField.value = '';
+            }
+
+            if (amountField) {
+                const selected = planField.selectedOptions[0];
+                amountField.value = selected?.dataset.amount || amountField.value || '';
+            }
+        };
+
+        networkField.addEventListener('change', refreshPlans);
+        planField.addEventListener('change', refreshPlans);
+        refreshPlans();
     });
 };
 
@@ -604,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.dataset.standalone = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) ? 'true' : 'false';
     setupTheme();
     bindAjaxForms();
+    bindProviderPlanFields();
     setupSidebar();
     setupGuestNav();
     setupProfileMenu();

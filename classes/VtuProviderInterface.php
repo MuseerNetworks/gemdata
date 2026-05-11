@@ -13,4 +13,8 @@ interface VtuProviderInterface
     public function healthCheck(): array;
 
     public function purchase(string $serviceSlug, array $payload): array;
+
+    public function checkBalance(): array;
+
+    public function queryTransaction(string $reference): array;
 }

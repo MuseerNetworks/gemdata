@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $user = require_user();
 $wallet = app(\GemData\Classes\Wallet::class)->ensure((int) $user['id']);
 $dedicatedAccount = app(\GemData\Classes\PaystackDedicatedAccountService::class)->getForUser((int) $user['id']);
+$providerPlans = app(\GemData\Classes\ProviderPlanService::class);
 $services = db()->query(
     "SELECT * FROM services
      WHERE is_enabled = 1
@@ -44,6 +45,7 @@ $serviceNetworks = [];
 foreach ($serviceNetworksRows as $networkRow) {
     $serviceNetworks[$networkRow['slug']][] = $networkRow;
 }
+$dataPlanCatalog = $providerPlans->catalogForServiceSlug('data');
 $hasTransactions = !empty($recentTransactions);
 $hasFundedWallet = (float) $wallet['balance'] > 0;
 $onboardingSteps = [
@@ -291,16 +293,31 @@ render_header('Dashboard', 'user');
                 <button class="primary-action" type="submit">Buy Airtime</button>
             <?php elseif ($service['slug'] === 'data'): ?>
                 <label>Network
-                    <select name="network">
+                    <select name="network" data-plan-network>
                         <option value="">Select network</option>
                         <?php foreach ($serviceNetworks['data'] ?? [] as $network): ?>
                             <option value="<?= e($network['network_code']); ?>"><?= e($network['network_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
-                <label>Plan <input name="plan" placeholder="2GB SME"></label>
+                <label>Plan
+                    <?php if ($dataPlanCatalog !== []): ?>
+                        <select name="plan" data-data-plan-select>
+                            <option value="">Select plan</option>
+                            <?php foreach ($dataPlanCatalog as $plan): ?>
+                                <option
+                                    value="<?= e($plan['local_plan_code']); ?>"
+                                    data-network="<?= e($plan['network_code']); ?>"
+                                    data-amount="<?= e((string) $plan['amount']); ?>"
+                                ><?= e($plan['local_plan_name'] . ($plan['amount'] > 0 ? ' - ' . money($plan['amount']) : '')); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php else: ?>
+                        <input name="plan" placeholder="2GB SME">
+                    <?php endif; ?>
+                </label>
                 <label>Phone Number <input name="phone" placeholder="08030000000"></label>
-                <label>Amount <input name="amount" placeholder="1500"></label>
+                <label>Amount <input name="amount" placeholder="1500" data-plan-amount></label>
                 <button class="primary-action" type="submit">Buy Data</button>
             <?php elseif ($service['slug'] === 'electricity'): ?>
                 <label>Meter Type

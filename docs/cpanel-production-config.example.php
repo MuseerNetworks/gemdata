@@ -9,6 +9,11 @@ return [
         'public_origin' => 'https://gemdata.com.ng',
         'force_https_in_production' => true,
         'trusted_proxies' => [],
+        'bootstrap_log_to_file' => true,
+        'bootstrap_log_file' => '/home/<cpanel_user>/public_html/storage/logs/bootstrap.log',
+        'provider_log_to_file' => true,
+        'provider_log_file' => '/home/<cpanel_user>/public_html/storage/logs/provider.log',
+        'required_extensions' => ['json', 'pdo_mysql', 'curl'],
     ],
     'db' => [
         'host' => 'localhost',
@@ -19,6 +24,18 @@ return [
         'charset' => 'utf8mb4',
     ],
     'providers' => [
+        'albani' => [
+            'label' => 'AlbaniAPI',
+            'driver' => 'albani',
+            'base_url' => 'https://albanidata.com/api/v1',
+            'api_key' => 'replace-with-your-albani-api-key',
+            'enabled' => true,
+            'sandbox' => false,
+            'timeout_seconds' => 20,
+            'retry_count' => 1,
+            'balance_path' => '/wallet/balance',
+            'balance_fallback_paths' => ['/wallet/balance'],
+        ],
         'smeplug' => [
             'label' => 'SMEPlug',
             'driver' => 'smeplug',

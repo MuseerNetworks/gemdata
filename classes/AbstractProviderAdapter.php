@@ -53,7 +53,7 @@ abstract class AbstractProviderAdapter implements VtuProviderInterface
         ]);
 
         return [
-            'status' => 'timeout',
+            'status' => 'failed',
             'provider_reference' => null,
             'amount' => $amount,
             'recipient' => $recipient,
@@ -61,6 +61,28 @@ abstract class AbstractProviderAdapter implements VtuProviderInterface
                 'provider' => $this->code(),
                 'message' => 'Adapter is enabled but still requires endpoint mapping for this provider.',
             ],
+        ];
+    }
+
+    public function checkBalance(): array
+    {
+        return [
+            'status' => empty($this->config['enabled']) ? 'disabled' : 'failed',
+            'balance' => null,
+            'currency' => 'NGN',
+            'provider_reference' => null,
+            'raw' => ['message' => 'Balance check is not implemented for this provider adapter yet.'],
+        ];
+    }
+
+    public function queryTransaction(string $reference): array
+    {
+        $reference = trim($reference);
+
+        return [
+            'status' => 'failed',
+            'provider_reference' => $reference !== '' ? $reference : null,
+            'raw' => ['message' => 'Transaction query is not implemented for this provider adapter yet.'],
         ];
     }
 }

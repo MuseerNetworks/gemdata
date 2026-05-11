@@ -69,6 +69,7 @@ use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
 use GemData\Classes\PaystackWebhookService;
 use GemData\Classes\PricingService;
+use GemData\Classes\ProviderPlanService;
 use GemData\Classes\ProviderManager;
 use GemData\Classes\RateLimiter;
 use GemData\Classes\ReportService;
@@ -82,6 +83,7 @@ use GemData\Classes\Validator;
 use GemData\Classes\Wallet;
 
 try {
+    bootstrap_runtime_preflight();
     $appLogger = new AppLogger();
     register_service(AppLogger::class, $appLogger);
     $cache = new SimpleCache((string) config('app.cache_dir', dirname(__DIR__) . '/storage/cache'));
@@ -106,11 +108,12 @@ try {
     $commission = new Commission($database);
     $mockProvider = new MockVtuProvider();
     $pricing = new PricingService($database, $cache);
+    $providerPlans = new ProviderPlanService($database, $pricing, $cache);
     $fraud = new FraudService($database);
-    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache);
+    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache, $providerPlans);
     $reportService = new ReportService($database);
     $adminOps = new AdminOpsService($database, $activityLogger, $providerManager);
-    $transactionService = new TransactionService($database, $wallet, $commission, $notifications, $providerManager, $pricing, $fraud, $activityLogger);
+    $transactionService = new TransactionService($database, $wallet, $commission, $notifications, $providerManager, $pricing, $providerPlans, $fraud, $activityLogger);
     $rateLimiter = new RateLimiter($database, (int) config('app.rate_limit_per_minute', 60));
     $apiAuth = new ApiAuth($database, $rateLimiter);
     $apiHandler = new ApiHandler($database, $apiAuth, $transactionService);
@@ -132,6 +135,7 @@ try {
     register_service(PaystackWebhookService::class, $paystackWebhooks);
     register_service(Commission::class, $commission);
     register_service(PricingService::class, $pricing);
+    register_service(ProviderPlanService::class, $providerPlans);
     register_service(FraudService::class, $fraud);
     register_service(ProviderManager::class, $providerManager);
     register_service(ReportService::class, $reportService);
@@ -149,14 +153,8 @@ try {
             'file' => $exception->getFile(),
             'line' => $exception->getLine(),
         ]);
-    } else {
-        error_log(sprintf(
-            '[GemData bootstrap] %s in %s:%d',
-            $exception->getMessage(),
-            $exception->getFile(),
-            $exception->getLine()
-        ));
     }
+    bootstrap_emergency_log($exception);
 
     if (!headers_sent()) {
         http_response_code(503);
@@ -252,4 +250,73 @@ function enforce_production_safety(string $environment): void
     if ((bool) config('mail.debug_display_reset_links', false)) {
         throw new RuntimeException('Reset-link debug output must be disabled in production.');
     }
+}
+
+function bootstrap_runtime_preflight(): void
+{
+    if (PHP_VERSION_ID < 80000) {
+        throw new RuntimeException('PHP 8.0 or newer is required.');
+    }
+
+    $required = array_values(array_unique(array_filter(array_map(
+        static fn($extension): string => strtolower(trim((string) $extension)),
+        (array) config('app.required_extensions', ['json', 'pdo_mysql'])
+    ))));
+
+    if ((bool) config('payments.auto_assign_dedicated_account', false) && !in_array('curl', $required, true)) {
+        $required[] = 'curl';
+    }
+
+    foreach ((array) config('providers', []) as $providerConfig) {
+        if (!is_array($providerConfig)) {
+            continue;
+        }
+
+        if (!empty($providerConfig['enabled']) && strtolower((string) ($providerConfig['driver'] ?? '')) === 'albani' && !in_array('curl', $required, true)) {
+            $required[] = 'curl';
+        }
+    }
+
+    foreach ($required as $extension) {
+        if ($extension === '') {
+            continue;
+        }
+
+        if (!extension_loaded($extension)) {
+            throw new RuntimeException(sprintf('Required PHP extension missing: %s.', $extension));
+        }
+    }
+}
+
+function bootstrap_emergency_log(Throwable $exception): void
+{
+    $line = sprintf(
+        '[GemData bootstrap][%s] %s in %s:%d',
+        date('c'),
+        $exception->getMessage(),
+        $exception->getFile(),
+        $exception->getLine()
+    );
+
+    error_log($line);
+
+    if (!(bool) config('app.bootstrap_log_to_file', true)) {
+        return;
+    }
+
+    $logFile = trim((string) config('app.bootstrap_log_file', dirname(__DIR__) . '/storage/logs/bootstrap.log'));
+    if ($logFile === '') {
+        return;
+    }
+
+    $directory = dirname($logFile);
+    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+        return;
+    }
+
+    if (!is_writable($directory) && (!is_file($logFile) || !is_writable($logFile))) {
+        return;
+    }
+
+    @file_put_contents($logFile, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
 }

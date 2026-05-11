@@ -45,4 +45,24 @@ class MockVtuProvider implements VtuProviderInterface
             ],
         ];
     }
+
+    public function checkBalance(): array
+    {
+        return [
+            'status' => 'successful',
+            'balance' => 0.0,
+            'currency' => 'NGN',
+            'provider_reference' => null,
+            'raw' => ['provider' => 'mock'],
+        ];
+    }
+
+    public function queryTransaction(string $reference): array
+    {
+        return [
+            'status' => 'pending',
+            'provider_reference' => trim($reference) !== '' ? trim($reference) : null,
+            'raw' => ['provider' => 'mock', 'message' => 'Mock transaction query is informational only.'],
+        ];
+    }
 }
