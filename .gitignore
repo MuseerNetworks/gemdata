@@ -7,6 +7,8 @@ dist/
 logs/
 *.log
 storage/cache/
+storage/logs/*.log
+!storage/logs/.gitignore
 includes/config.local.php
 *.pem
 *.key
@@ -14,5 +16,7 @@ includes/config.local.php
 *.pfx
 *.crt
 *.secrets*
+*.sql.bak
 .DS_Store
 Thumbs.db
+fallback_test.php

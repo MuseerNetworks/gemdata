@@ -41,6 +41,9 @@ session_set_cookie_params([
 ]);
 session_start();
 
+require_once __DIR__ . '/security_headers.php';
+emit_security_headers();
+
 spl_autoload_register(function (string $class): void {
     $prefix = 'GemData\\Classes\\';
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {

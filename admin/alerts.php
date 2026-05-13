@@ -16,7 +16,7 @@ if (is_post()) {
     flash('success', 'Broadcast stored successfully.');
     redirect(base_url('admin/alerts.php'));
 }
-$fraudEvents = db()->query('SELECT fe.*, u.full_name FROM fraud_events fe LEFT JOIN users u ON u.id = fe.user_id ORDER BY fe.id DESC LIMIT 25');
+$fraudEvents = db()->safeQuery('SELECT fe.*, u.full_name FROM fraud_events fe LEFT JOIN users u ON u.id = fe.user_id ORDER BY fe.id DESC LIMIT 25');
 $broadcasts = db()->query('SELECT b.*, a.full_name AS admin_name FROM broadcasts b INNER JOIN admins a ON a.id = b.created_by_admin_id ORDER BY b.id DESC LIMIT 20');
 render_header('Alerts', 'admin');
 ?>

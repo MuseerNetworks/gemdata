@@ -220,10 +220,10 @@ if (user()) {
                 <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                     <?php
                     $plans = [
-                        ['name' => 'MTN 1GB SME', 'price' => 'NGN 620', 'validity' => '30 days', 'tone' => 'bg-yellow-50 text-yellow-700'],
-                        ['name' => 'Airtel 1GB', 'price' => 'NGN 650', 'validity' => '30 days', 'tone' => 'bg-red-50 text-red-700'],
-                        ['name' => 'Glo 1GB', 'price' => 'NGN 640', 'validity' => '30 days', 'tone' => 'bg-emerald-50 text-emerald-700'],
-                        ['name' => '9mobile 1GB', 'price' => 'NGN 670', 'validity' => '30 days', 'tone' => 'bg-green-50 text-green-700'],
+                        ['name' => 'MTN 1GB SME', 'price' => '₦620', 'validity' => '30 days', 'tone' => 'bg-yellow-50 text-yellow-700'],
+                        ['name' => 'Airtel 1GB', 'price' => '₦650', 'validity' => '30 days', 'tone' => 'bg-red-50 text-red-700'],
+                        ['name' => 'Glo 1GB', 'price' => '₦640', 'validity' => '30 days', 'tone' => 'bg-emerald-50 text-emerald-700'],
+                        ['name' => '9mobile 1GB', 'price' => '₦670', 'validity' => '30 days', 'tone' => 'bg-green-50 text-green-700'],
                     ];
                     ?>
                     <?php foreach ($plans as $plan): ?>
@@ -356,20 +356,29 @@ if (user()) {
                 <div>
                     <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Contact</p>
                     <div class="mt-4 space-y-3 text-sm text-slate-600">
-                        <p>support@gemdata.local</p>
-                        <p>+234 800 000 0000</p>
+                        <p><a href="mailto:support@gemdata.com.ng" class="hover:text-slate-950">support@gemdata.com.ng</a></p>
+                        <p><a href="tel:+2348155568369" class="hover:text-slate-950">+2348155568369</a></p>
                         <div class="flex gap-3 pt-1 text-slate-500">
-                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                            <a href="https://x.com/AYaseer10" target="_blank" rel="noopener noreferrer" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 transition hover:bg-slate-200" aria-label="Twitter / X">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 4.01c-.77.35-1.6.58-2.47.69a4.27 4.27 0 0 0 1.88-2.36 8.4 8.4 0 0 1-2.7 1.03 4.22 4.22 0 0 0-7.32 2.89c0 .33.04.65.11.96A11.97 11.97 0 0 1 3 3.86a4.22 4.22 0 0 0 1.31 5.63 4.18 4.18 0 0 1-1.91-.53v.05a4.22 4.22 0 0 0 3.39 4.14 4.27 4.27 0 0 1-1.9.07 4.23 4.23 0 0 0 3.95 2.93A8.47 8.47 0 0 1 2 18.58 11.94 11.94 0 0 0 8.48 20.5c7.78 0 12.03-6.44 12.03-12.02 0-.18 0-.37-.01-.55A8.54 8.54 0 0 0 22 4.01z"/></svg>
-                            </span>
-                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                            </a>
+                            <a href="mailto:support@gemdata.com.ng" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 transition hover:bg-slate-200" aria-label="Email">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-                            </span>
-                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                            </a>
+                            <a href="https://www.instagram.com/museernetworkslimited?utm_source=qr&igsh=cWhkaDdrenMxN2I5" target="_blank" rel="noopener noreferrer" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 transition hover:bg-slate-200" aria-label="Instagram">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/></svg>
-                            </span>
+                            </a>
+                            <a href="https://wa.me/2349077513009" target="_blank" rel="noopener noreferrer" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 transition hover:bg-slate-200" aria-label="WhatsApp">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+                            </a>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div class="border-t border-slate-200/70">
+                <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8">
+                    <p>&copy; 2026 GemData. All Rights Reserved</p>
+                    <p>Powered by Museer Networks Limited</p>
                 </div>
             </div>
         </footer>

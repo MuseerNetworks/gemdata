@@ -73,7 +73,7 @@ class PricingService
             return $resolved;
         }
 
-        $price = $this->db->first(
+        $price = $this->db->safeFirst(
             'SELECT *
              FROM service_prices
              WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
@@ -81,7 +81,7 @@ class PricingService
             ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
         );
         if (!$price && $tier !== 'USER') {
-            $price = $this->db->first(
+            $price = $this->db->safeFirst(
                 'SELECT *
                  FROM service_prices
                  WHERE service_id = :service_id AND tier = :tier AND network_code IS NULL
@@ -118,7 +118,7 @@ class PricingService
             return $cached;
         }
 
-        $rows = $this->db->query(
+        $rows = $this->db->safeQuery(
             'SELECT * FROM service_prices WHERE service_id = :service_id ORDER BY network_code IS NULL DESC, network_code, tier',
             ['service_id' => $serviceId]
         );

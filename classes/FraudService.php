@@ -61,7 +61,7 @@ class FraudService
 
     public function log(int $userId, ?int $transactionId, array $event): void
     {
-        $this->db->execute(
+        $this->db->safeExecute(
             'INSERT INTO fraud_events (user_id, transaction_id, event_type, risk_level, fingerprint, description)
              VALUES (:user_id, :transaction_id, :event_type, :risk_level, :fingerprint, :description)',
             [

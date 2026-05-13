@@ -109,4 +109,68 @@ class Database
     {
         return $this->pdo->inTransaction();
     }
+
+    /**
+     * Check if a table exists in the current database.
+     */
+    public function tableExists(string $tableName): bool
+    {
+        try {
+            $row = $this->first(
+                'SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name',
+                ['table_name' => $tableName]
+            );
+            return ((int) ($row['cnt'] ?? 0)) > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Run a query but return an empty array on table-not-found errors instead of crashing.
+     */
+    public function safeQuery(string $sql, array $params = []): array
+    {
+        try {
+            return $this->query($sql, $params);
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), '1146') || str_contains($e->getMessage(), 'Base table or view not found')) {
+                $this->logger?->error('Safe query caught missing table.', ['sql' => substr($sql, 0, 120), 'error' => $e->getMessage()]);
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Run a first() query but return null on table-not-found errors instead of crashing.
+     */
+    public function safeFirst(string $sql, array $params = []): ?array
+    {
+        try {
+            return $this->first($sql, $params);
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), '1146') || str_contains($e->getMessage(), 'Base table or view not found')) {
+                $this->logger?->error('Safe first caught missing table.', ['sql' => substr($sql, 0, 120), 'error' => $e->getMessage()]);
+                return null;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Run execute() but silently log on table-not-found errors.
+     */
+    public function safeExecute(string $sql, array $params = []): bool
+    {
+        try {
+            return $this->execute($sql, $params);
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), '1146') || str_contains($e->getMessage(), 'Base table or view not found')) {
+                $this->logger?->error('Safe execute caught missing table.', ['sql' => substr($sql, 0, 120), 'error' => $e->getMessage()]);
+                return false;
+            }
+            throw $e;
+        }
+    }
 }

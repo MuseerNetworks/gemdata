@@ -1,42 +1,67 @@
-# ----------------------------------------------------------------------
-# 1. LiteSpeed / cPanel Compatibility
-# ----------------------------------------------------------------------
-<IfModule Litespeed>
-    # Disable LiteSpeed caching for dynamic PHP requests by default
-    CacheDisable public /
-</IfModule>
+# GemData shared-hosting-safe root rules for cPanel + LiteSpeed.
+# Keep this file minimal. If the site returns HTTP 500 before index.php runs,
+# temporarily rename this file to `.htaccess.off` to isolate rewrite issues.
 
-# Do not use Options -MultiViews or Options All (Causes 500 on some shared hosts)
+# `Options -Indexes` is commonly allowed on cPanel. If your host rejects it,
+# comment it out before retrying the site.
 Options -Indexes
 
-# ----------------------------------------------------------------------
-# 2. Security: Block Access to Sensitive Directories & Files
-# ----------------------------------------------------------------------
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
 
-    # Block access to source code, configs, and internal directories
-    RewriteRule ^(includes|classes|database|storage|cron)/.*$ - [F,L]
-    RewriteRule ^(\.git|\.env|\.cpanel\.yml|composer\.|package\.) - [F,L]
+    # Deny direct access to internal app directories.
+    RewriteRule ^(includes|classes|database|storage|cron)(/|$) - [F,L,NC]
+
+    # Deny common sensitive files at the document root.
+    RewriteRule ^(\.git|\.env|\.cpanel\.yml|composer\.(json|lock)|package(-lock)?\.json)$ - [F,L,NC]
+
+    # Deny access to hidden dotfiles (except .htaccess itself and .well-known)
+    RewriteRule ^\.(?!htaccess$|well-known/) - [F,L]
 </IfModule>
 
-# Block access to hidden files/directories (except .well-known)
-<FilesMatch "^\.(?!well-known)">
-    Require all denied
+# --- Security Headers (LiteSpeed/Apache) ---
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# --- Deny access to sensitive file types ---
+<FilesMatch "\.(sql|log|bak|env|yml|yaml|json|lock|md|txt|ini|sh|pem|key|crt|p12|pfx)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
-# ----------------------------------------------------------------------
-# 3. Security Headers
-# ----------------------------------------------------------------------
-<IfModule mod_headers.c>
-    Header set X-Content-Type-Options "nosniff"
-    Header set X-XSS-Protection "1; mode=block"
-    Header set X-Frame-Options "SAMEORIGIN"
-    # Header always edit Set-Cookie (.*) "$1; HttpOnly; Secure"
-</IfModule>
+# Allow specific public files that use denied extensions
+<FilesMatch "^(manifest\.json|robots\.txt|sw\.js)$">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
+</FilesMatch>
 
-# ----------------------------------------------------------------------
-# 4. PHP Settings (Use with Caution on Shared Hosting)
-# ----------------------------------------------------------------------
-# Note: Do not use php_flag or php_value here. Use MultiPHP INI Editor or .user.ini
+# --- Deny .user.ini exposure ---
+<Files ".user.ini">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
+
+# --- Force HTTPS on cPanel (only if not behind a proxy already doing it) ---
+# Uncomment if needed:
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

@@ -18,6 +18,7 @@ function current_page_key(string $section, string $path): string
         return match (true) {
             str_contains($path, 'admin/users.php') => 'users',
             str_contains($path, 'admin/services.php') => 'services',
+            str_contains($path, 'admin/service-control.php') => 'service-control',
             str_contains($path, 'admin/transactions.php') => 'transactions',
             str_contains($path, 'admin/wallet.php') => 'wallet',
             str_contains($path, 'admin/providers.php') => 'providers',
@@ -26,6 +27,7 @@ function current_page_key(string $section, string $path): string
             str_contains($path, 'admin/invites.php'),
             str_contains($path, 'admin/accept-invite.php') => 'roles',
             str_contains($path, 'admin/alerts.php') => 'alerts',
+            str_contains($path, 'admin/notifications.php') => 'notifications',
             str_contains($path, 'admin/settings.php') => 'settings',
             default => 'overview',
         };
@@ -49,11 +51,13 @@ function nav_items(string $section): array
             ['key' => 'users', 'label' => 'Users', 'href' => base_url('admin/users.php'), 'icon' => 'users'],
             ['key' => 'transactions', 'label' => 'Transactions', 'href' => base_url('admin/transactions.php'), 'icon' => 'transactions'],
             ['key' => 'services', 'label' => 'Services', 'href' => base_url('admin/services.php'), 'icon' => 'services'],
+            ['key' => 'service-control', 'label' => 'Service Control', 'href' => base_url('admin/service-control.php'), 'icon' => 'services'],
             ['key' => 'wallet', 'label' => 'Wallet Control', 'href' => base_url('admin/wallet.php'), 'icon' => 'wallet'],
             ['key' => 'providers', 'label' => 'Providers', 'href' => base_url('admin/providers.php'), 'icon' => 'server'],
             ['key' => 'reports', 'label' => 'Reports', 'href' => base_url('admin/reports.php'), 'icon' => 'chart'],
             ['key' => 'roles', 'label' => 'Roles & Invites', 'href' => base_url('admin/roles.php'), 'icon' => 'shield'],
             ['key' => 'alerts', 'label' => 'Alerts', 'href' => base_url('admin/alerts.php'), 'icon' => 'notification'],
+            ['key' => 'notifications', 'label' => 'Notifications', 'href' => base_url('admin/notifications.php'), 'icon' => 'notification'],
             ['key' => 'settings', 'label' => 'Settings', 'href' => base_url('admin/settings.php'), 'icon' => 'settings'],
             ['key' => 'logout', 'label' => 'Logout', 'href' => base_url('admin/logout.php'), 'icon' => 'logout'],
         ];
@@ -62,12 +66,12 @@ function nav_items(string $section): array
             return match ($item['key']) {
                 'users' => admin_can('users.view'),
                 'transactions' => admin_can('transactions.view'),
-                'services' => admin_can('services.manage'),
+                'services', 'service-control' => admin_can('services.manage'),
                 'wallet' => admin_can('wallet.manage'),
                 'providers' => admin_can('providers.manage'),
                 'reports' => admin_can('reports.view'),
                 'roles' => admin_can('roles.manage'),
-                'alerts' => admin_can('alerts.manage'),
+                'alerts', 'notifications' => admin_can('alerts.manage'),
                 'settings' => admin_can('settings.manage'),
                 default => true,
             };

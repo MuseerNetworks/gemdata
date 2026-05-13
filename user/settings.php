@@ -55,6 +55,10 @@ render_header('Settings', 'user');
                 Full Name
                 <input value="<?= e($user['full_name']); ?>" readonly>
             </label>
+            <label data-search-item data-search="username profile">
+                Username
+                <input value="<?= e($user['email']); ?>" readonly>
+            </label>
             <label data-search-item data-search="email profile">
                 Email Address
                 <input value="<?= e($user['email']); ?>" readonly>
@@ -66,6 +70,14 @@ render_header('Settings', 'user');
             <label data-search-item data-search="wallet balance">
                 Wallet Balance
                 <input value="<?= e(money($user['balance'] ?? 0)); ?>" readonly>
+            </label>
+            <label data-search-item data-search="account type tier">
+                Account Type
+                <input value="<?= e(ucfirst(strtolower($user['tier'] ?? 'USER'))); ?>" readonly>
+            </label>
+            <label data-search-item data-search="date joined created">
+                Date Joined
+                <input value="<?= e(human_datetime($user['created_at'] ?? null)); ?>" readonly>
             </label>
             <label data-search-item data-search="notification alerts sms">
                 Notification Preference
