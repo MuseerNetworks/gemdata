@@ -28,9 +28,18 @@ class PaystackDedicatedAccountService
     public function getForUser(int $userId): ?array
     {
         return $this->db->first(
-            'SELECT * FROM user_funding_accounts WHERE user_id = :user_id LIMIT 1',
-            ['user_id' => $userId]
+            'SELECT * FROM user_funding_accounts WHERE user_id = :user_id AND provider = :provider LIMIT 1',
+            ['user_id' => $userId, 'provider' => 'paystack']
         );
+    }
+
+    /** Return ALL virtual accounts for a user (all providers). */
+    public function getAllForUser(int $userId): array
+    {
+        return $this->db->all(
+            'SELECT * FROM user_funding_accounts WHERE user_id = :user_id ORDER BY assigned_at DESC',
+            ['user_id' => $userId]
+        ) ?? [];
     }
 
     public function ensureForUser(int $userId, bool $forceRetry = false): array
@@ -243,8 +252,9 @@ class PaystackDedicatedAccountService
             'meta_json',
         ];
 
-        $payload = array_intersect_key($fields, array_flip($allowed));
-        $payload['user_id'] = $userId;
+        $payload             = array_intersect_key($fields, array_flip($allowed));
+        $payload['user_id']  = $userId;
+        $payload['provider'] = 'paystack'; // always scope to this provider
 
         $columns = array_keys($payload);
         $insertSql = implode(', ', $columns);

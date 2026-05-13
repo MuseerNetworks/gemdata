@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/logo.php';
 
 $config = require __DIR__ . '/config.php';
 $GLOBALS['__gemdata_container'] = ['config' => $config];
@@ -71,6 +72,8 @@ use GemData\Classes\NotificationService;
 use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
 use GemData\Classes\PaystackWebhookService;
+use GemData\Classes\ZenithPayVirtualAccountService;
+use GemData\Classes\ZenithPayWebhookService;
 use GemData\Classes\PricingService;
 use GemData\Classes\ProviderPlanService;
 use GemData\Classes\ProviderManager;
@@ -109,6 +112,8 @@ try {
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger);
     $paystackWebhooks = new PaystackWebhookService($database, $payments, $activityLogger, $appLogger);
     $commission = new Commission($database);
+    $zenithPayAccounts = new ZenithPayVirtualAccountService($database, $activityLogger, $notifications);
+    $zenithPayWebhooks = new ZenithPayWebhookService($database, $payments, $activityLogger, $appLogger);
     $mockProvider = new MockVtuProvider();
     $pricing = new PricingService($database, $cache);
     $providerPlans = new ProviderPlanService($database, $pricing, $cache);
@@ -137,6 +142,8 @@ try {
     register_service(PaymentGatewayService::class, $payments);
     register_service(PaystackWebhookService::class, $paystackWebhooks);
     register_service(Commission::class, $commission);
+    register_service(ZenithPayVirtualAccountService::class, $zenithPayAccounts);
+    register_service(ZenithPayWebhookService::class, $zenithPayWebhooks);
     register_service(PricingService::class, $pricing);
     register_service(ProviderPlanService::class, $providerPlans);
     register_service(FraudService::class, $fraud);

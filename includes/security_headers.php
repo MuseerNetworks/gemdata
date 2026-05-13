@@ -40,4 +40,13 @@ function emit_security_headers(): void
         "form-action 'self'",
     ]);
     header('Content-Security-Policy: ' . $csp);
+
+    // HSTS — only send over HTTPS; tells browsers to always use HTTPS for this domain
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+    }
+
+    // Remove server fingerprinting headers
+    header_remove('X-Powered-By');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 }

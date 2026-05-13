@@ -1,35 +1,62 @@
-# GemData shared-hosting-safe root rules for cPanel + LiteSpeed.
-# Keep this file minimal. If the site returns HTTP 500 before index.php runs,
-# temporarily rename this file to `.htaccess.off` to isolate rewrite issues.
+# GemData — Production .htaccess
+# LiteSpeed / Apache compatible — cPanel shared hosting
+# Domain root deployment: https://gemdata.com.ng/
+#
+# If site returns 500 before index.php, rename to .htaccess.off to isolate.
 
-# `Options -Indexes` is commonly allowed on cPanel. If your host rejects it,
-# comment it out before retrying the site.
 Options -Indexes
 
+# ─── Deny access to internal directories ────────────────────────────────────
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Deny direct access to internal app directories.
-    RewriteRule ^(includes|classes|database|storage|cron)(/|$) - [F,L,NC]
+    # Redirect legacy /gemdata/* URLs to production root (fixes old PWA installs)
+    RewriteRule ^gemdata/(.*)$ /$1 [R=301,L,NE]
 
-    # Deny common sensitive files at the document root.
+    # Force HTTPS — redirects all plain HTTP to HTTPS permanently
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Block direct access to sensitive internal directories
+    RewriteRule ^(includes|classes|database|storage|cron|docs)(/|$) - [F,L,NC]
+
+    # Block dotfiles (except .well-known for Let's Encrypt)
+    RewriteRule ^\.(?!well-known/) - [F,L]
+
+    # Block sensitive file types
     RewriteRule ^(\.git|\.env|\.cpanel\.yml|composer\.(json|lock)|package(-lock)?\.json)$ - [F,L,NC]
-
-    # Deny access to hidden dotfiles (except .htaccess itself and .well-known)
-    RewriteRule ^\.(?!htaccess$|well-known/) - [F,L]
 </IfModule>
 
-# --- Security Headers (LiteSpeed/Apache) ---
+# ── Security Headers ────────────────────────────────────────────────────────
 <IfModule mod_headers.c>
+    # Prevent clickjacking
     Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Prevent MIME sniffing
     Header always set X-Content-Type-Options "nosniff"
+
+    # XSS filter (legacy browsers)
     Header always set X-XSS-Protection "1; mode=block"
+
+    # Referrer policy
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Disable unused browser APIs
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
+    # HSTS — activated (max 1 year, include subdomains)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Remove server fingerprinting
+    Header always unset X-Powered-By
+    Header always unset Server
+
+    # Service worker scope — allow SW at root
+    Header always set Service-Worker-Allowed "/"
 </IfModule>
 
-# --- Deny access to sensitive file types ---
-<FilesMatch "\.(sql|log|bak|env|yml|yaml|json|lock|md|txt|ini|sh|pem|key|crt|p12|pfx)$">
+# ─── Block Sensitive File Types ──────────────────────────────────────────────
+<FilesMatch "\.(sql|log|bak|env|yml|yaml|lock|ini|sh|pem|key|crt|p12|pfx|secrets)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -39,7 +66,18 @@ Options -Indexes
     </IfModule>
 </FilesMatch>
 
-# Allow specific public files that use denied extensions
+# Block production config templates
+<FilesMatch "^config\.(production|staging).*\.php$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Allow manifest and robots
 <FilesMatch "^(manifest\.json|robots\.txt|sw\.js)$">
     <IfModule mod_authz_core.c>
         Require all granted
@@ -50,18 +88,68 @@ Options -Indexes
     </IfModule>
 </FilesMatch>
 
-# --- Deny .user.ini exposure ---
+# Block .user.ini exposure
 <Files ".user.ini">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Deny from all
-    </IfModule>
 </Files>
 
-# --- Force HTTPS on cPanel (only if not behind a proxy already doing it) ---
-# Uncomment if needed:
-# RewriteCond %{HTTPS} off
-# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# ─── Static Asset Caching ────────────────────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    # CSS/JS with versioned cache busting via query string
+    ExpiresByType text/css                 "access plus 7 days"
+    ExpiresByType application/javascript   "access plus 7 days"
+
+    # Images — longer cache
+    ExpiresByType image/png                "access plus 30 days"
+    ExpiresByType image/jpeg               "access plus 30 days"
+    ExpiresByType image/webp               "access plus 30 days"
+    ExpiresByType image/svg+xml            "access plus 30 days"
+    ExpiresByType image/x-icon             "access plus 30 days"
+
+    # PWA manifest — short cache (update frequently)
+    ExpiresByType application/manifest+json "access plus 1 hour"
+    ExpiresByType application/json          "access plus 1 hour"
+
+    # Fonts
+    ExpiresByType font/woff2               "access plus 365 days"
+    ExpiresByType font/woff                "access plus 365 days"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Force revalidation on HTML (PHP)
+    <FilesMatch "\.(php|html)$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </FilesMatch>
+
+    # Aggressive cache for fingerprinted assets
+    <FilesMatch "\.(css|js|png|jpg|webp|svg|ico|woff2|woff)$">
+        Header set Cache-Control "public, max-age=604800, stale-while-revalidate=86400"
+    </FilesMatch>
+</IfModule>
+
+# ─── GZIP Compression ────────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css
+    AddOutputFilterByType DEFLATE application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml application/manifest+json
+    AddOutputFilterByType DEFLATE font/woff2 font/woff
+</IfModule>
+
+# LiteSpeed equivalent
+<IfModule lsapi_module>
+    php_value output_handler ""
+</IfModule>
+
+# ─── PHP Memory/Resource Limits (shared hosting) ─────────────────────────────
+<IfModule mod_php.c>
+    php_value memory_limit 128M
+    php_value max_execution_time 30
+    php_value post_max_size 8M
+    php_value upload_max_filesize 4M
+</IfModule>

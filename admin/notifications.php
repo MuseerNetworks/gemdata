@@ -83,7 +83,7 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 render_header('Notifications', 'admin');
 ?>
 <div class="space-y-6">
-    <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($flashMsg = flash('success')): ?><div class="notice notice-success"><?= e($flashMsg); ?></div><?php endif; ?>
 
     <section class="surface-card p-6">
         <h1 class="text-3xl font-black text-white">Send Notification</h1>

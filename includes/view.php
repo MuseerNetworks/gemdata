@@ -117,10 +117,12 @@ function render_sidebar(array $items, string $activeKey, string $section): void
     ?>
     <aside class="app-sidebar" id="app-sidebar" data-section="<?= e($section); ?>">
         <div class="sidebar-brand">
-            <a href="<?= e(base_url()); ?>" class="brand-mark">G</a>
-            <div>
+            <a href="<?= e(base_url()); ?>" class="sidebar-logo-link" aria-label="GemData Home">
+                <?= gemdata_logo('icon', 'auto', 'sidebar-logo-icon', 'GemData'); ?>
+            </a>
+            <div class="sidebar-brand-text">
                 <p class="brand-title">GemData</p>
-                <p class="brand-subtitle"><?= $section === 'admin' ? 'Admin Console' : 'GemData Workspace'; ?></p>
+                <p class="brand-subtitle"><?= $section === 'admin' ? 'Admin Console' : 'Workspace'; ?></p>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -170,6 +172,8 @@ function render_header(string $title, string $section = 'user'): void
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?= e($title); ?> | <?= e(config('app.name')); ?></title>
+        <meta name="description" content="GemData — Fast, secure VTU platform for airtime, data bundles, electricity bills, and reseller operations in Nigeria.">
+        <link rel="canonical" href="<?= e(rtrim(app_origin(), '/') . ($_SERVER['REQUEST_URI'] ?? '/')); ?>">
         <meta name="theme-color" content="<?= e($pwaTheme); ?>">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -178,9 +182,43 @@ function render_header(string $title, string $section = 'user'): void
         <meta name="application-name" content="<?= e(config('app.name')); ?>">
         <meta name="msapplication-TileColor" content="<?= e($pwaTheme); ?>">
         <link rel="manifest" href="<?= e(base_url('manifest.json')); ?>">
-        <link rel="apple-touch-icon" sizes="180x180" href="<?= e(base_url('assets/pwa/icons/icon-180.png')); ?>">
-        <link rel="icon" type="image/png" sizes="192x192" href="<?= e(base_url('assets/pwa/icons/icon-192.png')); ?>">
-        <link rel="icon" type="image/png" sizes="512x512" href="<?= e(base_url('assets/pwa/icons/icon-512.png')); ?>">
+        <!-- Favicon — PNG first, using base_url() for localhost + production compatibility -->
+        <link rel="icon" type="image/png" sizes="32x32" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
+        <link rel="icon" type="image/png" sizes="16x16" href="<?= e(base_url('assets/brand/favicon-16x16.png')); ?>?v=20260513c">
+        <link rel="icon" type="image/png" sizes="48x48" href="<?= e(base_url('assets/brand/favicon-48x48.png')); ?>?v=20260513c">
+        <link rel="shortcut icon" type="image/png" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
+        <!-- Apple / iOS -->
+        <link rel="apple-touch-icon" sizes="180x180" href="<?= e(base_url('assets/brand/apple-touch-icon.png')); ?>?v=20260513c">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="GemData">
+        <!-- Android / Chrome -->
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="application-name" content="GemData">
+        <meta name="theme-color" content="#1d4ed8">
+        <!-- Windows -->
+        <meta name="msapplication-TileColor" content="#1d4ed8">
+        <meta name="msapplication-TileImage" content="/assets/brand/ms-tile-150.png">
+        <meta name="msapplication-config" content="/browserconfig.xml">
+        <!-- Open Graph -->
+        <meta property="og:type" content="website">
+        <meta property="og:site_name" content="GemData">
+        <meta property="og:title" content="<?= e($title); ?> | GemData">
+        <meta property="og:description" content="GemData — Nigeria's fastest VTU platform for airtime, data bundles, electricity bills, and reseller API operations.">
+        <meta property="og:image" content="<?= e(rtrim(app_origin(),'/')); ?>/assets/brand/og-image.png">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:url" content="<?= e(rtrim(app_origin(),'/') . ($_SERVER['REQUEST_URI'] ?? '/')); ?>">
+        <!-- Twitter / X -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:site" content="@GemDataNG">
+        <meta name="twitter:title" content="<?= e($title); ?> | GemData">
+        <meta name="twitter:description" content="Fast, secure VTU for airtime, data, electricity, and reseller operations.">
+        <meta name="twitter:image" content="<?= e(rtrim(app_origin(),'/')); ?>/assets/brand/og-image.png">
+        <!-- Fonts -->
+        <link rel="dns-prefetch" href="//cdn.tailwindcss.com">
+        <link rel="preconnect" href="https://fonts.bunny.net">
+        <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800,900&display=swap" rel="stylesheet">
         <script>
             (function () {
                 var theme = localStorage.getItem('gemdata-theme') || 'light-fintech';
@@ -292,10 +330,12 @@ function render_header(string $title, string $section = 'user'): void
             <div class="guest-shell">
                 <header class="guest-topbar">
                     <div class="guest-brand">
-                        <a href="<?= e(base_url()); ?>" class="brand-mark">G</a>
-                        <div>
+                        <a href="<?= e(base_url()); ?>" class="sidebar-logo-link" aria-label="GemData Home">
+                            <?= gemdata_logo('icon', 'auto', 'sidebar-logo-icon', 'GemData'); ?>
+                        </a>
+                        <div class="sidebar-brand-text">
                             <p class="brand-title">GemData</p>
-                            <p class="brand-subtitle">GemData Workspace</p>
+                            <p class="brand-subtitle">Trust In Data</p>
                         </div>
                     </div>
                     <nav class="guest-nav">

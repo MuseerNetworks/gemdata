@@ -40,7 +40,7 @@ $services = db()->query('SELECT * FROM services ORDER BY name');
 render_header('Service Control', 'admin');
 ?>
 <div class="space-y-6">
-    <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($flashMsg = flash('success')): ?><div class="notice notice-success"><?= e($flashMsg); ?></div><?php endif; ?>
 
     <section class="surface-card p-6">
         <h1 class="text-3xl font-black text-white">Service Availability Control</h1>

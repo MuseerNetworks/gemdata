@@ -190,7 +190,24 @@ class ProviderManager
     {
         $summary = [];
         foreach ($this->allProviders() as $provider) {
-            $summary[] = $this->healthForProvider($provider);
+            try {
+                $summary[] = $this->healthForProvider($provider);
+            } catch (\Throwable $e) {
+                $this->logger->warning('Provider health check failed gracefully.', [
+                    'provider' => $provider['code'] ?? 'unknown',
+                    'error' => $e->getMessage(),
+                ]);
+                $summary[] = [
+                    'status' => 'unavailable',
+                    'balance_amount' => 0.0,
+                    'provider_code' => (string) ($provider['code'] ?? 'unknown'),
+                    'provider_name' => (string) ($provider['name'] ?? 'Unknown'),
+                    'threshold' => (float) ($provider['low_balance_threshold'] ?? 0),
+                    'is_low_balance' => false,
+                    'balance_status' => 'unavailable',
+                    'sandbox' => false,
+                ];
+            }
         }
 
         return $summary;
@@ -237,9 +254,32 @@ class ProviderManager
             return $cached;
         }
 
-        $driver = $this->driver($provider);
-        $health = $driver->healthCheck();
-        $balance = $driver->checkBalance();
+        try {
+            $driver = $this->driver($provider);
+            $health = $driver->healthCheck();
+            $balance = $driver->checkBalance();
+        } catch (\Throwable $e) {
+            // Provider is disabled or misconfigured — return safe defaults
+            $this->logger->warning('Provider health/balance check skipped.', [
+                'provider' => $provider['code'] ?? 'unknown',
+                'reason' => $e->getMessage(),
+            ]);
+            $latest = $this->latestBalanceLog((int) $provider['id']);
+            $result = [
+                'status' => 'unavailable',
+                'balance_amount' => (float) ($latest['balance_amount'] ?? 0),
+                'provider_code' => (string) $provider['code'],
+                'provider_name' => (string) $provider['name'],
+                'threshold' => (float) $provider['low_balance_threshold'],
+                'is_low_balance' => false,
+                'balance_status' => 'unavailable',
+                'sandbox' => false,
+                'error' => $e->getMessage(),
+            ];
+            $this->cache->put($cacheKey, $result, 60);
+            return $result;
+        }
+
         if (($balance['status'] ?? '') === 'successful' && isset($balance['balance'])) {
             $this->logBalance(
                 (int) $provider['id'],

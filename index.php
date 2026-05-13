@@ -17,7 +17,47 @@ if (user()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GemData | Fast, Secure & Affordable VTU Platform</title>
+    <title>GemData | Fast, Secure &amp; Affordable VTU Platform</title>
+    <meta name="description" content="GemData — Nigeria's fastest VTU platform for airtime, data bundles, electricity bills, cable TV subscriptions, and reseller operations.">
+    <link rel="canonical" href="<?= e(rtrim(app_origin(), '/') . '/'); ?>">
+    <!-- Favicon — PNG first -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= e(base_url('assets/brand/favicon-16x16.png')); ?>?v=20260513c">
+    <link rel="icon" type="image/png" sizes="48x48" href="<?= e(base_url('assets/brand/favicon-48x48.png')); ?>?v=20260513c">
+    <link rel="shortcut icon" type="image/png" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
+    <!-- Apple / iOS -->
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= e(base_url('assets/brand/apple-touch-icon.png')); ?>?v=20260513c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GemData">
+    <!-- Android / Chrome / PWA -->
+    <link rel="manifest" href="<?= e(base_url('manifest.json')); ?>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="GemData">
+    <meta name="theme-color" content="#1d4ed8">
+    <!-- Windows -->
+    <meta name="msapplication-TileColor" content="#1d4ed8">
+    <meta name="msapplication-TileImage" content="/assets/brand/ms-tile-150.png">
+    <meta name="msapplication-config" content="/browserconfig.xml">
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="GemData">
+    <meta property="og:title" content="GemData | Fast, Secure &amp; Affordable VTU Platform">
+    <meta property="og:description" content="Nigeria's fastest VTU platform for airtime, data, electricity bills, and reseller operations.">
+    <meta property="og:image" content="<?= e(rtrim(app_origin(),'/')); ?>/assets/brand/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="<?= e(rtrim(app_origin(), '/') . '/'); ?>">
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@GemDataNG">
+    <meta name="twitter:title" content="GemData — Trust In Data">
+    <meta name="twitter:description" content="Fast, secure VTU for airtime, data, electricity, and reseller operations in Nigeria.">
+    <meta name="twitter:image" content="<?= e(rtrim(app_origin(),'/')); ?>/assets/brand/og-image.png">
+    <!-- Fonts -->
+    <link rel="dns-prefetch" href="//cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800,900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -56,16 +96,27 @@ if (user()) {
             });
         });
     </script>
+    <script>
+        // Service Worker registration for landing page PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .catch(function (err) { console.warn('SW registration failed', err); });
+            });
+        }
+    </script>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
     <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(91,97,255,0.12),_transparent_28%),radial-gradient(circle_at_right,_rgba(45,212,191,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#f5f7ff_52%,#eef2ff_100%)]">
         <header class="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-                <a href="<?= e(base_url()); ?>" class="flex items-center gap-3">
-                    <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-gem-500 to-cyan-400 text-lg font-black text-white shadow-float">G</span>
+                <a href="<?= e(base_url()); ?>" class="flex items-center gap-3 lp-brand-link">
+                    <span class="lp-brand-icon" style="display:flex;align-items:center;width:2.75rem;height:2.75rem;flex-shrink:0">
+                        <?= gemdata_logo('icon', 'light', 'lp-logo-icon', 'GemData'); ?>
+                    </span>
                     <span>
-                        <span class="block text-lg font-black tracking-tight">GemData</span>
-                        <span class="block text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">GemData Workspace</span>
+                        <span class="block text-lg font-black tracking-tight" style="color:#1d4ed8">GemData</span>
+                        <span class="block text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Trust In Data</span>
                     </span>
                 </a>
                 <nav class="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">

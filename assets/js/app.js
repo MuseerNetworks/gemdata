@@ -603,12 +603,16 @@ const setupServiceWorker = () => {
         return;
     }
 
-    const runtime = getRuntime();
-    const serviceWorkerPath = `${runtime.baseUrl || ''}/service-worker.js`;
+    // Always register SW at the root scope for production.
+    // On production: /service-worker.js with scope '/'
+    // The runtime.baseUrl may be full URL (e.g. https://gemdata.com.ng) — strip origin.
+    const swPath = '/service-worker.js';
+    const swScope = '/';
+
     window.addEventListener('load', async () => {
         try {
-            const registration = await navigator.serviceWorker.register(serviceWorkerPath, {
-                scope: `${runtime.baseUrl || '/'}`
+            const registration = await navigator.serviceWorker.register(swPath, {
+                scope: swScope
             });
 
             if (registration.waiting) {

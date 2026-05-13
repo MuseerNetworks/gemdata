@@ -190,15 +190,17 @@ class SessionAuth
     {
         $windowMinutes = max(1, (int) config('app.admin_login_attempt_window_minutes', 15));
         $limit = max(1, (int) config('app.admin_login_attempt_limit', 5));
+        // Cast to int before interpolation — PDO cannot bind INTERVAL values
+        $window = (int) $windowMinutes;
         $row = $this->db->first(
             'SELECT COUNT(*) AS total
              FROM admin_login_logs
              WHERE email = :email
                AND ip_address = :ip_address
                AND was_successful = 0
-               AND created_at >= DATE_SUB(NOW(), INTERVAL ' . $windowMinutes . ' MINUTE)',
+               AND created_at >= DATE_SUB(NOW(), INTERVAL ' . $window . ' MINUTE)',
             [
-                'email' => $email,
+                'email'      => $email,
                 'ip_address' => client_ip(),
             ]
         );
@@ -210,15 +212,17 @@ class SessionAuth
     {
         $windowMinutes = max(1, (int) config('app.user_login_attempt_window_minutes', 15));
         $limit = max(1, (int) config('app.user_login_attempt_limit', 5));
+        // Cast to int before interpolation — PDO cannot bind INTERVAL values
+        $window = (int) $windowMinutes;
         $row = $this->db->first(
             'SELECT COUNT(*) AS total
              FROM user_login_logs
              WHERE email = :email
                AND ip_address = :ip_address
                AND was_successful = 0
-               AND created_at >= DATE_SUB(NOW(), INTERVAL ' . $windowMinutes . ' MINUTE)',
+               AND created_at >= DATE_SUB(NOW(), INTERVAL ' . $window . ' MINUTE)',
             [
-                'email' => $email,
+                'email'      => $email,
                 'ip_address' => client_ip(),
             ]
         );

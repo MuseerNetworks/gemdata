@@ -1,4 +1,5 @@
 ---
 deployment:
   tasks:
-    - /usr/bin/rsync -av --exclude='.git' ./ /home/yyrigitd/public_html/
+    # Edit the cPanel username/path if this repository is deployed elsewhere.
+    - /usr/bin/rsync -av --delete --exclude='.git' ./ /home/yyrigitd/public_html/

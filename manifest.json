@@ -1,33 +1,63 @@
 {
-  "id": "/gemdata/",
+  "id": "/",
   "name": "GemData",
   "short_name": "GemData",
-  "description": "GemData VTU platform for airtime, data, bills, wallet funding, and reseller operations.",
-  "lang": "en-NG",
+  "description": "Nigeria's fastest VTU platform — airtime, data bundles, electricity, cable TV, and reseller API.",
+  "lang": "en",
   "dir": "ltr",
-  "start_url": "/gemdata/",
-  "scope": "/gemdata/",
+  "categories": ["finance", "utilities"],
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#0f172a",
-  "background_color": "#f8fbff",
-  "categories": ["finance", "business", "utilities"],
+  "orientation": "portrait-primary",
+  "theme_color": "#1d4ed8",
+  "background_color": "#0f172a",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/gemdata/assets/pwa/icons/icon-192.png",
+      "src": "/assets/brand/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/gemdata/assets/pwa/icons/icon-512.png",
+      "src": "/assets/brand/pwa-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/brand/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/gemdata/assets/pwa/icons/icon-maskable-512.png",
+      "src": "/assets/brand/pwa-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/assets/brand/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Buy Data",
+      "short_name": "Data",
+      "url": "/user/dashboard.php#services",
+      "icons": [{ "src": "/assets/brand/favicon-32x32.png", "sizes": "32x32" }]
+    },
+    {
+      "name": "My Wallet",
+      "short_name": "Wallet",
+      "url": "/user/fund-wallet.php",
+      "icons": [{ "src": "/assets/brand/favicon-32x32.png", "sizes": "32x32" }]
+    }
+  ],
+  "screenshots": []
 }

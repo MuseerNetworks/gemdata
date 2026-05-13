@@ -1,70 +1,111 @@
-const VERSION = 'gemdata-pwa-v1';
+/**
+ * GemData Service Worker v2
+ * Production-safe: paths relative to domain root (/), not /gemdata/
+ * Bumped to v2 to force full cache invalidation of any stale v1 caches.
+ */
+const VERSION = 'gemdata-pwa-v2';
 const ASSET_CACHE = `${VERSION}-assets`;
-const PAGE_CACHE = `${VERSION}-pages`;
-const RUNTIME_CONFIG = {
-  basePath: '/gemdata',
-  offlinePage: '/gemdata/offline.html'
-};
+const PAGE_CACHE  = `${VERSION}-pages`;
 
+// Production: basePath is empty string (domain root).
+// If you ever move back to a sub-directory, set this to '/subdirectory'.
+const BASE_PATH    = '';
+const OFFLINE_PAGE = `${BASE_PATH}/offline.html`;
+
+// Only cache true static shell assets — never cache PHP pages.
+// PHP pages must always go network-first so auth/session state is respected.
 const CORE_ASSETS = [
-  '/gemdata/',
-  '/gemdata/index.php',
-  '/gemdata/user/login.php',
-  '/gemdata/user/register.php',
-  '/gemdata/user/forgot-password.php',
-  '/gemdata/assets/css/site.css',
-  '/gemdata/assets/js/app.js',
-  '/gemdata/manifest.json',
-  '/gemdata/offline.html',
-  '/gemdata/assets/pwa/icons/icon-180.png',
-  '/gemdata/assets/pwa/icons/icon-192.png',
-  '/gemdata/assets/pwa/icons/icon-512.png',
-  '/gemdata/assets/pwa/icons/icon-maskable-512.png'
+  `${BASE_PATH}/assets/css/site.css`,
+  `${BASE_PATH}/assets/js/app.js`,
+  `${BASE_PATH}/manifest.json`,
+  `${BASE_PATH}/offline.html`,
+  `${BASE_PATH}/assets/pwa/icons/icon-180.png`,
+  `${BASE_PATH}/assets/pwa/icons/icon-192.png`,
+  `${BASE_PATH}/assets/pwa/icons/icon-512.png`,
+  `${BASE_PATH}/assets/pwa/icons/icon-maskable-512.png`,
 ];
 
+// ─── Install: cache only static shell ─────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(ASSET_CACHE).then((cache) => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
+    caches.open(ASSET_CACHE)
+      .then((cache) => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
+      .catch((err) => {
+        // Don't fail install if an icon is missing — log and continue
+        console.warn('[GemData SW] Install partial failure:', err);
+        return self.skipWaiting();
+      })
   );
 });
 
+// ─── Activate: purge ALL old caches ───────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys
-        .filter((key) => ![ASSET_CACHE, PAGE_CACHE].includes(key))
-        .map((key) => caches.delete(key))
-    )).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key !== ASSET_CACHE && key !== PAGE_CACHE)
+          .map((key) => {
+            console.log('[GemData SW] Deleting stale cache:', key);
+            return caches.delete(key);
+          })
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
+// ─── Messages ─────────────────────────────────────────────────────────────
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-
   if (event.data && event.data.type === 'QUEUE_SYNC_REQUEST') {
     event.waitUntil(notifyClients({ type: 'QUEUE_SYNC_REQUEST' }));
   }
 });
 
+// ─── Background Sync ──────────────────────────────────────────────────────
 self.addEventListener('sync', (event) => {
   if (event.tag === 'gemdata-sync-queue') {
     event.waitUntil(notifyClients({ type: 'QUEUE_SYNC_REQUEST' }));
   }
 });
 
+// ─── Fetch ────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-  if (request.method !== 'GET') {
-    return;
-  }
+
+  // Only handle GET
+  if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
   const isSameOrigin = url.origin === self.location.origin;
-  const isApiRoute = isSameOrigin && url.pathname.startsWith(`${RUNTIME_CONFIG.basePath}/api/`);
-  const isCronRoute = isSameOrigin && url.pathname.startsWith(`${RUNTIME_CONFIG.basePath}/cron/`);
-  const isManifest = isSameOrigin && url.pathname === `${RUNTIME_CONFIG.basePath}/manifest.json`;
+
+  // Redirect any stale /gemdata/* requests to the root path
+  // (handles old PWA installs that cached wrong URLs)
+  if (isSameOrigin && url.pathname.startsWith('/gemdata/')) {
+    const corrected = url.pathname.replace(/^\/gemdata/, '') || '/';
+    const newUrl    = url.origin + corrected + url.search;
+    event.respondWith(Response.redirect(newUrl, 301));
+    return;
+  }
+
+  // Never intercept API, cron, or webhook routes — always network
+  const isApiRoute  = isSameOrigin && url.pathname.startsWith(`${BASE_PATH}/api/`);
+  const isCronRoute = isSameOrigin && url.pathname.startsWith(`${BASE_PATH}/cron/`);
+  if (isApiRoute || isCronRoute) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // Tailwind CDN — let it pass through (don't cache; CDN handles its own caching)
+  if (url.hostname === 'cdn.tailwindcss.com') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // Static assets → cache-first
   const isStaticAsset =
     url.pathname.includes('/assets/') ||
     url.pathname.endsWith('.css') ||
@@ -74,54 +115,56 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.jpeg') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.webp') ||
-    url.hostname === 'cdn.tailwindcss.com';
+    url.pathname.endsWith('.ico');
 
-  if (isApiRoute || isCronRoute) {
-    event.respondWith(fetch(request));
-    return;
-  }
+  const isManifest = isSameOrigin && url.pathname === `${BASE_PATH}/manifest.json`;
 
   if (isStaticAsset || isManifest) {
     event.respondWith(cacheFirst(request));
     return;
   }
 
+  // Navigation (PHP pages) → always network-first, fallback to offline page
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstPage(request));
     return;
   }
 
+  // Everything else → network with runtime cache fallback
   event.respondWith(networkFirstRuntime(request));
 });
 
+// ─── Cache strategies ─────────────────────────────────────────────────────
 async function cacheFirst(request) {
-  const cache = await caches.open(ASSET_CACHE);
+  const cache  = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
-  const response = await fetch(request);
-  if (response && (response.ok || response.type === 'opaque')) {
-    cache.put(request, response.clone());
-  }
-  return response;
-}
-
-async function networkFirstPage(request) {
-  const cache = await caches.open(PAGE_CACHE);
   try {
     const response = await fetch(request);
-    if (response && response.ok) {
+    if (response && (response.ok || response.type === 'opaque')) {
       cache.put(request, response.clone());
     }
     return response;
+  } catch (err) {
+    return new Response('Asset unavailable offline.', { status: 503 });
+  }
+}
+
+async function networkFirstPage(request) {
+  try {
+    const response = await fetch(request);
+    // Only cache successful, non-authenticated page shells if needed
+    // For VTU/fintech, we intentionally do NOT cache PHP pages to avoid
+    // serving stale session/auth state
+    return response;
   } catch (error) {
-    const cached = await cache.match(request, { ignoreSearch: false }) || await cache.match(request.url) || await cache.match(`${RUNTIME_CONFIG.basePath}/`);
-    if (cached) {
-      return cached;
-    }
-    return caches.match(RUNTIME_CONFIG.offlinePage);
+    // If completely offline, serve the offline page
+    const cached = await caches.match(OFFLINE_PAGE);
+    return cached || new Response('<h1>You are offline</h1>', {
+      status: 503,
+      headers: { 'Content-Type': 'text/html' }
+    });
   }
 }
 
@@ -135,9 +178,7 @@ async function networkFirstRuntime(request) {
     return response;
   } catch (error) {
     const cached = await cache.match(request);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
     throw error;
   }
 }
