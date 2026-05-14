@@ -1,19 +1,4 @@
 ---
 deployment:
   tasks:
-    # GemData — cPanel Git Version Control Deployment
-    # Target: /home/yyrigitd/public_html/
-    #
-    # FIX NOTES (2026-05-14):
-    #   REMOVED --delete  → was silently deleting config.local.php (not in repo/.gitignore)
-    #   REMOVED -a        → -a includes -o/-g (owner/group) which FAIL on shared hosting
-    #   ADDED  -rlptD     → safe equivalent: recursive, symlinks, perms, times, devices
-    #   ADDED  --exclude='config.local.php'   → never overwrite live API keys/DB config
-    #   ADDED  --exclude='storage/'           → never wipe live logs/cache
-    - /usr/bin/rsync -rlptD
-        --exclude='.git'
-        --exclude='config.local.php'
-        --exclude='storage/logs/'
-        --exclude='storage/cache/'
-        ./
-        /home/yyrigitd/public_html/
+    - /usr/bin/rsync -rlptD --exclude='.git' --exclude='config.local.php' --exclude='storage/logs/' --exclude='storage/cache/' ./ /home/yyrigitd/public_html/
