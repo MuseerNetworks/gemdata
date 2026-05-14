@@ -4,15 +4,13 @@ deployment:
 
     - export DEPLOYPATH=/home/yyrigitd/public_html/
 
+    - /bin/cp index.php $DEPLOYPATH
+
+    - /bin/cp -R admin $DEPLOYPATH
+    - /bin/cp -R api $DEPLOYPATH
     - /bin/cp -R assets $DEPLOYPATH
     - /bin/cp -R classes $DEPLOYPATH
     - /bin/cp -R includes $DEPLOYPATH
     - /bin/cp -R user $DEPLOYPATH
-    - /bin/cp -R admin $DEPLOYPATH
-    - /bin/cp -R api $DEPLOYPATH
-    - /bin/cp -R uploads $DEPLOYPATH
 
-    - /bin/cp index.php $DEPLOYPATH
     - /bin/cp .htaccess $DEPLOYPATH
-    - /bin/cp manifest.json $DEPLOYPATH
-    - /bin/cp service-worker.js $DEPLOYPATH
