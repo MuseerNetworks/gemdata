@@ -446,10 +446,24 @@ class TransactionService
 
             $providerAccount = $providerResponse['provider_account'] ?? null;
             $commissionAmount = 0.0;
-            if ($status === 'successful' && ($locked['channel'] ?? 'web') === 'api') {
-                $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
-                $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
-                $this->commission->log((int) $locked['user_id'], $transactionId, (int) $locked['service_id'], $rate, (float) $locked['amount'], $commissionAmount);
+            if ($status === 'successful') {
+                // Resolve user type to determine commission eligibility
+                $txUser = $this->db->first('SELECT user_type, tier FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $isReseller = in_array($txUser['user_type'] ?? '', ['reseller'], true)
+                           || in_array($txUser['tier'] ?? '', ['RESELLER'], true);
+                if ($isReseller) {
+                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
+                    $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
+                    $this->commission->creditToWallet(
+                        (int) $locked['user_id'],
+                        $transactionId,
+                        (int) $locked['service_id'],
+                        $rate,
+                        (float) $locked['amount'],
+                        $commissionAmount,
+                        $service['name'] ?? 'VTU Service'
+                    );
+                }
             }
 
             if ($status === 'failed') {
@@ -723,10 +737,23 @@ class TransactionService
             }
 
             $commissionAmount = (float) ($locked['commission_amount'] ?? 0);
-            if (($locked['channel'] ?? 'web') === 'api' && $commissionAmount <= 0) {
-                $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
-                $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
-                $this->commission->log((int) $locked['user_id'], (int) $locked['id'], (int) $locked['service_id'], $rate, (float) $locked['amount'], $commissionAmount);
+            if ($commissionAmount <= 0) {
+                $reconUser = $this->db->first('SELECT user_type, tier FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $isReseller = in_array($reconUser['user_type'] ?? '', ['reseller'], true)
+                           || in_array($reconUser['tier'] ?? '', ['RESELLER'], true);
+                if ($isReseller) {
+                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
+                    $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
+                    $this->commission->creditToWallet(
+                        (int) $locked['user_id'],
+                        (int) $locked['id'],
+                        (int) $locked['service_id'],
+                        $rate,
+                        (float) $locked['amount'],
+                        $commissionAmount,
+                        $service['name'] ?? 'VTU Service'
+                    );
+                }
             }
 
             $providerAccount = $providerResponse['provider_account'] ?? null;

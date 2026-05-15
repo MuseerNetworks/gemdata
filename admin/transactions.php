@@ -168,12 +168,13 @@ $countRow = db()->first(
 );
 $pagination = pagination_meta((int) ($countRow['total'] ?? 0), $page, $perPage);
 
-$baseQuery = "SELECT t.*, u.full_name, u.tier, s.name AS service_name, s.slug AS service_slug
+$baseQuery = "SELECT t.*, u.full_name, u.tier, u.user_type, s.name AS service_name, s.slug AS service_slug
               FROM transactions t
               INNER JOIN users u ON u.id = t.user_id
               INNER JOIN services s ON s.id = t.service_id
               WHERE {$where}
               ORDER BY t.id DESC";
+
 $rows = db()->query($baseQuery . " LIMIT {$pagination['offset']}, {$pagination['per_page']}", $params);
 
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
@@ -267,7 +268,7 @@ render_header('Transactions', 'admin');
                 <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="channel"><option value="">All channels</option><?php foreach (['web','api'] as $channel): ?><option value="<?= e($channel); ?>"<?= $filters['channel'] === $channel ? ' selected' : ''; ?>><?= e(strtoupper($channel)); ?></option><?php endforeach; ?></select>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="tier"><option value="">All tiers</option><?php foreach (['USER','RESELLER','AGENT','API_RESELLER'] as $tier): ?><option value="<?= e($tier); ?>"<?= $filters['tier'] === $tier ? ' selected' : ''; ?>><?= e($tier); ?></option><?php endforeach; ?></select>
+                <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="tier"><option value="">All tiers</option><?php foreach (['USER','RESELLER','SMART','API_RESELLER'] as $tier): ?><option value="<?= e($tier); ?>"<?= $filters['tier'] === $tier ? ' selected' : ''; ?>><?= e($tier); ?></option><?php endforeach; ?></select>
                 <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_code">
                     <option value="">All providers</option>
                     <?php foreach ($providers as $provider): ?>
@@ -308,7 +309,7 @@ render_header('Transactions', 'admin');
                 <table>
                     <thead>
                         <tr class="text-slate-400">
-                            <th></th><th>User</th><th>Reference</th><th>Service</th><th>Provider</th><th>Status</th><th>Amount</th><th>Profit</th><th>Review</th>
+                            <th></th><th>User</th><th>Reference</th><th>Service</th><th>Provider</th><th>Status</th><th>Amount</th><th>Profit</th><th>Commission</th><th>Review</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -321,6 +322,14 @@ render_header('Transactions', 'admin');
                                 <td>
                                     <div class="font-semibold text-white"><?= e($row['full_name']); ?></div>
                                     <div class="text-xs text-slate-400"><?= e($row['tier']); ?></div>
+                                    <?php
+                                    $utBadge = match($row['user_type'] ?? 'smart') {
+                                        'reseller' => 'text-yellow-400',
+                                        'api'      => 'text-blue-400',
+                                        default    => 'text-slate-500',
+                                    };
+                                    ?>
+                                    <div class="text-xs <?= $utBadge ?>"><?= e(strtoupper((string)($row['user_type'] ?? 'smart'))); ?></div>
                                 </td>
                                 <td class="font-mono text-xs">
                                     <div class="text-white"><?= e($row['reference']); ?></div>
@@ -334,6 +343,14 @@ render_header('Transactions', 'admin');
                                 <td><span class="status-chip status-<?= e($row['status']); ?>"><?= e(ucfirst($row['status'])); ?></span></td>
                                 <td><?= e(money($row['selling_price'] > 0 ? $row['selling_price'] : $row['amount'])); ?></td>
                                 <td><?= e(money($row['profit_amount'])); ?></td>
+                                <td>
+                                    <?php if ((float)($row['commission_amount'] ?? 0) > 0): ?>
+                                        <span class="text-green-400 font-semibold"><?= e(money($row['commission_amount'])); ?></span>
+                                        <div class="text-xs text-slate-500"><?= e($row['pricing_source'] ?? ''); ?></div>
+                                    <?php else: ?>
+                                        <span class="text-slate-600">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="w-[26rem]">
                                     <details class="admin-inline-drawer">
                                         <summary>Review actions</summary>

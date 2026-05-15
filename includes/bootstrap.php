@@ -64,6 +64,7 @@ use GemData\Classes\AdminService;
 use GemData\Classes\AdminOpsService;
 use GemData\Classes\AppLogger;
 use GemData\Classes\Commission;
+use GemData\Classes\CommissionWallet;
 use GemData\Classes\Database;
 use GemData\Classes\FraudService;
 use GemData\Classes\MaintenanceService;
@@ -111,7 +112,8 @@ try {
     $dedicatedAccounts = new PaystackDedicatedAccountService($database, $activityLogger, $notifications);
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger);
     $paystackWebhooks = new PaystackWebhookService($database, $payments, $activityLogger, $appLogger);
-    $commission = new Commission($database);
+    $commissionWallet = new CommissionWallet($database);
+    $commission = new Commission($database, $commissionWallet);
     $zenithPayAccounts = new ZenithPayVirtualAccountService($database, $activityLogger, $notifications);
     $zenithPayWebhooks = new ZenithPayWebhookService($database, $payments, $activityLogger, $appLogger);
     $mockProvider = new MockVtuProvider();
@@ -142,6 +144,7 @@ try {
     register_service(PaymentGatewayService::class, $payments);
     register_service(PaystackWebhookService::class, $paystackWebhooks);
     register_service(Commission::class, $commission);
+    register_service(CommissionWallet::class, $commissionWallet);
     register_service(ZenithPayVirtualAccountService::class, $zenithPayAccounts);
     register_service(ZenithPayWebhookService::class, $zenithPayWebhooks);
     register_service(PricingService::class, $pricing);
