@@ -95,5 +95,5 @@ function session_timed_out(): bool
         return false;
     }
 
-    return (time() - $lastActivity) > (int) config('app.session_timeout_seconds', 1800);
+    return (time() - $lastActivity) > (int) config('session.timeout_seconds', 1800);
 }

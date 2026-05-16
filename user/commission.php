@@ -2,14 +2,12 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireLogin();
-$user = $auth->user();
+$user = require_user();
+$db = db();
 
 // Only resellers access this page
 if (($user['user_type'] ?? 'smart') !== 'reseller') {
-    header('Location: /user/dashboard.php');
-    exit;
+    redirect(base_url('user/dashboard.php'));
 }
 
 $commWallet    = new \GemData\Classes\CommissionWallet($db);
@@ -89,7 +87,7 @@ render_header('Commission Wallet', 'reseller-commission');
       <i class="bi bi-clock me-1"></i> Withdrawal Pending Review
     </span>
   <?php elseif ($balance >= 500): ?>
-    <a href="/user/withdrawals.php" class="btn btn-success">
+    <a href="<?= e(base_url('user/withdrawals.php')); ?>" class="btn btn-success">
       <i class="bi bi-cash-stack me-1"></i> Request Withdrawal
     </a>
   <?php else: ?>

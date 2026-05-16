@@ -2,9 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireAdminLogin();
-$admin = $auth->admin();
+$admin = require_permission('withdrawals.manage');
+$db = db();
 
 $commWallet  = new \GemData\Classes\CommissionWallet($db);
 $withdrawSvc = new \GemData\Classes\WithdrawalService($db, $commWallet);
@@ -13,6 +12,7 @@ $error   = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
     $action    = $_POST['action'] ?? '';
     $requestId = (int) ($_POST['request_id'] ?? 0);
     $note      = trim($_POST['note'] ?? '');
@@ -131,12 +131,14 @@ render_header('Withdrawal Requests', 'admin-withdrawals');
               <form method="POST" class="d-inline">
                 <input type="hidden" name="request_id" value="<?= $req['id'] ?>">
                 <input type="hidden" name="action" value="approve">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <input type="text" name="note" class="form-control form-control-sm d-inline w-auto me-1" placeholder="Note (optional)">
                 <button class="btn btn-sm btn-success" onclick="return confirm('Approve this withdrawal?')">Approve</button>
               </form>
               <form method="POST" class="d-inline ms-1">
                 <input type="hidden" name="request_id" value="<?= $req['id'] ?>">
                 <input type="hidden" name="action" value="reject">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <input type="text" name="note" class="form-control form-control-sm d-inline w-auto me-1" placeholder="Reason (required)">
                 <button class="btn btn-sm btn-danger">Reject</button>
               </form>
@@ -144,6 +146,7 @@ render_header('Withdrawal Requests', 'admin-withdrawals');
               <form method="POST" class="d-inline">
                 <input type="hidden" name="request_id" value="<?= $req['id'] ?>">
                 <input type="hidden" name="action" value="mark_paid">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <button class="btn btn-sm btn-outline-success" onclick="return confirm('Mark as paid after manual bank transfer?')">
                   <i class="bi bi-check2-all me-1"></i>Mark Paid
                 </button>

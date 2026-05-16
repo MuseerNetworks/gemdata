@@ -2,13 +2,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireLogin();
-$user = $auth->user();
+$user = require_user();
+$db = db();
 
 if (($user['user_type'] ?? 'smart') !== 'reseller') {
-    header('Location: /user/dashboard.php');
-    exit;
+    redirect(base_url('user/dashboard.php'));
 }
 
 $commWallet  = new \GemData\Classes\CommissionWallet($db);
@@ -16,8 +14,7 @@ $withdrawSvc = new \GemData\Classes\WithdrawalService($db, $commWallet);
 $featureFlag = new \GemData\Classes\FeatureFlag($db);
 
 if (!$featureFlag->enabled('withdrawal_enabled')) {
-    header('Location: /user/commission.php');
-    exit;
+    redirect(base_url('user/commission.php'));
 }
 
 $balance   = $commWallet->balance((int) $user['id']);
@@ -26,6 +23,7 @@ $error     = '';
 $success   = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
     $amount    = (float) ($_POST['amount'] ?? 0);
     $bankName  = trim($_POST['bank_name'] ?? '');
     $acctNo    = trim($_POST['account_number'] ?? '');
@@ -69,6 +67,7 @@ render_header('Request Withdrawal', 'reseller-withdrawals');
       </div>
       <div class="card-body">
         <form method="POST">
+          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
           <div class="mb-3">
             <label class="form-label fw-medium">Amount (₦)</label>
             <input type="number" name="amount" class="form-control" min="500" max="<?= $balance ?>"

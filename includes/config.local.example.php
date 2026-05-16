@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 return [
     'app' => [
-        'environment' => 'production',
-        'base_url' => '',
-        'public_origin' => 'https://gemdata.com.ng',
-        'force_https_in_production' => true,
+        'environment' => 'local',
+        'base_url' => '/gemdata',
+        'public_origin' => 'http://localhost',
+        'force_https_in_production' => false,
         'trusted_proxies' => [],
     ],
     'db' => [
-        'host' => 'localhost',
+        'host' => '127.0.0.1',
         'port' => '3306',
-        'dbname' => 'yyrigitd_gemdata',
-        'username' => 'yyrigitd_admin',
-        'password' => 'replace-with-your-cpanel-db-password',
+        'dbname' => 'gemdata_api',
+        'username' => 'root',
+        'password' => '',
         'charset' => 'utf8mb4',
     ],
     'providers' => [
@@ -43,21 +43,21 @@ return [
         'allowed_sources' => ['paystack'],
     ],
     'payments' => [
-        'default_gateway' => 'bank_transfer',
+        'default_gateway' => 'mock_paystack',
         'display_gateway_name' => 'Paystack',
-        'auto_verify_mock_funding' => false,
-        'auto_assign_dedicated_account' => true,
-        'paystack_secret_key' => 'sk_live_replace_me',
+        'auto_verify_mock_funding' => true,
+        'auto_assign_dedicated_account' => false,
+        'paystack_secret_key' => '',
         'paystack_base_url' => 'https://api.paystack.co',
         'dva_preferred_bank' => '',
     ],
     'mail' => [
         'driver' => 'smtp',
-        'from_email' => 'no-reply@gemdata.com.ng',
+        'from_email' => 'no-reply@gemdata.local',
         'from_name' => 'GemData',
-        'debug_display_reset_links' => false,
+        'debug_display_reset_links' => true,
     ],
     'mobile' => [
-        'webview_origin' => 'https://gemdata.com.ng',
+        'webview_origin' => 'http://localhost/gemdata',
     ],
 ];

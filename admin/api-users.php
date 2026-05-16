@@ -2,14 +2,14 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireAdminLogin();
-$admin = $auth->admin();
+$admin = require_permission('api_users.manage');
+$db = db();
 
 $error   = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
     $action = $_POST['action'] ?? '';
     $userId = (int) ($_POST['user_id'] ?? 0);
 
@@ -160,6 +160,7 @@ render_header('API User Management', 'admin-api-users');
               <form method="POST" class="d-inline">
                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                 <input type="hidden" name="action" value="deactivate">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Deactivate this API user?')">
                   Deactivate
                 </button>
@@ -168,10 +169,11 @@ render_header('API User Management', 'admin-api-users');
               <form method="POST" class="d-inline">
                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                 <input type="hidden" name="action" value="activate">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <button class="btn btn-sm btn-outline-success">Activate</button>
               </form>
               <?php endif; ?>
-              <a href="/admin/user-detail.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-secondary ms-1">
+              <a href="<?= e(base_url('admin/user-detail.php?id=' . (int) $u['id'])); ?>" class="btn btn-sm btn-outline-secondary ms-1">
                 <i class="bi bi-eye"></i>
               </a>
             </td>
@@ -194,6 +196,7 @@ render_header('API User Management', 'admin-api-users');
       </div>
       <div class="modal-body">
         <input type="hidden" name="action" value="activate">
+        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
         <div class="mb-3">
           <label class="form-label fw-medium">Select User</label>
           <select name="user_id" class="form-select" required>

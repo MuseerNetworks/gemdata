@@ -10,6 +10,19 @@ class PricingService
     {
     }
 
+    private function networkMatchClause(): string
+    {
+        return '((network_code IS NULL AND :network_code_is_null = 1) OR network_code = :network_code_value)';
+    }
+
+    private function networkMatchParams(?string $networkCode): array
+    {
+        return [
+            'network_code_is_null' => $networkCode === null ? 1 : 0,
+            'network_code_value' => $networkCode,
+        ];
+    }
+
     public function normalizeNetwork(?string $network): ?string
     {
         $network = strtolower(trim((string) $network));
@@ -53,9 +66,12 @@ class PricingService
         $custom = $this->db->first(
             'SELECT selling_price
              FROM user_custom_prices
-             WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+             WHERE user_id = :user_id AND service_id = :service_id AND ' . $this->networkMatchClause() . '
              LIMIT 1',
-            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+            array_merge(
+                ['user_id' => $userId, 'service_id' => $serviceId],
+                $this->networkMatchParams($networkCode)
+            )
         );
         if ($custom) {
             $selling = (float) $custom['selling_price'];
@@ -76,9 +92,12 @@ class PricingService
         $price = $this->db->safeFirst(
             'SELECT *
              FROM service_prices
-             WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+             WHERE service_id = :service_id AND tier = :tier AND ' . $this->networkMatchClause() . '
              LIMIT 1',
-            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+            array_merge(
+                ['service_id' => $serviceId, 'tier' => $tier],
+                $this->networkMatchParams($networkCode)
+            )
         );
         if (!$price && $tier !== 'USER') {
             $price = $this->db->safeFirst(
@@ -130,8 +149,11 @@ class PricingService
     {
         $networkCode = $this->normalizeNetwork($networkCode);
         $existing = $this->db->first(
-            'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
-            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+            'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND ' . $this->networkMatchClause() . ' LIMIT 1',
+            array_merge(
+                ['service_id' => $serviceId, 'tier' => $tier],
+                $this->networkMatchParams($networkCode)
+            )
         );
 
         $profitMargin = $sellingPrice - $costPrice;
@@ -170,8 +192,11 @@ class PricingService
     {
         $networkCode = $this->normalizeNetwork($networkCode);
         $existing = $this->db->first(
-            'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
-            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+            'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND ' . $this->networkMatchClause() . ' LIMIT 1',
+            array_merge(
+                ['user_id' => $userId, 'service_id' => $serviceId],
+                $this->networkMatchParams($networkCode)
+            )
         );
 
         if ($existing) {

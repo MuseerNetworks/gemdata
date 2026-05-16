@@ -40,7 +40,8 @@ class ZenithPayVirtualAccountService
 
     public function isConfigured(): bool
     {
-        return trim((string) config('payments.zenithpay_secret_key', '')) !== '';
+        $secretKey = trim((string) config('payments.zenithpay_secret_key', ''));
+        return $secretKey !== '' && !$this->isPlaceholderSecret($secretKey);
     }
 
     public function shouldAutoAssign(): bool
@@ -81,7 +82,7 @@ class ZenithPayVirtualAccountService
         if (!$this->isConfigured()) {
             return $this->upsertAccountRow($userId, [
                 'status'             => 'failed',
-                'last_error_message' => 'ZenithPay is not configured. Add zenithpay_secret_key to your config.',
+                'last_error_message' => 'ZenithPay is not configured. Set ZENITHPAY_SECRET_KEY so payments.zenithpay_secret_key resolves.',
                 'requested_at'       => date('Y-m-d H:i:s'),
             ]);
         }
@@ -214,8 +215,8 @@ class ZenithPayVirtualAccountService
         $baseUrl   = rtrim((string) config('payments.zenithpay_base_url', 'https://zenithpay.ng'), '/');
         $secretKey = trim((string) config('payments.zenithpay_secret_key', ''));
 
-        if ($secretKey === '') {
-            throw new RuntimeException('ZenithPay secret key is not configured.');
+        if ($secretKey === '' || $this->isPlaceholderSecret($secretKey)) {
+            throw new RuntimeException('ZenithPay secret key is not configured. Set ZENITHPAY_SECRET_KEY to your live ZenithPay token.');
         }
 
         if (!function_exists('curl_init')) {
@@ -268,5 +269,28 @@ class ZenithPayVirtualAccountService
         $lastName  = count($parts) > 1 ? trim(implode(' ', array_slice($parts, 1))) : 'User';
 
         return ['first_name' => $firstName, 'last_name' => $lastName];
+    }
+
+    private function isPlaceholderSecret(string $secretKey): bool
+    {
+        $normalized = strtolower(trim($secretKey));
+        if ($normalized === '') {
+            return true;
+        }
+
+        foreach ([
+            'your-zenithpay-live-token',
+            'replace_with_your_zenithpay_live_token',
+            'replace-with-your-zenithpay-live-token',
+            'replace_with_your_zenithpay_token',
+            'replace-with-your-zenithpay-token',
+            'changeme',
+        ] as $placeholder) {
+            if ($normalized === $placeholder) {
+                return true;
+            }
+        }
+
+        return str_contains($normalized, 'replace_with') || str_contains($normalized, 'your-zenithpay');
     }
 }

@@ -44,6 +44,6 @@ GemData remains a server-rendered PHP app. The mobile app wrapper should load th
 - Do not request unnecessary device permissions for the current webview-based build.
 
 ## Routing and API URLs
-- All links must stay base-URL safe under `/gemdata`.
+- All links must stay base-URL safe whether the app is deployed at the domain root or under a subdirectory.
 - API calls should resolve against the hosted origin, never `localhost`.
 - Test login, wallet funding, and one purchase inside the WebView before release.

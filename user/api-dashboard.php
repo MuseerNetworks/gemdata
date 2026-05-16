@@ -2,13 +2,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireLogin();
-$user = $auth->user();
+$user = require_user();
+$db = db();
 
 if (($user['user_type'] ?? 'smart') !== 'api') {
-    header('Location: /user/dashboard.php');
-    exit;
+    redirect(base_url('user/dashboard.php'));
 }
 
 $userId = (int) $user['id'];
@@ -79,7 +77,7 @@ render_header('API Dashboard', 'api-dashboard');
       <div class="card-body">
         <div class="text-muted small mb-1">Wallet Balance</div>
         <div class="fw-bold fs-4">₦<?= number_format((float)($wallet['balance'] ?? 0), 2) ?></div>
-        <a href="/user/fund-wallet.php" class="btn btn-sm btn-outline-primary mt-2">Fund Wallet</a>
+        <a href="<?= e(base_url('user/fund-wallet.php')); ?>" class="btn btn-sm btn-outline-primary mt-2">Fund Wallet</a>
       </div>
     </div>
   </div>
@@ -123,13 +121,13 @@ render_header('API Dashboard', 'api-dashboard');
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-header bg-white border-0 pt-3 d-flex align-items-center justify-content-between">
     <h5 class="fw-semibold mb-0">API Keys</h5>
-    <a href="/user/api-keys.php" class="btn btn-sm btn-outline-primary">Manage Keys</a>
+    <a href="<?= e(base_url('user/api-keys.php')); ?>" class="btn btn-sm btn-outline-primary">Manage Keys</a>
   </div>
   <div class="card-body p-0">
     <?php if (empty($apiKeys)): ?>
       <div class="text-center text-muted py-4">
         <i class="bi bi-key fs-1 d-block mb-2"></i>
-        No API keys yet. <a href="/user/api-keys.php">Generate your first key</a>.
+        No API keys yet. <a href="<?= e(base_url('user/api-keys.php')); ?>">Generate your first key</a>.
       </div>
     <?php else: ?>
     <div class="table-responsive">
@@ -163,7 +161,7 @@ render_header('API Dashboard', 'api-dashboard');
 <!-- Quick Links -->
 <div class="row g-3 mb-4">
   <div class="col-md-4">
-    <a href="/user/api-logs.php" class="card border-0 shadow-sm text-decoration-none h-100">
+    <a href="<?= e(base_url('user/api-logs.php')); ?>" class="card border-0 shadow-sm text-decoration-none h-100">
       <div class="card-body d-flex align-items-center gap-3">
         <div class="rounded-3 bg-primary bg-opacity-10 p-3">
           <i class="bi bi-list-ul text-primary fs-4"></i>
@@ -177,7 +175,7 @@ render_header('API Dashboard', 'api-dashboard');
     </a>
   </div>
   <div class="col-md-4">
-    <a href="/docs/api.php" class="card border-0 shadow-sm text-decoration-none h-100">
+    <a href="<?= e(base_url('docs/api.php')); ?>" class="card border-0 shadow-sm text-decoration-none h-100">
       <div class="card-body d-flex align-items-center gap-3">
         <div class="rounded-3 bg-warning bg-opacity-10 p-3">
           <i class="bi bi-book text-warning fs-4"></i>
@@ -191,7 +189,7 @@ render_header('API Dashboard', 'api-dashboard');
     </a>
   </div>
   <div class="col-md-4">
-    <a href="/user/fund-wallet.php" class="card border-0 shadow-sm text-decoration-none h-100">
+    <a href="<?= e(base_url('user/fund-wallet.php')); ?>" class="card border-0 shadow-sm text-decoration-none h-100">
       <div class="card-body d-flex align-items-center gap-3">
         <div class="rounded-3 bg-success bg-opacity-10 p-3">
           <i class="bi bi-wallet2 text-success fs-4"></i>
@@ -210,7 +208,7 @@ render_header('API Dashboard', 'api-dashboard');
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
     <h5 class="fw-semibold mb-0">Recent API Transactions</h5>
-    <a href="/user/api-logs.php" class="btn btn-sm btn-link text-decoration-none">View All</a>
+    <a href="<?= e(base_url('user/api-logs.php')); ?>" class="btn btn-sm btn-link text-decoration-none">View All</a>
   </div>
   <div class="card-body p-0">
     <?php if (empty($recent)): ?>

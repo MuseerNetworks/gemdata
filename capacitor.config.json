@@ -3,7 +3,7 @@
   "appName": "GemData",
   "webDir": ".",
   "server": {
-    "url": "https://example.com/gemdata",
+    "url": "https://gemdata.com.ng",
     "cleartext": false
   }
 }

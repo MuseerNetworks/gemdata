@@ -78,7 +78,7 @@ render_header('Register');
     <section class="rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-950 via-slate-900 to-cyan-950/70 p-8 text-white">
         <p class="eyebrow">GemData Workspace</p>
         <h1 class="mt-4 text-4xl font-black">Create your GemData account.</h1>
-        <p class="mt-4 max-w-xl text-slate-300">Open your wallet, buy VTU services, and scale toward reseller API usage from a single Nigerian-focused platform.</p>
+        <p class="mt-4 max-w-xl text-slate-300">Open your wallet, buy VTU services, and scale toward reseller API usage from a single Nigerian-focused platform. ZenithPay virtual accounts can be requested later from wallet funding after BVN submission.</p>
         <div class="mt-8 space-y-4">
             <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p class="font-semibold">Use your Nigerian phone number</p>
@@ -88,12 +88,16 @@ render_header('Register');
                 <p class="font-semibold">Secure your password</p>
                 <p class="mt-2 text-sm text-slate-300">Use at least 8 characters with uppercase, lowercase, and a number.</p>
             </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p class="font-semibold">ZenithPay comes after signup</p>
+                <p class="mt-2 text-sm text-slate-300">Your ZenithPay virtual account is requested from the wallet funding page after you enter your 11-digit BVN.</p>
+            </div>
         </div>
     </section>
     <section class="rounded-3xl border border-white/10 bg-white/5 p-8">
     <p class="eyebrow">Quick onboarding</p>
     <h1 class="surface-section-title">Create your account</h1>
-    <p class="surface-section-copy">Open a wallet, buy VTU services, and request reseller API access later.</p>
+    <p class="surface-section-copy">Open a wallet, buy VTU services, and request ZenithPay or reseller API access later from your dashboard tools.</p>
     <?php if (!empty($errors)): ?>
         <div class="notice notice-error mt-6">Please correct the highlighted fields and try again.</div>
     <?php endif; ?>

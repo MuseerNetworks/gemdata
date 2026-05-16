@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $user = require_user();
 $wallet = app(\GemData\Classes\Wallet::class)->ensure((int) $user['id']);
 $dedicatedAccount = app(\GemData\Classes\PaystackDedicatedAccountService::class)->getForUser((int) $user['id']);
+$zenithAccount = app(\GemData\Classes\ZenithPayVirtualAccountService::class)->getForUser((int) $user['id']);
+$dedicatedAccountStatus = (string) ($dedicatedAccount['status'] ?? '');
+$zenithAccountStatus = (string) ($zenithAccount['status'] ?? '');
 $providerPlans = app(\GemData\Classes\ProviderPlanService::class);
 $services = db()->query(
     "SELECT * FROM services
@@ -161,33 +164,57 @@ render_header('Dashboard', 'user');
         <div class="dashboard-section-header dashboard-section-header-start">
             <div>
                 <p class="eyebrow">Transfer Funding</p>
-                <h2 class="surface-section-title">Dedicated account status</h2>
-                <p class="surface-section-copy">Use your assigned transfer account to fund the wallet without starting a new card payment each time.</p>
+                <h2 class="surface-section-title">Transfer account status</h2>
+                <p class="surface-section-copy">Use Paystack or ZenithPay transfer details from your wallet funding page. ZenithPay requires BVN verification before the account can be created.</p>
             </div>
             <a class="secondary-action inline-flex items-center justify-center" href="<?= e(base_url('user/fund-wallet.php')); ?>">Open Wallet Funding</a>
         </div>
-        <?php if (($dedicatedAccount['status'] ?? '') === 'assigned'): ?>
-            <div class="dedicated-account-grid mt-4">
-                <div class="dedicated-account-tile">
-                    <span class="metric-label">Account Number</span>
-                    <strong><?= e((string) $dedicatedAccount['dedicated_account_number']); ?></strong>
-                </div>
-                <div class="dedicated-account-tile">
-                    <span class="metric-label">Bank</span>
-                    <strong><?= e((string) $dedicatedAccount['bank_name']); ?></strong>
-                </div>
-                <div class="dedicated-account-tile">
-                    <span class="metric-label">Status</span>
-                    <strong>Ready for transfer</strong>
-                </div>
+        <div class="mt-4" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+            <div class="rounded-2xl border border-white/10 bg-slate-900/40 p-5">
+                <p class="eyebrow">Paystack</p>
+                <?php if ($dedicatedAccountStatus === 'assigned'): ?>
+                    <div class="dedicated-account-grid mt-3">
+                        <div class="dedicated-account-tile">
+                            <span class="metric-label">Account Number</span>
+                            <strong><?= e((string) $dedicatedAccount['dedicated_account_number']); ?></strong>
+                        </div>
+                        <div class="dedicated-account-tile">
+                            <span class="metric-label">Bank</span>
+                            <strong><?= e((string) $dedicatedAccount['bank_name']); ?></strong>
+                        </div>
+                    </div>
+                    <div class="notice notice-success mt-3">Paystack transfer account is ready.</div>
+                <?php elseif ($dedicatedAccountStatus === 'pending'): ?>
+                    <div class="notice notice-success mt-3">Paystack is still assigning your transfer account.</div>
+                <?php elseif ($dedicatedAccountStatus === 'failed'): ?>
+                    <div class="notice notice-error mt-3">Paystack account setup needs attention on the wallet funding page.</div>
+                <?php else: ?>
+                    <div class="notice notice-error mt-3">No Paystack transfer account is assigned yet.</div>
+                <?php endif; ?>
             </div>
-        <?php elseif (($dedicatedAccount['status'] ?? '') === 'pending'): ?>
-            <div class="notice notice-success mt-4">Your transfer account is being assigned by Paystack. Check the wallet funding page shortly for the full account number.</div>
-        <?php elseif (($dedicatedAccount['status'] ?? '') === 'failed'): ?>
-            <div class="notice notice-error mt-4">Your transfer account is not ready yet. Open wallet funding to retry account assignment and review the latest status.</div>
-        <?php else: ?>
-            <div class="notice notice-error mt-4">No dedicated transfer account has been assigned yet. Open wallet funding to request one once Paystack DVA is enabled.</div>
-        <?php endif; ?>
+            <div class="rounded-2xl border border-white/10 bg-slate-900/40 p-5">
+                <p class="eyebrow">ZenithPay</p>
+                <?php if ($zenithAccountStatus === 'assigned'): ?>
+                    <div class="dedicated-account-grid mt-3">
+                        <div class="dedicated-account-tile">
+                            <span class="metric-label">Account Number</span>
+                            <strong><?= e((string) $zenithAccount['dedicated_account_number']); ?></strong>
+                        </div>
+                        <div class="dedicated-account-tile">
+                            <span class="metric-label">Bank</span>
+                            <strong><?= e((string) $zenithAccount['bank_name']); ?></strong>
+                        </div>
+                    </div>
+                    <div class="notice notice-success mt-3">ZenithPay virtual account is ready.</div>
+                <?php elseif ($zenithAccountStatus === 'pending'): ?>
+                    <div class="notice notice-success mt-3">ZenithPay account request is still processing.</div>
+                <?php elseif ($zenithAccountStatus === 'failed'): ?>
+                    <div class="notice notice-error mt-3">ZenithPay setup failed. Open wallet funding to review the latest reason and retry with your BVN.</div>
+                <?php else: ?>
+                    <div class="notice notice-error mt-3">No ZenithPay account yet. Open wallet funding and submit your BVN to request one.</div>
+                <?php endif; ?>
+            </div>
+        </div>
     </section>
 
     <section id="services" class="surface-card services-surface">

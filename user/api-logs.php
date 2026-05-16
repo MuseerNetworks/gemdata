@@ -2,13 +2,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireLogin();
-$user = $auth->user();
+$user = require_user();
+$db = db();
 
 if (($user['user_type'] ?? 'smart') !== 'api') {
-    header('Location: /user/dashboard.php');
-    exit;
+    redirect(base_url('user/dashboard.php'));
 }
 
 $userId = (int) $user['id'];
@@ -73,7 +71,7 @@ render_header('API Transaction Logs', 'api-logs');
     <h1>API Transaction Logs</h1>
     <p class="text-muted">Full history of all API channel transactions.</p>
   </div>
-  <a href="/user/api-dashboard.php" class="btn btn-outline-secondary btn-sm">
+  <a href="<?= e(base_url('user/api-dashboard.php')); ?>" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
   </a>
 </div>

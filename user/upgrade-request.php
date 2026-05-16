@@ -2,9 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$auth = new \GemData\Classes\SessionAuth($db, $config);
-$auth->requireLogin();
-$user = $auth->user();
+$user = require_user();
+$db = db();
 
 $upgradeSvc = new \GemData\Classes\UpgradeRequestService($db);
 $currentType = $user['user_type'] ?? 'smart';
@@ -12,8 +11,7 @@ $targetType  = 'reseller';
 
 // Already a reseller or api — redirect
 if (in_array($currentType, ['reseller', 'api'], true)) {
-    header('Location: /user/dashboard.php');
-    exit;
+    redirect(base_url('user/dashboard.php'));
 }
 
 $latest  = $upgradeSvc->latestForUser((int) $user['id']);
@@ -21,6 +19,7 @@ $error   = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
     try {
         $upgradeSvc->request((int) $user['id'], $targetType);
         $success = 'Your upgrade request has been submitted. Admin will review it shortly.';
@@ -93,6 +92,7 @@ render_header('Upgrade to Reseller', 'upgrade-request');
             <?php endif; ?>
           </div>
           <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
             <p>You can submit a new request.</p>
             <button type="submit" class="btn btn-primary w-100">
               <i class="bi bi-arrow-up-circle me-1"></i> Request Reseller Upgrade
@@ -102,6 +102,7 @@ render_header('Upgrade to Reseller', 'upgrade-request');
           <h5 class="fw-semibold mb-3">Request Account Upgrade</h5>
           <p class="text-muted">Click the button below to send an upgrade request to admin. No documents required.</p>
           <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
             <button type="submit" class="btn btn-primary btn-lg w-100">
               <i class="bi bi-arrow-up-circle me-1"></i> Request Reseller Upgrade
             </button>

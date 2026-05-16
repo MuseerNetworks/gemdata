@@ -36,10 +36,11 @@ session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
     'domain' => '',
-    'secure' => is_https_request(),
-    'httponly' => true,
-    'samesite' => 'Lax',
+    'secure' => (bool) config('session.secure_cookie', is_https_request()) && is_https_request(),
+    'httponly' => (bool) config('session.http_only', true),
+    'samesite' => (string) config('session.same_site', 'Lax'),
 ]);
+session_name((string) config('session.cookie_name', 'PHPSESSID'));
 session_start();
 
 require_once __DIR__ . '/security_headers.php';
