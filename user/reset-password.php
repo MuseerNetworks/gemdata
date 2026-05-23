@@ -39,37 +39,43 @@ if (is_post()) {
 
 render_header('Reset Password');
 ?>
-<div class="mx-auto max-w-4xl grid gap-8 lg:grid-cols-[0.92fr,1.08fr]">
-    <section class="rounded-3xl border border-white/10 bg-gradient-to-br from-cyan-950 via-slate-900 to-indigo-950/80 p-8 text-white">
+<div class="gd-auth-wrap gd-auth-grid gd-auth-grid-two">
+    <section class="gd-auth-panel">
         <p class="eyebrow">Password Reset</p>
-        <h1 class="mt-4 text-4xl font-black">Create a new secure password.</h1>
-        <ul class="mt-6 space-y-3 text-sm text-slate-300">
+        <h1 class="gd-auth-title">Create a new secure password.</h1>
+        <ul class="mt-6 space-y-3 text-sm text-white/80">
             <li>Use at least 8 characters.</li>
             <li>Include uppercase, lowercase, and a number.</li>
             <li>The link becomes unusable after one successful reset.</li>
         </ul>
     </section>
-    <section class="rounded-3xl border border-white/10 bg-white/5 p-8">
-    <h1 class="text-3xl font-black">Reset Password</h1>
+    <section class="gd-auth-card">
+    <h1 class="gd-auth-title">Reset Password</h1>
     <?php if ($error): ?>
         <div class="notice notice-error mt-4"><?= e($error); ?></div>
     <?php endif; ?>
     <?php if (!$reset): ?>
         <div class="notice notice-error mt-4">This reset link is invalid or has expired.</div>
     <?php else: ?>
-        <p class="mt-4 text-slate-400">Create a new password for <?= e($reset['email']); ?>.</p>
-        <form method="post" class="mt-6 space-y-4">
+        <p class="gd-auth-copy">Create a new password for <?= e($reset['email']); ?>.</p>
+        <form method="post" class="mt-6 gd-form-grid" data-loading-form>
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
             <input type="hidden" name="reset" value="<?= (int) $resetId; ?>">
-            <div>
-                <label class="mb-2 block text-sm">New Password</label>
-                <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="password" type="password" placeholder="Create a new password" required>
+            <div class="gd-field">
+                <label>New Password</label>
+                <div class="password-field">
+                    <input class="gd-input" name="password" type="password" placeholder="Create a new password" autocomplete="new-password" required>
+                    <button class="password-toggle" type="button" data-password-toggle aria-label="Show password"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></button>
+                </div>
             </div>
-            <div>
-                <label class="mb-2 block text-sm">Confirm Password</label>
-                <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="password_confirmation" type="password" placeholder="Repeat the new password" required>
+            <div class="gd-field">
+                <label>Confirm Password</label>
+                <div class="password-field">
+                    <input class="gd-input" name="password_confirmation" type="password" placeholder="Repeat the new password" autocomplete="new-password" required>
+                    <button class="password-toggle" type="button" data-password-toggle aria-label="Show password"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></button>
+                </div>
             </div>
-            <button class="w-full rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950" type="submit">Save New Password</button>
+            <button class="gd-auth-button w-full" type="submit" data-loading-label="Saving password...">Save New Password</button>
         </form>
     <?php endif; ?>
     </section>

@@ -11,6 +11,11 @@ if (admin_user()) {
 if (user()) {
     redirect(base_url('user/dashboard.php'));
 }
+
+$siteCssPath = __DIR__ . '/assets/css/site.css';
+$siteJsPath = __DIR__ . '/assets/js/app.js';
+$siteCssVersion = is_file($siteCssPath) ? (string) filemtime($siteCssPath) : (string) time();
+$siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : (string) time();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,12 +26,12 @@ if (user()) {
     <meta name="description" content="GemData — Nigeria's fastest VTU platform for airtime, data bundles, electricity bills, cable TV subscriptions, and reseller operations.">
     <link rel="canonical" href="<?= e(rtrim(app_origin(), '/') . '/'); ?>">
     <!-- Favicon — PNG first -->
-    <link rel="icon" type="image/png" sizes="32x32" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
-    <link rel="icon" type="image/png" sizes="16x16" href="<?= e(base_url('assets/brand/favicon-16x16.png')); ?>?v=20260513c">
-    <link rel="icon" type="image/png" sizes="48x48" href="<?= e(base_url('assets/brand/favicon-48x48.png')); ?>?v=20260513c">
-    <link rel="shortcut icon" type="image/png" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260513c">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260522a">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?= e(base_url('assets/brand/favicon-16x16.png')); ?>?v=20260522a">
+    <link rel="icon" type="image/png" sizes="48x48" href="<?= e(base_url('assets/brand/favicon-48x48.png')); ?>?v=20260522a">
+    <link rel="shortcut icon" type="image/png" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260522a">
     <!-- Apple / iOS -->
-    <link rel="apple-touch-icon" sizes="180x180" href="<?= e(base_url('assets/brand/apple-touch-icon.png')); ?>?v=20260513c">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?= e(base_url('assets/brand/apple-touch-icon.png')); ?>?v=20260522a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="GemData">
@@ -58,24 +63,32 @@ if (user()) {
     <link rel="dns-prefetch" href="//cdn.tailwindcss.com">
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800,900&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script nonce="<?= e(csp_nonce()); ?>">
+        (function () {
+            var theme = localStorage.getItem('gemdata-theme') || 'light-fintech';
+            document.documentElement.setAttribute('data-theme', theme);
+        }());
+    </script>
+    <script nonce="<?= e(csp_nonce()); ?>" src="https://cdn.tailwindcss.com"></script>
+    <script nonce="<?= e(csp_nonce()); ?>">
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
                         gem: {
-                            50: '#f4f5ff',
-                            100: '#eaecff',
-                            500: '#5b61ff',
-                            600: '#474ee5',
-                            700: '#353db8',
-                            900: '#0f172a',
+                            50: '#EEF2FF',
+                            100: '#DBE4FF',
+                            500: '#1B4DFF',
+                            600: '#1B4DFF',
+                            700: '#1238CC',
+                            900: '#0F172A',
+                            teal: '#00C6AE',
+                            border: '#E2E8F0',
                         }
                     },
                     boxShadow: {
-                        soft: '0 24px 70px rgba(15, 23, 42, 0.10)',
-                        float: '0 18px 42px rgba(91, 97, 255, 0.18)',
+                        soft: '0 18px 44px rgba(15, 23, 42, 0.08)',
+                        float: '0 4px 24px rgba(27, 77, 255, 0.16)',
                     },
                     borderRadius: {
                         '4xl': '2rem',
@@ -84,7 +97,9 @@ if (user()) {
             }
         };
     </script>
-    <script>
+    <link rel="stylesheet" href="<?= e(base_url('assets/css/site.css') . '?v=' . $siteCssVersion); ?>">
+    <script nonce="<?= e(csp_nonce()); ?>" defer src="<?= e(base_url('assets/js/app.js') . '?v=' . $siteJsVersion); ?>"></script>
+    <script nonce="<?= e(csp_nonce()); ?>">
         document.addEventListener('DOMContentLoaded', function () {
             var toggle = document.querySelector('[data-public-nav-toggle]');
             var panel = document.querySelector('[data-public-nav-panel]');
@@ -96,7 +111,7 @@ if (user()) {
             });
         });
     </script>
-    <script>
+    <script nonce="<?= e(csp_nonce()); ?>">
         // Service Worker registration for landing page PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
@@ -106,8 +121,8 @@ if (user()) {
         }
     </script>
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased">
-    <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(91,97,255,0.12),_transparent_28%),radial-gradient(circle_at_right,_rgba(45,212,191,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#f5f7ff_52%,#eef2ff_100%)]">
+<body class="bg-slate-50 text-slate-900 antialiased" data-app-section="guest" data-page-key="landing">
+    <div class="gd-landing-shell min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(27,77,255,0.10),_transparent_28%),radial-gradient(circle_at_right,_rgba(0,198,174,0.10),_transparent_24%),linear-gradient(180deg,#F8FAFC_0%,#F8FBFF_52%,#EEF2FF_100%)]">
         <header class="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
                 <a href="<?= e(base_url()); ?>" class="flex items-center gap-3 lp-brand-link">
@@ -125,7 +140,7 @@ if (user()) {
                     <a class="transition hover:text-slate-950" href="#about">About</a>
                     <a class="transition hover:text-slate-950" href="<?= e(base_url('docs/api.php')); ?>">API</a>
                     <a class="transition hover:text-slate-950" href="<?= e(base_url('user/login.php')); ?>">Login</a>
-                    <a class="rounded-full bg-slate-950 px-5 py-3 text-white shadow-soft transition hover:bg-gem-600" href="<?= e(base_url('user/register.php')); ?>">Register</a>
+                    <a class="rounded-full bg-gem-600 px-5 py-3 text-white shadow-float transition hover:bg-gem-700" href="<?= e(base_url('user/register.php')); ?>">Register</a>
                 </nav>
                 <button class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-soft md:hidden" type="button" data-public-nav-toggle aria-label="Toggle navigation">
                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -138,7 +153,7 @@ if (user()) {
                     <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="#about">About</a>
                     <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="<?= e(base_url('docs/api.php')); ?>">API</a>
                     <a class="rounded-2xl border border-slate-200 bg-white px-4 py-3" href="<?= e(base_url('user/login.php')); ?>">Login</a>
-                    <a class="rounded-2xl bg-slate-950 px-4 py-3 text-white" href="<?= e(base_url('user/register.php')); ?>">Register</a>
+                    <a class="rounded-2xl bg-gem-600 px-4 py-3 text-white" href="<?= e(base_url('user/register.php')); ?>">Register</a>
                 </nav>
             </div>
         </header>
@@ -155,7 +170,7 @@ if (user()) {
                         <div class="mt-8 flex flex-wrap gap-4">
                             <a class="rounded-full bg-gem-600 px-6 py-3.5 text-sm font-bold text-white shadow-float transition hover:bg-gem-700" href="<?= e(base_url('user/register.php')); ?>">Get Started</a>
                             <a class="rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-soft transition hover:border-slate-400" href="<?= e(base_url('user/login.php')); ?>">Login</a>
-                            <a class="rounded-full border border-cyan-200 bg-cyan-50 px-6 py-3.5 text-sm font-bold text-cyan-800 transition hover:bg-cyan-100" href="#download">Download App</a>
+                            <a class="rounded-full border border-gem-100 bg-gem-50 px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-white" href="#download">Download App</a>
                         </div>
                         <div class="mt-10 grid gap-4 sm:grid-cols-3">
                             <div class="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-soft">
@@ -173,19 +188,19 @@ if (user()) {
                         </div>
                         <div class="mt-8 flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-600">
                             <span class="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-700">Wallet-safe funding flow</span>
-                            <span class="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-cyan-800">Real-time transaction visibility</span>
+                            <span class="rounded-full border border-gem-100 bg-gem-50 px-4 py-2 text-gem-700">Real-time transaction visibility</span>
                             <span class="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-gem-700">Optimized for Nigerian VTU buyers</span>
                         </div>
                     </div>
 
                     <div class="relative">
-                        <div class="absolute -left-6 top-8 hidden h-28 w-28 rounded-full bg-cyan-300/30 blur-3xl lg:block"></div>
+                        <div class="absolute -left-6 top-8 hidden h-28 w-28 rounded-full bg-gem-100/50 blur-3xl lg:block"></div>
                         <div class="absolute -right-8 bottom-6 hidden h-32 w-32 rounded-full bg-indigo-300/30 blur-3xl lg:block"></div>
                         <div class="relative mx-auto max-w-md rounded-[2rem] border border-white/70 bg-white/85 p-5 shadow-soft backdrop-blur">
-                            <div class="rounded-[1.7rem] bg-slate-950 p-5 text-white shadow-2xl">
+                            <div class="gd-landing-device rounded-[1.7rem] bg-slate-950 p-5 text-white shadow-2xl">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <p class="text-xs uppercase tracking-[0.22em] text-cyan-300">GemData Workspace</p>
+                                        <p class="text-xs uppercase tracking-[0.22em] text-blue-200">GemData Workspace</p>
                                         <h2 class="mt-2 text-2xl font-black">NGN 12,480.00</h2>
                                     </div>
                                     <span class="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-300">All services active</span>
@@ -214,7 +229,7 @@ if (user()) {
                                     </div>
                                     <div class="mt-4 grid grid-cols-2 gap-3">
                                         <button class="rounded-2xl bg-slate-100 px-4 py-3 text-left text-sm font-semibold">Buy Airtime</button>
-                                        <button class="rounded-2xl bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-cyan-800">Fund Wallet</button>
+                                        <button class="rounded-2xl bg-gem-50 px-4 py-3 text-left text-sm font-semibold text-gem-700">Fund Wallet</button>
                                     </div>
                                 </div>
                             </div>
@@ -316,29 +331,29 @@ if (user()) {
             </section>
 
             <section id="download" class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-16">
-                <div class="grid items-center gap-8 rounded-[2rem] bg-slate-950 px-6 py-8 text-white shadow-soft lg:grid-cols-[1fr,0.9fr] lg:px-10 lg:py-12">
+                <div class="gd-download-banner grid items-center gap-8 rounded-[2rem] px-6 py-8 text-white shadow-soft lg:grid-cols-[1fr,0.9fr] lg:px-10 lg:py-12">
                     <div>
-                        <span class="text-sm font-bold uppercase tracking-[0.22em] text-cyan-300">Mobile access</span>
+                        <span class="text-sm font-bold uppercase tracking-[0.22em] text-blue-100">Mobile access</span>
                         <h2 class="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Download GemData App</h2>
                         <p class="mt-4 max-w-2xl text-base leading-8 text-slate-300">Monitor wallet balance, buy VTU services, and track delivery on the go with the GemData mobile experience.</p>
-                        <a class="mt-8 inline-flex rounded-full bg-cyan-400 px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300" href="<?= e(base_url('user/register.php')); ?>">Install App</a>
+                        <a class="mt-8 inline-flex rounded-full bg-white px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-gem-50" href="<?= e(base_url('user/register.php')); ?>">Install App</a>
                     </div>
-                    <div class="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                        <div class="rounded-[1.4rem] bg-white p-5 text-slate-900">
-                            <p class="text-sm font-bold text-gem-700">GemData App</p>
+                    <div class="gd-app-mockup rounded-[1.75rem] p-5">
+                        <div class="gd-app-panel rounded-[1.4rem] p-5">
+                            <p class="gd-app-title text-sm font-bold">GemData App</p>
                             <div class="mt-5 space-y-4">
-                                <div class="rounded-3xl bg-slate-50 p-4">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Wallet balance</p>
-                                    <p class="mt-2 text-2xl font-black">NGN 8,240.00</p>
+                                <div class="gd-app-card gd-app-balance rounded-3xl p-4">
+                                    <p class="gd-app-label text-xs uppercase tracking-[0.18em]">Wallet balance</p>
+                                    <p class="gd-app-value mt-2 text-2xl font-black">NGN 8,240.00</p>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
-                                    <div class="rounded-3xl bg-indigo-50 p-4">
-                                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-gem-700">Data</p>
-                                        <p class="mt-2 text-lg font-black">MTN 2GB</p>
+                                    <div class="gd-app-card gd-app-mini gd-app-mini-data rounded-3xl p-4">
+                                        <p class="gd-app-label text-xs font-bold uppercase tracking-[0.18em]">Data</p>
+                                        <p class="gd-app-value mt-2 text-lg font-black">MTN 2GB</p>
                                     </div>
-                                    <div class="rounded-3xl bg-emerald-50 p-4">
-                                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Bills</p>
-                                        <p class="mt-2 text-lg font-black">EKEDC</p>
+                                    <div class="gd-app-card gd-app-mini gd-app-mini-bills rounded-3xl p-4">
+                                        <p class="gd-app-label text-xs font-bold uppercase tracking-[0.18em]">Bills</p>
+                                        <p class="gd-app-value mt-2 text-lg font-black">EKEDC</p>
                                     </div>
                                 </div>
                             </div>

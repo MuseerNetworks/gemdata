@@ -10,7 +10,13 @@ deployment:
     - /bin/cp -R api $DEPLOYPATH
     - /bin/cp -R assets $DEPLOYPATH
     - /bin/cp -R classes $DEPLOYPATH
+    - /bin/cp -R cron $DEPLOYPATH
+    - /bin/cp -R docs $DEPLOYPATH
     - /bin/cp -R includes $DEPLOYPATH
     - /bin/cp -R user $DEPLOYPATH
 
     - /bin/cp .htaccess $DEPLOYPATH
+    - /bin/cp browserconfig.xml $DEPLOYPATH
+    - /bin/cp manifest.json $DEPLOYPATH
+    - /bin/cp offline.html $DEPLOYPATH
+    - /bin/cp service-worker.js $DEPLOYPATH

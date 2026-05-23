@@ -5,7 +5,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
 $user = require_user();
-verify_csrf();
+$token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+if (!hash_equals($_SESSION['csrf_token'] ?? '', (string) $token)) {
+    app(\GemData\Classes\Response::class)->json('error', 'Invalid CSRF token.', [], ['csrf_token' => ['Invalid CSRF token.']], [], 419);
+}
 
 $serviceSlug = trim($_POST['service_slug'] ?? '');
 $payload = $_POST;
@@ -15,10 +18,67 @@ if ($serviceSlug === 'cable_tv' && empty($payload['provider']) && !empty($payloa
 }
 
 try {
+    $pin = trim((string) ($payload['security_pin'] ?? $payload['wallet_pin'] ?? ''));
+    if ($pin === '') {
+        app(\GemData\Classes\Response::class)->json('error', 'Wallet PIN is required.', [], ['security_pin' => ['Wallet PIN is required.']], [], 422);
+    }
+    if ($serviceSlug === 'cable_tv' && array_key_exists('cable_validation_status', $payload)) {
+        $validationStatus = trim((string) ($payload['cable_validation_status'] ?? ''));
+        $confirmedFallback = (string) ($payload['cable_iuc_confirmed'] ?? '') === '1';
+        if ($validationStatus !== 'verified' && !$confirmedFallback) {
+            app(\GemData\Classes\Response::class)->json('error', 'Please verify or confirm your smartcard/IUC number before payment.', [], ['smartcard_number' => ['Confirm your smartcard/IUC number before payment.']], [], 422);
+        }
+    }
+    if ($serviceSlug === 'electricity' && array_key_exists('electricity_validation_status', $payload)) {
+        $validationStatus = trim((string) ($payload['electricity_validation_status'] ?? ''));
+        $confirmedFallback = (string) ($payload['electricity_meter_confirmed'] ?? '') === '1';
+        if ($validationStatus !== 'verified' && !$confirmedFallback) {
+            app(\GemData\Classes\Response::class)->json('error', 'Please verify or confirm your meter number before payment.', [], ['meter_number' => ['Confirm your meter number before payment.']], [], 422);
+        }
+    }
+    $db = db();
+    if ($db->columnExists('users', 'transaction_pin_hash')) {
+        $pinRow = $db->first('SELECT transaction_pin_hash FROM users WHERE id = :id LIMIT 1', ['id' => $user['id']]);
+        $pinHash = (string) ($pinRow['transaction_pin_hash'] ?? '');
+        if ($pinHash === '') {
+            app(\GemData\Classes\Response::class)->json('error', 'Set up your wallet PIN before making purchases.', [], ['security_pin' => ['Wallet PIN setup is required.']], [], 403);
+        }
+        if (!password_verify($pin, $pinHash)) {
+            app(\GemData\Classes\Response::class)->json('error', 'Invalid wallet PIN.', [], ['security_pin' => ['Invalid wallet PIN.']], [], 422);
+        }
+    } else {
+        app(\GemData\Classes\Response::class)->json('error', 'Wallet PIN protection is not configured.', [], ['security_pin' => ['Wallet PIN protection is required.']], [], 503);
+    }
+
     $result = app(\GemData\Classes\TransactionService::class)->purchase($serviceSlug, (int) $user['id'], $payload, 'web', false);
-    app(\GemData\Classes\Response::class)->json('success', 'Transaction accepted and queued for processing.', $result, [], ['reload' => true]);
+    if ($serviceSlug === 'cable_tv' && array_key_exists('cable_validation_status', $payload) && (($payload['cable_validation_status'] ?? '') !== 'verified')) {
+        app(\GemData\Classes\ActivityLogger::class)->log('user', (int) $user['id'], 'cable_purchase_without_live_validation', 'Cable TV purchase submitted after unavailable verification fallback.', [
+            'provider' => (string) ($payload['provider'] ?? ''),
+            'smartcard_last4' => substr(preg_replace('/\D+/', '', (string) ($payload['smartcard_number'] ?? '')) ?? '', -4),
+            'reference' => (string) ($result['reference'] ?? ''),
+        ]);
+    }
+    if ($serviceSlug === 'electricity' && array_key_exists('electricity_validation_status', $payload) && (($payload['electricity_validation_status'] ?? '') !== 'verified')) {
+        app(\GemData\Classes\ActivityLogger::class)->log('user', (int) $user['id'], 'electricity_purchase_without_live_validation', 'Electricity purchase submitted after unavailable verification fallback.', [
+            'provider' => (string) ($payload['disco'] ?? ''),
+            'meter_last4' => substr(preg_replace('/\D+/', '', (string) ($payload['meter_number'] ?? '')) ?? '', -4),
+            'reference' => (string) ($result['reference'] ?? ''),
+        ]);
+    }
+    $walletBalance = app(\GemData\Classes\Wallet::class)->balance((int) $user['id']);
+    app(\GemData\Classes\Response::class)->json('success', 'Transaction accepted and queued for processing.', [
+        'transaction' => $result,
+        'wallet_balance' => $walletBalance,
+        'wallet_balance_formatted' => money($walletBalance),
+    ]);
 } catch (InvalidArgumentException $exception) {
     app(\GemData\Classes\Response::class)->json('error', 'Validation failed.', [], json_decode((string) $exception->getMessage(), true) ?: [], [], 422);
 } catch (Throwable $throwable) {
-    app(\GemData\Classes\Response::class)->json('error', $throwable->getMessage(), [], [], [], 400);
+    $rawMessage = strtolower($throwable->getMessage());
+    $message = str_contains($rawMessage, 'insufficient')
+        ? 'Insufficient wallet balance. Please fund your wallet and try again.'
+        : (str_contains($rawMessage, 'disabled') || str_contains($rawMessage, 'unavailable') || str_contains($rawMessage, 'outside the allowed') || str_contains($rawMessage, 'configured')
+            ? $throwable->getMessage()
+            : 'Transaction could not be processed right now. Please try again or contact support.');
+    app(\GemData\Classes\Response::class)->json('error', $message, [], [], [], 400);
 }

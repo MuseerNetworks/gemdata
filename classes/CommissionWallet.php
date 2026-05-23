@@ -62,6 +62,15 @@ class CommissionWallet
         return $this->applyMutation('withdrawal', $userId, $amount, $narration, 'withdrawal', null, $idempotencyKey);
     }
 
+    public function restoreWithdrawal(
+        int     $userId,
+        float   $amount,
+        string  $narration,
+        ?string $idempotencyKey = null
+    ): array {
+        return $this->applyMutation('credit', $userId, $amount, $narration, 'withdrawal', null, $idempotencyKey);
+    }
+
     // ── Transaction history ───────────────────────────────────────
 
     public function history(int $userId, int $limit = 20, int $offset = 0): array

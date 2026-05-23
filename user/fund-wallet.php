@@ -4,232 +4,122 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-$user              = require_user();
-$payments          = app(\GemData\Classes\PaymentGatewayService::class);
-$dedicatedAccounts = app(\GemData\Classes\PaystackDedicatedAccountService::class);
-$zenithPay         = app(\GemData\Classes\ZenithPayVirtualAccountService::class);
+$user = require_user();
+$payments = app(\GemData\Classes\PaymentGatewayService::class);
+$xixaPay = app(\GemData\Classes\XixaPay::class);
 
 if (is_post()) {
-    verify_csrf();
-
-    // ── Paystack dedicated account retry ─────────────────────────────────────
-    if (($_POST['action'] ?? '') === 'retry_dedicated_account') {
-        try {
-            $account    = $dedicatedAccounts->ensureForUser((int) $user['id'], true);
-            $statusCopy = (string) ($account['status'] ?? 'pending');
-            flash('success', 'Paystack account sync requested. Status: ' . $statusCopy . '.');
-        } catch (Throwable $throwable) {
-            flash('error', $throwable->getMessage());
-        }
-        redirect(base_url('user/fund-wallet.php'));
-    }
-
-    // ── ZenithPay account assign / retry ─────────────────────────────────────
-    if (($_POST['action'] ?? '') === 'assign_zenithpay_account') {
-        $bvn        = trim((string) ($_POST['bvn'] ?? ''));
-        $forceRetry = ($_POST['force_retry'] ?? '0') === '1';
-        try {
-            $account    = $zenithPay->ensureForUser((int) $user['id'], $bvn, $forceRetry);
-            $statusCopy = (string) ($account['status'] ?? 'pending');
-            flash('success', 'ZenithPay account request processed. Status: ' . $statusCopy . '.');
-        } catch (Throwable $throwable) {
-            flash('error', $throwable->getMessage());
-        }
-        redirect(base_url('user/fund-wallet.php'));
-    }
-
-    // Any other POST is not supported
     http_response_code(400);
     exit;
 }
 
-$recentFunding    = $payments->userFundingRequests((int) $user['id']);
-$walletBalance    = app(\GemData\Classes\Wallet::class)->balance((int) $user['id']);
-$dedicatedAccount = $dedicatedAccounts->getForUser((int) $user['id']);
-$accountStatus    = (string) ($dedicatedAccount['status'] ?? '');
-$zenithAccount    = $zenithPay->getForUser((int) $user['id']);
-$zenithStatus     = (string) ($zenithAccount['status'] ?? '');
+$recentFunding = $payments->userFundingRequests((int) $user['id']);
+$walletBalance = app(\GemData\Classes\Wallet::class)->balance((int) $user['id']);
+$account = $xixaPay->getForUser((int) $user['id']);
+$status = (string) ($account['status'] ?? '');
+$accountNumber = (string) ($account['dedicated_account_number'] ?? '');
+$bankName = (string) ($account['bank_name'] ?? '');
+$accountName = (string) ($account['account_name'] ?? '');
+$fullDetails = trim($bankName . "\n" . $accountNumber . "\n" . $accountName);
 
 render_header('Fund Wallet', 'user');
 ?>
 <div class="space-y-6">
+    <div class="stagger-1">
+        <h1 class="text-2xl font-extrabold text-gem-text">Fund Wallet</h1>
+        <p class="text-[14px] text-gem-muted mt-0.5">Use your XixaPay funding account to add money to your wallet.</p>
+    </div>
+
     <?php if ($message = flash('success')): ?>
-        <div class="notice notice-success"><?= e($message); ?></div>
+        <div class="bg-green-50 border border-green-100 text-gem-green rounded-2xl px-5 py-4 text-[13px] font-semibold"><?= e($message); ?></div>
     <?php endif; ?>
     <?php if ($message = flash('error')): ?>
-        <div class="notice notice-error"><?= e($message); ?></div>
+        <div class="bg-red-50 border border-red-100 text-gem-red rounded-2xl px-5 py-4 text-[13px] font-semibold"><?= e($message); ?></div>
     <?php endif; ?>
 
-    <section class="surface-card p-8" data-search-item data-search="wallet fund bank transfer virtual account balance">
-        <div class="dashboard-section-header dashboard-section-header-start">
-            <div>
-                <p class="eyebrow">Wallet Funding</p>
-                <h1 class="surface-section-title">Fund your wallet</h1>
-                <p class="surface-section-copy">Transfer money into one of your dedicated virtual accounts below. Your wallet is credited automatically once the bank confirms the transfer.</p>
-            </div>
-            <div class="rounded-2xl border border-white/10 bg-slate-900/60 px-5 py-4 text-right">
-                <p class="text-sm text-slate-400">Current balance</p>
-                <p class="mt-2 text-2xl font-black text-white"><?= e(money($walletBalance)); ?></p>
-            </div>
-        </div>
-
-        <!-- ── How it works ─────────────────────────────────────────────── -->
-        <div class="funding-steps mt-6">
-            <div class="funding-step is-complete">
-                <strong>1. Get your account</strong>
-                <span>A unique bank account number is assigned to your profile below.</span>
-            </div>
-            <div class="funding-step is-complete">
-                <strong>2. Transfer any amount</strong>
-                <span>Send from any Nigerian bank to your dedicated account number.</span>
-            </div>
-            <div class="funding-step is-complete">
-                <strong>3. Wallet auto-credited</strong>
-                <span>Your balance updates automatically once the bank confirms the transfer.</span>
-            </div>
-        </div>
-
-        <!-- ── Virtual Account Cards ─────────────────────────────────────── -->
-        <div class="dedicated-accounts-grid mt-6" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.25rem;">
-
-            <!-- Paystack Dedicated Account -->
-            <div class="dedicated-account-card" data-search-item data-search="paystack dedicated account bank transfer account number virtual account">
-                <div class="dashboard-section-header dashboard-section-header-start" style="margin-bottom:.75rem">
-                    <div>
-                        <p class="eyebrow">Paystack</p>
-                        <h2 class="surface-section-title" style="font-size:1.1rem">Dedicated Transfer Account</h2>
-                    </div>
-                    <?php if ($accountStatus !== 'assigned'): ?>
-                        <form method="post">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                            <input type="hidden" name="action" value="retry_dedicated_account">
-                            <button class="secondary-action" type="submit" style="font-size:.8rem;padding:.4rem .9rem">Retry Sync</button>
-                        </form>
-                    <?php endif; ?>
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-4 stagger-2">
+        <section class="wallet-card rounded-2xl p-5 text-white xl:col-span-2 shadow-panel">
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-[13px] font-semibold text-blue-200">Main Wallet Balance</span>
+                    <span class="bg-white/15 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold">NGN</span>
                 </div>
+                <div class="text-[28px] font-extrabold tracking-tight font-mono"><?= e(money($walletBalance)); ?></div>
+                <div class="mt-5 grid grid-cols-2 gap-2">
+                    <a href="<?= e(base_url('user/dashboard.php')); ?>" class="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl py-3 px-2 text-[12px] font-semibold">Dashboard</a>
+                    <a href="<?= e(base_url('user/transactions.php')); ?>" class="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl py-3 px-2 text-[12px] font-semibold">History</a>
+                </div>
+            </div>
+        </section>
 
-                <?php if ($accountStatus === 'assigned'): ?>
-                    <div class="dedicated-account-grid">
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Account Number</span>
-                            <strong><?= e((string) $dedicatedAccount['dedicated_account_number']); ?></strong>
-                        </div>
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Bank</span>
-                            <strong><?= e((string) $dedicatedAccount['bank_name']); ?></strong>
-                        </div>
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Account Name</span>
-                            <strong><?= e((string) $dedicatedAccount['account_name']); ?></strong>
-                        </div>
-                    </div>
-                    <div class="notice notice-success" style="margin-top:.75rem">Account ready — transfer to fund your wallet instantly.</div>
-                <?php elseif ($accountStatus === 'pending'): ?>
-                    <div class="notice notice-success">Being assigned by Paystack. Refresh or retry shortly.</div>
-                <?php elseif ($accountStatus === 'failed'): ?>
-                    <div class="notice notice-error">Assignment failed.<?php if (!empty($dedicatedAccount['last_error_message'])): ?> Reason: <?= e((string) $dedicatedAccount['last_error_message']); ?><?php endif; ?></div>
+        <section class="xl:col-span-3 user-premium-card bg-white rounded-2xl shadow-card border border-gem-border p-5">
+            <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-[16px] font-bold text-gem-text">Your Funding Account</h2>
+                    <p class="text-[13px] text-gem-muted mt-0.5">Transfer from any Nigerian bank to this XixaPay account.</p>
+                </div>
+                <?php if ($status === 'assigned'): ?>
+                    <span class="inline-flex items-center gap-1 bg-green-50 text-gem-green text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-gem-green"></span>Active</span>
                 <?php else: ?>
-                    <div class="notice notice-error">Not yet assigned. Click "Retry Sync" once Paystack credentials are configured.</div>
+                    <span class="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Not ready</span>
                 <?php endif; ?>
             </div>
 
-            <!-- ZenithPay Virtual Account -->
-            <div class="dedicated-account-card" data-search-item data-search="zenithpay virtual account bank transfer palmpay bvn">
-                <div class="dashboard-section-header dashboard-section-header-start" style="margin-bottom:.75rem">
-                    <div>
-                        <p class="eyebrow">ZenithPay</p>
-                        <h2 class="surface-section-title" style="font-size:1.1rem">Virtual Bank Account</h2>
+            <?php if ($status === 'assigned'): ?>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="user-premium-card rounded-2xl bg-gem-gray border border-gem-border p-4">
+                        <div class="text-[11px] text-gem-muted font-bold uppercase tracking-wider">Bank Name</div>
+                        <div class="text-[15px] font-bold text-gem-text mt-1"><?= e($bankName); ?></div>
                     </div>
-                    <?php if ($zenithStatus === 'assigned'): ?>
-                        <form method="post">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                            <input type="hidden" name="action" value="assign_zenithpay_account">
-                            <input type="hidden" name="bvn" value="<?= e((string) ($zenithAccount['bvn'] ?? '')); ?>">
-                            <input type="hidden" name="force_retry" value="1">
-                            <button class="secondary-action" type="submit" style="font-size:.8rem;padding:.4rem .9rem">Retry</button>
-                        </form>
-                    <?php endif; ?>
+                    <div class="user-premium-card rounded-2xl bg-gem-gray border border-gem-border p-4">
+                        <div class="text-[11px] text-gem-muted font-bold uppercase tracking-wider">Account Number</div>
+                        <div class="text-[15px] font-bold text-gem-text font-mono mt-1"><?= e($accountNumber); ?></div>
+                    </div>
+                    <div class="user-premium-card rounded-2xl bg-gem-gray border border-gem-border p-4">
+                        <div class="text-[11px] text-gem-muted font-bold uppercase tracking-wider">Account Name</div>
+                        <div class="text-[15px] font-bold text-gem-text mt-1"><?= e($accountName); ?></div>
+                    </div>
                 </div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <button class="inline-flex items-center gap-2 bg-gem-blue hover:bg-gem-blueDk text-white text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-panel" type="button" data-copy-value="<?= e($accountNumber); ?>">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        Copy Account Number
+                    </button>
+                    <button class="inline-flex items-center gap-2 border border-gem-border text-gem-text text-[13px] font-bold px-4 py-2.5 rounded-xl hover:bg-gem-gray" type="button" data-copy-value="<?= e($fullDetails); ?>">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        Copy Full Details
+                    </button>
+                </div>
+                <p class="text-[12px] text-gem-muted mt-4">Webhook wallet crediting remains disabled until the real XixaPay payload is reviewed.</p>
+            <?php else: ?>
+                <div class="user-empty-state rounded-2xl bg-gem-gray border border-gem-border p-4 text-[13px] text-gem-muted">
+                    <?= $status === 'pending' ? 'Generating your funding account...' : 'Funding account temporarily unavailable. Please contact support.'; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+    </div>
 
-                <?php if ($zenithStatus === 'assigned'): ?>
-                    <div class="dedicated-account-grid">
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Account Number</span>
-                            <strong><?= e((string) $zenithAccount['dedicated_account_number']); ?></strong>
-                        </div>
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Bank</span>
-                            <strong><?= e((string) $zenithAccount['bank_name']); ?></strong>
-                        </div>
-                        <div class="dedicated-account-tile">
-                            <span class="metric-label">Account Name</span>
-                            <strong><?= e((string) $zenithAccount['account_name']); ?></strong>
-                        </div>
-                    </div>
-                    <div class="notice notice-success" style="margin-top:.75rem">ZenithPay account ready — transfer to fund your wallet instantly.</div>
-                <?php elseif ($zenithStatus === 'failed'): ?>
-                    <div class="notice notice-error" style="margin-bottom:.75rem">
-                        Previous attempt failed.<?php if (!empty($zenithAccount['last_error_message'])): ?> Reason: <?= e((string) $zenithAccount['last_error_message']); ?><?php endif; ?>
-                    </div>
-                    <form method="post" class="grid gap-3">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                        <input type="hidden" name="action" value="assign_zenithpay_account">
-                        <input type="hidden" name="force_retry" value="1">
-                        <label class="metric-label" for="zenith-bvn-retry">Your 11-digit BVN</label>
-                        <input id="zenith-bvn-retry" class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="bvn" maxlength="11" placeholder="e.g. 12345678901" value="<?= e((string) ($zenithAccount['bvn'] ?? '')); ?>">
-                        <button class="primary-action" type="submit">Retry ZenithPay Account</button>
-                    </form>
-                <?php else: ?>
-                    <!-- No ZenithPay account yet — show BVN form -->
-                    <p class="surface-section-copy" style="margin-bottom:.75rem;font-size:.9rem">Get a free virtual bank account linked to your wallet. Your BVN is required by ZenithPay for regulatory compliance.</p>
-                    <form method="post" class="grid gap-3">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                        <input type="hidden" name="action" value="assign_zenithpay_account">
-                        <label class="metric-label" for="zenith-bvn">Your 11-digit BVN</label>
-                        <input id="zenith-bvn" class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="bvn" maxlength="11" placeholder="e.g. 12345678901" required>
-                        <button class="primary-action" type="submit"><?= $zenithPay->isConfigured() ? 'Get ZenithPay Account' : 'ZenithPay Not Yet Configured'; ?></button>
-                    </form>
-                <?php endif; ?>
-            </div>
-
-        </div><!-- end .dedicated-accounts-grid -->
-    </section>
-
-    <!-- ── Funding History ───────────────────────────────────────────────── -->
-    <section class="surface-card p-8">
-        <div class="dashboard-section-header dashboard-section-header-start">
-            <div>
-                <p class="eyebrow">Funding History</p>
-                <h2 class="surface-section-title">Transfer log</h2>
-            </div>
+    <section class="stagger-3">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-[16px] font-bold text-gem-text">Funding History</h2>
         </div>
-        <div class="table-shell mt-6">
-            <table>
-                <thead>
-                    <tr class="text-slate-400">
-                        <th>Reference</th>
-                        <th>Provider</th>
-                        <th>Status</th>
-                        <th>Amount</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if ($recentFunding === []): ?>
-                        <tr><td colspan="5" class="text-slate-400">No funding transfers yet. Transfer to one of your accounts above to get started.</td></tr>
-                    <?php else: ?>
-                        <?php foreach ($recentFunding as $row): ?>
-                            <tr>
-                                <td><span class="font-mono text-xs text-slate-300"><?= e((string) $row['reference']); ?></span></td>
-                                <td><?= e(ucwords(str_replace('_', ' ', (string) $row['provider']))); ?></td>
-                                <td><span class="status-chip status-<?= e((string) $row['status']); ?>"><?= e(ucfirst((string) $row['status'])); ?></span></td>
-                                <td><?= e(money($row['amount'])); ?></td>
-                                <td><span class="timestamp" title="<?= e((string) $row['created_at']); ?>"><?= e(human_datetime((string) $row['created_at'])); ?></span></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+        <div class="user-premium-card bg-white rounded-2xl shadow-card border border-gem-border overflow-hidden">
+            <div class="user-table-head hidden sm:grid grid-cols-5 gap-4 px-5 py-3 bg-gem-gray border-b border-gem-border text-[11px] font-bold text-gem-muted uppercase tracking-wider">
+                <div class="col-span-2">Reference / Provider</div><div>Amount</div><div>Status</div><div>Date</div>
+            </div>
+            <div class="divide-y divide-gem-border">
+                <?php if ($recentFunding === []): ?>
+                    <div class="user-empty-state px-5 py-8 text-center text-[13px] text-gem-muted">No funding transfers yet.</div>
+                <?php endif; ?>
+                <?php foreach ($recentFunding as $row): ?>
+                    <div class="user-list-row grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-4 px-5 py-4 hover:bg-gem-gray/50 transition-colors">
+                        <div class="col-span-2"><div class="text-[13px] font-semibold text-gem-text font-mono"><?= e((string) $row['reference']); ?></div><div class="text-[11px] text-gem-muted"><?= e(ucwords(str_replace('_', ' ', (string) $row['provider']))); ?></div></div>
+                        <div class="sm:flex sm:items-center"><span class="text-[13px] font-bold text-gem-text font-mono"><?= e(money($row['amount'])); ?></span></div>
+                        <div class="sm:flex sm:items-center"><span class="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[11px] font-semibold px-2.5 py-1 rounded-full"><?= e(ucfirst((string) $row['status'])); ?></span></div>
+                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted"><?= e(human_datetime((string) $row['created_at'])); ?></span></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         </div>
     </section>
 </div>

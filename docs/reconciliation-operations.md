@@ -8,8 +8,8 @@
 ## What gets reconciled
 - Stuck `pending` transactions with stale `processing_started_at`
 - Timeout-prone pending transactions older than the configured reconciliation window
-- Duplicate Paystack webhook events
-- Partial funding states where webhook intake was recorded but wallet credit has not completed
+- XixaPay webhook payloads logged for first-live review
+- Partial funding states after XixaPay wallet crediting is enabled
 
 ## Admin review points
 - `admin/transactions.php`

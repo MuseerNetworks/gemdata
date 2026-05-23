@@ -21,7 +21,7 @@ class PaymentGatewayService
         return config('app.environment', 'local') === 'production';
     }
 
-    public function createFundingRequest(int $userId, float $amount, string $provider = 'mock_paystack'): array
+    public function createFundingRequest(int $userId, float $amount, string $provider = 'xixapay')
     {
         if ($this->isProductionBankTransferOnly()) {
             throw new RuntimeException('Production wallet funding is handled through your dedicated transfer account.');
@@ -229,14 +229,14 @@ class PaymentGatewayService
             $request = null;
             if ($reference !== '') {
                 $request = $this->db->first(
-                    'SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1',
+                    'SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1 FOR UPDATE',
                     ['reference' => $reference]
                 );
             }
 
             if (!$request && $providerReference !== '') {
                 $request = $this->db->first(
-                    'SELECT * FROM wallet_funding_requests WHERE provider_reference = :provider_reference LIMIT 1',
+                    'SELECT * FROM wallet_funding_requests WHERE provider_reference = :provider_reference LIMIT 1 FOR UPDATE',
                     ['provider_reference' => $providerReference]
                 );
             }
@@ -261,7 +261,12 @@ class PaymentGatewayService
                 }
 
                 if (!$account) {
-                    throw new RuntimeException('Could not match funding webhook to a user funding account.');
+                    throw new RuntimeException(
+                        'Could not match funding webhook to a user funding account. '
+                        . 'account_number=' . $accountNumber
+                        . '; email=' . $email
+                        . '; provider_reference=' . $providerReference
+                    );
                 }
 
                 $reference = $reference !== '' ? $reference : 'WFH' . strtoupper(bin2hex(random_bytes(5)));
@@ -273,7 +278,7 @@ class PaymentGatewayService
                     [
                         'user_id' => $account['user_id'],
                         'reference' => $reference,
-                        'provider' => 'paystack_bank_transfer',
+                        'provider' => (string) ($payload['provider'] ?? 'bank_transfer'),
                         'provider_reference' => $providerReference,
                         'amount' => $amount,
                         'currency' => (string) ($payload['currency'] ?? config('app.currency', 'NGN')),
@@ -282,7 +287,7 @@ class PaymentGatewayService
                         'meta_json' => (string) ($payload['meta_json'] ?? '{}'),
                     ]
                 );
-                $request = $this->db->first('SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1', ['reference' => $reference]);
+                $request = $this->db->first('SELECT * FROM wallet_funding_requests WHERE reference = :reference LIMIT 1 FOR UPDATE', ['reference' => $reference]);
             }
 
             if (!$request) {
@@ -320,17 +325,17 @@ class PaymentGatewayService
                 'funding',
                 (int) $request['id'],
                 'wallet-funding:' . ($providerReference !== '' ? $providerReference : (string) $request['reference']),
-                'paystack_bank_transfer'
+                (string) ($request['provider'] ?? 'bank_transfer')
             );
 
             $this->notifications->create(
                 (int) $request['user_id'],
                 'Wallet funded',
-                'Your wallet has been credited after Paystack bank transfer verification.',
+                'Your wallet has been credited after bank transfer verification.',
                 'success'
             );
 
-            $this->logger->log('system', 0, 'wallet_funding_webhook_credited', 'Credited wallet from Paystack webhook.', [
+            $this->logger->log('system', 0, 'wallet_funding_webhook_credited', 'Credited wallet from bank transfer webhook.', [
                 'reference' => $request['reference'],
                 'provider_reference' => $providerReference,
                 'wallet_transaction_id' => $walletRecord['id'] ?? null,

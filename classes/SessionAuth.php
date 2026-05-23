@@ -57,11 +57,51 @@ class SessionAuth
             return false;
         }
         session_regenerate_id(true);
+        if ($this->adminRequiresTwoFactor($admin)) {
+            $_SESSION['admin_2fa_pending_id'] = (int) $admin['id'];
+            $_SESSION['admin_2fa_verified'] = false;
+            $_SESSION['last_activity_at'] = time();
+            $this->logAdminLogin((int) $admin['id'], $email, true, 'password_verified_2fa_pending');
+            return true;
+        }
         $_SESSION['admin_id'] = (int) $admin['id'];
+        $_SESSION['admin_2fa_verified'] = true;
         $_SESSION['last_activity_at'] = time();
         $this->db->execute('UPDATE admins SET last_login_at = NOW() WHERE id = :id', ['id' => $admin['id']]);
         $this->logAdminLogin((int) $admin['id'], $email, true, 'success');
         return true;
+    }
+
+    private function adminRequiresTwoFactor(array $admin): bool
+    {
+        return (bool) config('security.admin_2fa_enabled', false)
+            || (int) ($admin['two_factor_enabled'] ?? 0) === 1
+            || ($admin['role_slug'] ?? '') === 'super_admin';
+    }
+
+    public function pendingTwoFactorAdmin(): ?array
+    {
+        if (empty($_SESSION['admin_2fa_pending_id'])) {
+            return null;
+        }
+        return $this->db->first(
+            'SELECT a.*, r.slug AS role_slug, r.name AS role_name
+             FROM admins a
+             LEFT JOIN admin_roles r ON r.id = a.role_id
+             WHERE a.id = :id AND a.is_active = 1 LIMIT 1',
+            ['id' => (int) $_SESSION['admin_2fa_pending_id']]
+        );
+    }
+
+    public function completeAdminTwoFactor(int $adminId): void
+    {
+        session_regenerate_id(true);
+        unset($_SESSION['admin_2fa_pending_id']);
+        $_SESSION['admin_id'] = $adminId;
+        $_SESSION['admin_2fa_verified'] = true;
+        $_SESSION['last_activity_at'] = time();
+        $this->db->execute('UPDATE admins SET last_login_at = NOW(), two_factor_enabled = 1 WHERE id = :id', ['id' => $adminId]);
+        $this->logger->log('admin', $adminId, 'admin_2fa_verified', 'Admin completed two-factor verification.');
     }
 
     public function logoutUser(): void
@@ -73,6 +113,7 @@ class SessionAuth
     public function logoutAdmin(): void
     {
         unset($_SESSION['admin_id']);
+        unset($_SESSION['admin_2fa_pending_id'], $_SESSION['admin_2fa_verified']);
         $this->destroySession();
     }
 

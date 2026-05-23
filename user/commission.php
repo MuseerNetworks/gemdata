@@ -4,146 +4,94 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $user = require_user();
 $db = db();
-
-// Only resellers access this page
-if (($user['user_type'] ?? 'smart') !== 'reseller') {
+$role = app(\GemData\Classes\UserRoleManager::class)->roleFor($user);
+if (!in_array($role, ['reseller', 'api'], true)) {
     redirect(base_url('user/dashboard.php'));
 }
 
-$commWallet    = new \GemData\Classes\CommissionWallet($db);
-$withdrawSvc   = new \GemData\Classes\WithdrawalService($db, $commWallet);
-$featureFlag   = new \GemData\Classes\FeatureFlag($db);
+$commWallet = new \GemData\Classes\CommissionWallet($db);
+$withdrawSvc = new \GemData\Classes\WithdrawalService($db, $commWallet);
+$featureFlag = new \GemData\Classes\FeatureFlag($db);
 
-$balance       = $commWallet->balance((int) $user['id']);
-$totalEarned   = $commWallet->totalEarned((int) $user['id']);
-$totalWithdrawn= $commWallet->totalWithdrawn((int) $user['id']);
-$history       = $commWallet->history((int) $user['id'], 20);
-$pendingWdr    = $withdrawSvc->listByUser((int) $user['id'], 1);
-$hasPending    = !empty($pendingWdr) && ($pendingWdr[0]['status'] ?? '') === 'pending';
+$balance = $commWallet->balance((int) $user['id']);
+$totalEarned = $commWallet->totalEarned((int) $user['id']);
+$totalWithdrawn = $commWallet->totalWithdrawn((int) $user['id']);
+$history = $commWallet->history((int) $user['id'], 20);
+$pendingWdr = $withdrawSvc->listByUser((int) $user['id'], 1);
+$hasPending = !empty($pendingWdr) && ($pendingWdr[0]['status'] ?? '') === 'pending';
+$pendingAmount = $hasPending ? (float) ($pendingWdr[0]['amount'] ?? 0) : 0.0;
+$minimumWithdrawal = $withdrawSvc->minimumAmount();
 $withdrawEnabled = $featureFlag->enabled('withdrawal_enabled');
 
-render_header('Commission Wallet', 'reseller-commission');
+render_header('Commission Wallet', 'user');
 ?>
-
-<div class="page-header">
-  <h1>Commission Wallet</h1>
-  <p class="text-muted">Track and manage your earned commissions.</p>
-</div>
-
-<!-- Summary Cards -->
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body">
-        <div class="d-flex align-items-center gap-3">
-          <div class="rounded-3 bg-success bg-opacity-10 p-3">
-            <i class="bi bi-wallet2 text-success fs-4"></i>
-          </div>
-          <div>
-            <div class="text-muted small">Available Balance</div>
-            <div class="fw-bold fs-4 text-success">₦<?= number_format($balance, 2) ?></div>
-          </div>
+<div class="space-y-6">
+    <div class="stagger-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue"><?= $role === 'api' ? 'API Commission' : 'Reseller Reports'; ?></p>
+            <h1 class="mt-1 text-2xl font-extrabold text-gem-text">Commission Wallet</h1>
+            <p class="text-[14px] text-gem-muted mt-0.5">Track commission earnings, withdrawals, and business progress separately from your main wallet.</p>
         </div>
-      </div>
+        <?php if ($withdrawEnabled): ?>
+            <?php if ($hasPending): ?>
+                <span class="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] font-bold text-amber-700">Withdrawal Pending Review</span>
+            <?php elseif ($balance >= $minimumWithdrawal): ?>
+                <a href="<?= e(base_url('user/withdrawals.php')); ?>" class="primary-action">Request Withdrawal</a>
+            <?php else: ?>
+                <span class="inline-flex items-center justify-center rounded-xl border border-gem-border bg-gem-gray px-4 py-2.5 text-[13px] font-bold text-gem-muted">Min. <?= e(money($minimumWithdrawal)); ?> balance to withdraw</span>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body">
-        <div class="d-flex align-items-center gap-3">
-          <div class="rounded-3 bg-primary bg-opacity-10 p-3">
-            <i class="bi bi-graph-up-arrow text-primary fs-4"></i>
-          </div>
-          <div>
-            <div class="text-muted small">Total Earned</div>
-            <div class="fw-bold fs-4">₦<?= number_format($totalEarned, 2) ?></div>
-          </div>
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <?php
+        $cards = [
+            ['label' => 'Available Balance', 'value' => money($balance), 'note' => 'Ready to withdraw', 'icon' => 'wallet', 'tone' => 'green'],
+            ['label' => 'Total Earned', 'value' => money($totalEarned), 'note' => 'All-time commission', 'icon' => 'profit', 'tone' => 'blue'],
+            ['label' => 'Pending Withdrawal', 'value' => money($pendingAmount), 'note' => $hasPending ? 'Awaiting admin review' : 'No active request', 'icon' => 'pending', 'tone' => 'amber'],
+            ['label' => 'Total Withdrawn', 'value' => money($totalWithdrawn), 'note' => 'Paid out to you', 'icon' => 'refund', 'tone' => 'amber'],
+        ];
+        ?>
+        <?php foreach ($cards as $card): ?>
+            <div class="user-premium-card rounded-2xl p-5 min-h-[9rem] flex flex-col justify-between">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <p class="user-muted-label"><?= e($card['label']); ?></p>
+                        <p class="user-metric-value mt-3"><?= e($card['value']); ?></p>
+                    </div>
+                    <span class="user-icon-box user-icon-<?= e($card['tone']); ?>"><?= icon_svg($card['icon']); ?></span>
+                </div>
+                <p class="mt-3 text-[13px] font-semibold text-gem-muted"><?= e($card['note']); ?></p>
+            </div>
+        <?php endforeach; ?>
+    </div>
+
+    <section class="user-premium-card rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gem-border">
+            <div>
+                <h2 class="text-[16px] font-bold text-gem-text">Commission History</h2>
+                <p class="text-[13px] text-gem-muted mt-0.5">Credits and withdrawals from your commission activity.</p>
+            </div>
+            <a href="<?= e(base_url('user/pricing.php')); ?>" class="text-[13px] font-bold text-gem-blue">View Pricing</a>
         </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body">
-        <div class="d-flex align-items-center gap-3">
-          <div class="rounded-3 bg-warning bg-opacity-10 p-3">
-            <i class="bi bi-arrow-up-circle text-warning fs-4"></i>
-          </div>
-          <div>
-            <div class="text-muted small">Total Withdrawn</div>
-            <div class="fw-bold fs-4">₦<?= number_format($totalWithdrawn, 2) ?></div>
-          </div>
+        <div class="hidden sm:grid grid-cols-5 gap-4 px-5 py-3 user-table-head">
+            <div>Date</div><div>Type</div><div>Narration</div><div class="text-right">Amount</div><div class="text-right">Balance After</div>
         </div>
-      </div>
-    </div>
-  </div>
+        <div class="divide-y divide-gem-border">
+            <?php if ($history === []): ?>
+                <div class="user-empty-state">No commission transactions yet. Complete sales to earn commission.</div>
+            <?php endif; ?>
+            <?php foreach ($history as $row): ?>
+                <?php $isCredit = $row['type'] === 'credit'; ?>
+                <div class="user-list-row grid-cols-1 sm:grid-cols-5">
+                    <div class="text-[12px] text-gem-muted"><?= e(human_datetime((string) $row['created_at'])); ?></div>
+                    <div><span class="inline-flex rounded-full <?= $isCredit ? 'bg-green-50 text-gem-green' : 'bg-amber-50 text-amber-700'; ?> px-2.5 py-1 text-[11px] font-bold uppercase"><?= $isCredit ? 'Earned' : 'Withdrawn'; ?></span></div>
+                    <div class="text-[13px] font-semibold text-gem-text"><?= e((string) $row['narration']); ?></div>
+                    <div class="text-left sm:text-right font-mono text-[13px] font-bold <?= $isCredit ? 'text-gem-green' : 'text-gem-red'; ?>"><?= $isCredit ? '+' : '-'; ?><?= e(money((float) $row['amount'])); ?></div>
+                    <div class="text-left sm:text-right font-mono text-[13px] text-gem-muted"><?= e(money((float) $row['balance_after'])); ?></div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </section>
 </div>
-
-<!-- Withdraw CTA -->
-<?php if ($withdrawEnabled): ?>
-<div class="d-flex justify-content-end mb-3">
-  <?php if ($hasPending): ?>
-    <span class="btn btn-outline-warning disabled">
-      <i class="bi bi-clock me-1"></i> Withdrawal Pending Review
-    </span>
-  <?php elseif ($balance >= 500): ?>
-    <a href="<?= e(base_url('user/withdrawals.php')); ?>" class="btn btn-success">
-      <i class="bi bi-cash-stack me-1"></i> Request Withdrawal
-    </a>
-  <?php else: ?>
-    <span class="btn btn-outline-secondary disabled">
-      Min. ₦500 balance to withdraw
-    </span>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
-
-<!-- Commission History -->
-<div class="card border-0 shadow-sm">
-  <div class="card-header bg-white border-0 pt-3">
-    <h5 class="mb-0 fw-semibold">Commission History</h5>
-  </div>
-  <div class="card-body p-0">
-    <?php if (empty($history)): ?>
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-        No commission transactions yet. Complete sales to earn commission.
-      </div>
-    <?php else: ?>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Narration</th>
-            <th class="text-end">Amount</th>
-            <th class="text-end">Balance After</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($history as $row): ?>
-          <tr>
-            <td class="text-muted small"><?= date('d M Y, H:i', strtotime($row['created_at'])) ?></td>
-            <td>
-              <?php if ($row['type'] === 'credit'): ?>
-                <span class="badge bg-success-subtle text-success">Earned</span>
-              <?php else: ?>
-                <span class="badge bg-warning-subtle text-warning">Withdrawn</span>
-              <?php endif; ?>
-            </td>
-            <td><?= htmlspecialchars($row['narration']) ?></td>
-            <td class="text-end fw-semibold <?= $row['type'] === 'credit' ? 'text-success' : 'text-danger' ?>">
-              <?= $row['type'] === 'credit' ? '+' : '-' ?>₦<?= number_format((float)$row['amount'], 2) ?>
-            </td>
-            <td class="text-end text-muted">₦<?= number_format((float)$row['balance_after'], 2) ?></td>
-          </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-    <?php endif; ?>
-  </div>
-</div>
-
 <?php render_footer(); ?>

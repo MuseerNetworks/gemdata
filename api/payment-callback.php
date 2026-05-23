@@ -5,8 +5,8 @@ declare(strict_types=1);
 /**
  * This endpoint is disabled.
  * Mock payment callbacks are not supported in production.
- * Wallet funding is handled exclusively via bank transfer webhooks
- * from Paystack (api/webhook.php) and ZenithPay (api/zenithpay-webhook.php).
+ * XixaPay webhook traffic is received by api/xixapay.php in logging-only mode
+ * until the live payload is confirmed.
  */
 
 http_response_code(410);

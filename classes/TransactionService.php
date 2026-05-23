@@ -71,6 +71,13 @@ class TransactionService
 
     public function purchase(string $serviceSlug, int $userId, array $payload, string $channel = 'web', bool $isApiUser = false): array
     {
+        if ((bool) config('security.email_verification_required_for_money_movement', true) && $this->db->columnExists('users', 'email_verified_at')) {
+            $verification = $this->db->first('SELECT email_verified_at FROM users WHERE id = :id LIMIT 1', ['id' => $userId]);
+            if (empty($verification['email_verified_at'])) {
+                throw new RuntimeException('Verify your email address before making purchases.');
+            }
+        }
+
         $service = $this->db->first('SELECT * FROM services WHERE slug = :slug LIMIT 1', ['slug' => $serviceSlug]);
         if (!$service) {
             throw new RuntimeException('Service not found.');
@@ -448,9 +455,10 @@ class TransactionService
             $commissionAmount = 0.0;
             if ($status === 'successful') {
                 // Resolve user type to determine commission eligibility
-                $txUser = $this->db->first('SELECT user_type, tier FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
-                $isReseller = in_array($txUser['user_type'] ?? '', ['reseller'], true)
-                           || in_array($txUser['tier'] ?? '', ['RESELLER'], true);
+                $txUser = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $isReseller = in_array($txUser['user_type'] ?? '', ['reseller', 'api'], true)
+                           || in_array($txUser['tier'] ?? '', ['RESELLER', 'API_RESELLER'], true)
+                           || (int) ($txUser['is_api_user'] ?? 0) === 1;
                 if ($isReseller) {
                     $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
                     $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
@@ -626,7 +634,7 @@ class TransactionService
                 ['transaction_id' => $transactionId, 'event_type' => 'transaction_refunded']
             );
             if (!$refundEvent) {
-                $this->wallet->refund(
+                $refund = $this->wallet->refund(
                     (int) $locked['user_id'],
                     (float) $locked['amount'],
                     'Admin cancellation refund for transaction ' . $locked['reference'],
@@ -640,11 +648,184 @@ class TransactionService
                     'wallet-override-refund:' . ($locked['idempotency_key'] ?? $locked['reference']),
                     'admin_cancellation'
                 );
+                if ($this->db->tableExists('refund_logs')) {
+                    $this->db->execute(
+                        'INSERT IGNORE INTO refund_logs
+                            (transaction_id, wallet_transaction_id, admin_id, user_id, amount, reason, status, idempotency_key)
+                         VALUES
+                            (:transaction_id, :wallet_transaction_id, :admin_id, :user_id, :amount, :reason, :status, :idempotency_key)',
+                        [
+                            'transaction_id' => $transactionId,
+                            'wallet_transaction_id' => $refund['id'] ?? null,
+                            'admin_id' => $adminId,
+                            'user_id' => (int) $locked['user_id'],
+                            'amount' => (float) $locked['amount'],
+                            'reason' => $reason,
+                            'status' => 'completed',
+                            'idempotency_key' => 'wallet-override-refund:' . ($locked['idempotency_key'] ?? $locked['reference']),
+                        ]
+                    );
+                }
                 $this->event($transactionId, 'transaction_refunded', 'admin', $adminId, 'Admin issued wallet refund during override.', ['amount' => (float) $locked['amount']]);
             }
 
             $this->event($transactionId, 'transaction_override', 'admin', $adminId, 'Admin cancelled pending transaction.', ['status' => $status, 'reason' => $reason]);
             $this->logger->log('admin', $adminId, 'transaction_override', 'Admin cancelled pending transaction.', ['transaction_id' => $transactionId, 'status' => $status]);
+            $this->db->commit();
+        } catch (Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
+    public function manualRefund(int $transactionId, string $reason, int $adminId): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new RuntimeException('A refund reason is required.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $locked = $this->db->first('SELECT * FROM transactions WHERE id = :id FOR UPDATE', ['id' => $transactionId]);
+            if (!$locked) {
+                throw new RuntimeException('Transaction not found.');
+            }
+
+            $status = (string) ($locked['status'] ?? '');
+            if (!in_array($status, ['pending', 'failed'], true)) {
+                throw new RuntimeException('Manual refund is only available for failed or pending transactions.');
+            }
+
+            $refundEvent = $this->db->first(
+                'SELECT id FROM transaction_events WHERE transaction_id = :transaction_id AND event_type = :event_type LIMIT 1',
+                ['transaction_id' => $transactionId, 'event_type' => 'transaction_refunded']
+            );
+            if ($refundEvent) {
+                throw new RuntimeException('This transaction has already been refunded.');
+            }
+
+            $refund = $this->wallet->refund(
+                (int) $locked['user_id'],
+                (float) $locked['amount'],
+                'Manual admin refund for transaction ' . $locked['reference'],
+                'admin',
+                [
+                    'admin_id' => $adminId,
+                    'transaction_id' => $transactionId,
+                    'reason' => $reason,
+                ],
+                'refund',
+                $transactionId,
+                'wallet-manual-refund:' . ($locked['idempotency_key'] ?? $locked['reference']),
+                'manual_refund'
+            );
+
+            $this->db->execute(
+                'UPDATE transactions
+                 SET status = :status, override_status = 1, override_reason = :override_reason, overridden_by_admin_id = :admin_id, overridden_at = NOW(),
+                     is_retryable = 0, processed_at = NOW(), failure_code = :failure_code
+                 WHERE id = :id',
+                [
+                    'status' => 'refunded',
+                    'override_reason' => $reason,
+                    'admin_id' => $adminId,
+                    'failure_code' => 'manual_refund',
+                    'id' => $transactionId,
+                ]
+            );
+
+            $this->event($transactionId, 'transaction_refunded', 'admin', $adminId, 'Admin issued manual wallet refund.', [
+                'amount' => (float) $locked['amount'],
+                'wallet_transaction_id' => $refund['id'] ?? null,
+                'reason' => $reason,
+            ]);
+            if ($this->db->tableExists('refund_logs')) {
+                $this->db->execute(
+                    'INSERT IGNORE INTO refund_logs
+                        (transaction_id, wallet_transaction_id, admin_id, user_id, amount, reason, status, idempotency_key)
+                     VALUES
+                        (:transaction_id, :wallet_transaction_id, :admin_id, :user_id, :amount, :reason, :status, :idempotency_key)',
+                    [
+                        'transaction_id' => $transactionId,
+                        'wallet_transaction_id' => $refund['id'] ?? null,
+                        'admin_id' => $adminId,
+                        'user_id' => (int) $locked['user_id'],
+                        'amount' => (float) $locked['amount'],
+                        'reason' => $reason,
+                        'status' => 'completed',
+                        'idempotency_key' => 'wallet-manual-refund:' . ($locked['idempotency_key'] ?? $locked['reference']),
+                    ]
+                );
+            }
+            $this->event($transactionId, 'transaction_manual_refund', 'admin', $adminId, 'Manual refund completed from transaction command center.', [
+                'reason' => $reason,
+            ]);
+            $this->logger->log('admin', $adminId, 'transaction_manual_refund', 'Admin manually refunded transaction.', [
+                'transaction_id' => $transactionId,
+                'amount' => (float) $locked['amount'],
+            ]);
+
+            $this->db->commit();
+        } catch (Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
+    public function forceSuccess(int $transactionId, string $reason, int $adminId): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new RuntimeException('A force-success reason is required.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $locked = $this->db->first('SELECT * FROM transactions WHERE id = :id FOR UPDATE', ['id' => $transactionId]);
+            if (!$locked) {
+                throw new RuntimeException('Transaction not found.');
+            }
+
+            $status = (string) ($locked['status'] ?? '');
+            if (!in_array($status, ['pending', 'failed'], true)) {
+                throw new RuntimeException('Force success is only available for pending or failed transactions.');
+            }
+
+            $refundEvent = $this->db->first(
+                'SELECT id FROM transaction_events WHERE transaction_id = :transaction_id AND event_type = :event_type LIMIT 1',
+                ['transaction_id' => $transactionId, 'event_type' => 'transaction_refunded']
+            );
+            if ($refundEvent) {
+                throw new RuntimeException('Refunded transactions cannot be force-marked successful.');
+            }
+
+            $this->db->execute(
+                'UPDATE transactions
+                 SET status = :status, override_status = 1, override_reason = :override_reason, overridden_by_admin_id = :admin_id, overridden_at = NOW(),
+                     is_retryable = 0, processed_at = NOW(), failure_code = NULL
+                 WHERE id = :id',
+                [
+                    'status' => 'successful',
+                    'override_reason' => $reason,
+                    'admin_id' => $adminId,
+                    'id' => $transactionId,
+                ]
+            );
+
+            $this->event($transactionId, 'transaction_force_success', 'admin', $adminId, 'Super Admin force-marked transaction successful. Wallet was not mutated.', [
+                'reason' => $reason,
+                'previous_status' => $status,
+            ]);
+            $this->event($transactionId, 'transaction_successful', 'admin', $adminId, 'Transaction marked successful by Super Admin override.', [
+                'reason' => $reason,
+                'wallet_mutation' => false,
+            ]);
+            $this->logger->log('admin', $adminId, 'transaction_force_success', 'Super Admin force-marked transaction successful.', [
+                'transaction_id' => $transactionId,
+                'previous_status' => $status,
+            ]);
+
             $this->db->commit();
         } catch (Throwable $throwable) {
             $this->db->rollBack();
@@ -738,9 +919,10 @@ class TransactionService
 
             $commissionAmount = (float) ($locked['commission_amount'] ?? 0);
             if ($commissionAmount <= 0) {
-                $reconUser = $this->db->first('SELECT user_type, tier FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
-                $isReseller = in_array($reconUser['user_type'] ?? '', ['reseller'], true)
-                           || in_array($reconUser['tier'] ?? '', ['RESELLER'], true);
+                $reconUser = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $isReseller = in_array($reconUser['user_type'] ?? '', ['reseller', 'api'], true)
+                           || in_array($reconUser['tier'] ?? '', ['RESELLER', 'API_RESELLER'], true)
+                           || (int) ($reconUser['is_api_user'] ?? 0) === 1;
                 if ($isReseller) {
                     $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
                     $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);

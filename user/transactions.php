@@ -19,42 +19,59 @@ $rows = db()->query(
 
 render_header('Transactions', 'user');
 ?>
-<div class="surface-card p-6">
-    <p class="eyebrow">Transactions</p>
-    <h1 class="surface-section-title">Transaction History</h1>
-    <p class="surface-section-copy">Submitted purchases may remain pending briefly while provider processing completes. Hover or press on a date to see the exact timestamp.</p>
-    <div class="table-shell mt-6">
-        <table>
-            <thead>
-                <tr class="text-slate-400">
-                    <th>Reference</th>
-                    <th>Service</th>
-                    <th>Status</th>
-                    <th>Channel</th>
-                    <th>Amount</th>
-                    <th>Commission</th>
-                    <th>Recipient</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody>
+<div class="space-y-6">
+    <div class="stagger-1">
+        <h1 class="text-2xl font-extrabold text-gem-text">Transactions</h1>
+        <p class="text-[14px] text-gem-muted mt-0.5">Track wallet purchases, API orders, and service activity.</p>
+    </div>
+
+    <section class="stagger-2">
+        <div class="user-premium-card bg-white rounded-2xl shadow-card border border-gem-border overflow-hidden">
+            <div class="user-table-head hidden sm:grid grid-cols-6 gap-4 px-5 py-3 bg-gem-gray border-b border-gem-border text-[11px] font-bold text-gem-muted uppercase tracking-wider">
+                <div class="col-span-2">Service / Description</div>
+                <div>Amount</div>
+                <div>Status</div>
+                <div>Channel</div>
+                <div>Date</div>
+            </div>
+            <div class="divide-y divide-gem-border">
+                <?php if ($rows === []): ?>
+                    <div class="user-empty-state px-5 py-8 text-center text-[13px] text-gem-muted">No transactions yet. Fund your wallet and make your first purchase.</div>
+                <?php endif; ?>
                 <?php foreach ($rows as $row): ?>
-                    <tr data-search-item data-search="<?= e($row['reference'] . ' ' . $row['service_name'] . ' ' . $row['status'] . ' ' . $row['channel'] . ' ' . $row['recipient']); ?>">
-                        <td><?= e($row['reference']); ?></td>
-                        <td><?= e($row['service_name']); ?></td>
-                        <td><span class="status-chip status-<?= e($row['status']); ?>"><?= e(ucfirst($row['status'])); ?></span></td>
-                        <td><?= e($row['channel']); ?></td>
-                        <td><?= e(money($row['amount'])); ?></td>
-                        <td><?= e(money($row['commission_amount'])); ?></td>
-                        <td><?= e($row['recipient']); ?></td>
-                        <td><span class="timestamp" title="<?= e($row['created_at']); ?>"><?= e(human_datetime((string) $row['created_at'])); ?></span></td>
-                    </tr>
+                    <?php
+                    $status = (string) $row['status'];
+                    $statusColor = $status === 'successful' ? 'green' : ($status === 'failed' ? 'red' : 'amber');
+                    $channel = strtolower((string) ($row['channel'] ?? ''));
+                    $serviceName = (string) ($row['service_name'] ?? 'Transaction');
+                    $isCredit = str_contains($channel, 'fund') || str_contains(strtolower($serviceName), 'fund');
+                    $amountPrefix = $isCredit ? '+' : '-';
+                    $amountClass = $isCredit ? 'transaction-amount-credit' : 'transaction-amount-debit';
+                    ?>
+                    <div class="transaction-list-card user-list-row relative grid grid-cols-1 sm:grid-cols-6 gap-2 sm:gap-4 px-5 py-4" data-search-item data-search="<?= e($row['reference'] . ' ' . $row['service_name'] . ' ' . $row['status'] . ' ' . $row['channel'] . ' ' . $row['recipient']); ?>">
+                        <div class="col-span-2 flex items-center gap-3 pr-16 sm:pr-0">
+                            <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600"><?= icon_svg('services'); ?></div>
+                            <div>
+                                <div class="text-[13px] font-semibold text-gem-text"><?= e($row['service_name']); ?></div>
+                                <div class="text-[11px] text-gem-muted"><?= e($row['recipient']); ?> · <?= e($row['reference']); ?></div>
+                            </div>
+                        </div>
+                        <div class="sm:flex sm:items-center absolute sm:static right-5 top-4"><span class="text-[13px] font-bold font-mono <?= e($amountClass); ?>"><?= e($amountPrefix . money((float) $row['amount'])); ?></span></div>
+                        <div class="sm:flex sm:items-center">
+                            <span class="inline-flex items-center gap-1 bg-<?= e($statusColor); ?>-50 text-<?= e($statusColor === 'green' ? 'gem-green' : ($statusColor === 'red' ? 'gem-red' : 'amber-600')); ?> text-[11px] font-semibold px-2.5 py-1 rounded-full">
+                                <span class="w-1.5 h-1.5 rounded-full bg-<?= e($statusColor === 'green' ? 'gem-green' : ($statusColor === 'red' ? 'gem-red' : 'amber-500')); ?>"></span>
+                                <?= e(ucfirst($status)); ?>
+                            </span>
+                        </div>
+                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted"><?= e(ucfirst((string) $row['channel'])); ?></span></div>
+                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted" title="<?= e($row['created_at']); ?>"><?= e(human_datetime((string) $row['created_at'])); ?></span></div>
+                    </div>
                 <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <div class="mt-6">
-        <?php render_pagination($pagination, 'user/transactions.php'); ?>
-    </div>
+            </div>
+        </div>
+        <div class="mt-6">
+            <?php render_pagination($pagination, 'user/transactions.php'); ?>
+        </div>
+    </section>
 </div>
 <?php render_footer(); ?>

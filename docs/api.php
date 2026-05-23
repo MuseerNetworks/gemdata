@@ -5,8 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
 render_header('API Docs');
-$apiBase = rtrim(base_url('api'), '/');
-$localBase = 'http://localhost' . $apiBase;
 ?>
 <div class="space-y-6">
     <section class="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -29,16 +27,16 @@ $localBase = 'http://localhost' . $apiBase;
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/buy-airtime.php</td><td>Purchase airtime</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/buy-data.php</td><td>Purchase data</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/pay-electricity.php</td><td>Buy electricity tokens</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/cable-tv.php</td><td>Renew cable TV</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/exam-pin.php</td><td>Buy exam pins</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/recharge-card.php</td><td>Generate recharge cards</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/data-card.php</td><td>Generate data cards</td></tr>
-                    <tr><td>POST</td><td><?= e($apiBase); ?>/bulk-sms.php</td><td>Send bulk SMS</td></tr>
-                    <tr><td>GET</td><td><?= e($apiBase); ?>/balance.php</td><td>Get wallet balance</td></tr>
-                    <tr><td>GET</td><td><?= e($apiBase); ?>/transactions.php</td><td>List transactions</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/buy-airtime.php</td><td>Purchase airtime</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/buy-data.php</td><td>Purchase data</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/pay-electricity.php</td><td>Buy electricity tokens</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/cable-tv.php</td><td>Renew cable TV</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/exam-pin.php</td><td>Buy exam pins</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/recharge-card.php</td><td>Generate recharge cards</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/data-card.php</td><td>Generate data cards</td></tr>
+                    <tr><td>POST</td><td>/gemdata/api/bulk-sms.php</td><td>Send bulk SMS</td></tr>
+                    <tr><td>GET</td><td>/gemdata/api/balance.php</td><td>Get wallet balance</td></tr>
+                    <tr><td>GET</td><td>/gemdata/api/transactions.php</td><td>List transactions</td></tr>
                 </tbody>
             </table>
         </div>
@@ -47,9 +45,9 @@ $localBase = 'http://localhost' . $apiBase;
     <section class="grid gap-6 lg:grid-cols-2">
         <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 class="text-2xl font-bold">Sample cURL</h2>
-<pre class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200"><code>curl -X POST "<?= e($localBase); ?>/buy-airtime.php" \
-  -H "X-API-KEY: gk_your_key" \
-  -H "X-API-SECRET: gs_your_secret" \
+<pre class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200"><code>curl -X POST "http://localhost/gemdata/api/buy-airtime.php" \
+  -H "X-API-KEY: gmd_live_your_key" \
+  -H "X-API-SECRET: your_one_time_secret" \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "08030000000",
@@ -58,12 +56,12 @@ $localBase = 'http://localhost' . $apiBase;
         </article>
         <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 class="text-2xl font-bold">Sample JS Fetch</h2>
-<pre class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200"><code>fetch('<?= e($localBase); ?>/buy-data.php', {
+<pre class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200"><code>fetch('http://localhost/gemdata/api/buy-data.php', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-API-KEY': 'gk_your_key',
-    'X-API-SECRET': 'gs_your_secret'
+    'X-API-KEY': 'gmd_live_your_key',
+    'X-API-SECRET': 'your_one_time_secret'
   },
   body: JSON.stringify({
     phone: '08030000000',
