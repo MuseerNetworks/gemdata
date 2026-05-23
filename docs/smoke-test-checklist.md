@@ -14,8 +14,8 @@
 ## Funding
 - User wallet page shows dedicated transfer account state correctly
 - No mock funding button appears in production
-- A Paystack webhook can be accepted without exposing secrets in the response
-- A duplicate webhook is ignored cleanly
+- The XixaPay logging webhook returns success without exposing secrets
+- `xixapay_test_log.txt` records the first live payload for review
 
 ## Transactions
 - One transaction can be queued successfully

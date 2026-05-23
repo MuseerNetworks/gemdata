@@ -83,10 +83,24 @@ CREATE TABLE IF NOT EXISTS provider_accounts (
     code VARCHAR(60) NOT NULL UNIQUE,
     name VARCHAR(120) NOT NULL,
     driver VARCHAR(60) NOT NULL DEFAULT 'mock',
-    status ENUM('active','inactive') NOT NULL DEFAULT 'inactive',
+    status ENUM('active','inactive','maintenance','archived') NOT NULL DEFAULT 'inactive',
     priority_order INT NOT NULL DEFAULT 1,
     supports_fallback TINYINT(1) NOT NULL DEFAULT 1,
+    cheapest_routing_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    sandbox_mode TINYINT(1) NOT NULL DEFAULT 0,
+    auto_disable_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    failure_threshold INT NOT NULL DEFAULT 5,
+    minimum_success_rate DECIMAL(5,2) NOT NULL DEFAULT 80.00,
+    health_score DECIMAL(5,2) NOT NULL DEFAULT 100.00,
     low_balance_threshold DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    current_balance DECIMAL(12,2) NULL,
+    balance_refreshed_at DATETIME NULL,
+    circuit_breaker_status ENUM('closed','open','half_open') NOT NULL DEFAULT 'closed',
+    circuit_breaker_opened_at DATETIME NULL,
+    circuit_breaker_until DATETIME NULL,
+    last_api_error VARCHAR(255) NULL,
+    last_successful_at DATETIME NULL,
+    archived_at DATETIME NULL,
     credentials_key VARCHAR(120) NULL,
     base_url VARCHAR(255) NULL,
     supported_services_json LONGTEXT NULL,
@@ -165,6 +179,84 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
     CONSTRAINT fk_wallet_tx_wallet FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS wallet_adjustment_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    wallet_transaction_id INT NULL,
+    admin_id INT NOT NULL,
+    user_id INT NOT NULL,
+    adjustment_type ENUM('credit','debit','refund') NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    balance_before DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    balance_after DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    reason VARCHAR(255) NOT NULL,
+    idempotency_key VARCHAR(120) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_wallet_adjustment_logs_user_created (user_id, created_at),
+    INDEX idx_wallet_adjustment_logs_admin_created (admin_id, created_at),
+    UNIQUE KEY uniq_wallet_adjustment_logs_idempotency (idempotency_key),
+    CONSTRAINT fk_wallet_adjustment_logs_wallet_tx FOREIGN KEY (wallet_transaction_id) REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+    CONSTRAINT fk_wallet_adjustment_logs_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE,
+    CONSTRAINT fk_wallet_adjustment_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS refund_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    transaction_id INT NULL,
+    wallet_transaction_id INT NULL,
+    admin_id INT NULL,
+    user_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    status ENUM('pending','completed','failed') NOT NULL DEFAULT 'completed',
+    idempotency_key VARCHAR(120) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_refund_logs_user_created (user_id, created_at),
+    INDEX idx_refund_logs_transaction (transaction_id),
+    UNIQUE KEY uniq_refund_logs_idempotency (idempotency_key),
+    CONSTRAINT fk_refund_logs_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
+    CONSTRAINT fk_refund_logs_wallet_tx FOREIGN KEY (wallet_transaction_id) REFERENCES wallet_transactions(id) ON DELETE SET NULL,
+    CONSTRAINT fk_refund_logs_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_refund_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS settlement_reconciliations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    reconciliation_reference VARCHAR(80) NOT NULL UNIQUE,
+    transaction_id INT NULL,
+    provider_code VARCHAR(60) NULL,
+    expected_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    actual_amount DECIMAL(12,2) NULL,
+    status ENUM('pending','matched','mismatch','resolved') NOT NULL DEFAULT 'pending',
+    notes VARCHAR(255) NULL,
+    created_by_admin_id INT NULL,
+    resolved_by_admin_id INT NULL,
+    resolved_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_settlement_reconciliations_status_created (status, created_at),
+    INDEX idx_settlement_reconciliations_provider_created (provider_code, created_at),
+    CONSTRAINT fk_settlement_reconciliations_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
+    CONSTRAINT fk_settlement_reconciliations_created_by FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL,
+    CONSTRAINT fk_settlement_reconciliations_resolved_by FOREIGN KEY (resolved_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_expense_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    provider_account_id INT NULL,
+    transaction_id INT NULL,
+    service_slug VARCHAR(80) NULL,
+    provider_code VARCHAR(60) NULL,
+    cost_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    selling_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    profit_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    source ENUM('provider_attempt','manual','report') NOT NULL DEFAULT 'report',
+    notes VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_provider_expense_logs_provider_created (provider_account_id, created_at),
+    INDEX idx_provider_expense_logs_transaction (transaction_id),
+    CONSTRAINT fk_provider_expense_logs_provider FOREIGN KEY (provider_account_id) REFERENCES provider_accounts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_provider_expense_logs_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS wallet_funding_requests (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -191,8 +283,9 @@ CREATE TABLE IF NOT EXISTS wallet_funding_requests (
 
 CREATE TABLE IF NOT EXISTS user_funding_accounts (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL UNIQUE,
-    provider VARCHAR(80) NOT NULL DEFAULT 'paystack',
+    user_id INT NOT NULL,
+    provider VARCHAR(80) NOT NULL DEFAULT 'xixapay',
+    account_reference VARCHAR(120) NULL,
     paystack_customer_id BIGINT NULL,
     paystack_customer_code VARCHAR(120) NULL,
     dedicated_account_id BIGINT NULL,
@@ -208,7 +301,9 @@ CREATE TABLE IF NOT EXISTS user_funding_accounts (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_funding_accounts_status (status, updated_at),
+    INDEX idx_user_funding_accounts_number (dedicated_account_number),
     INDEX idx_user_funding_accounts_customer (paystack_customer_code),
+    UNIQUE KEY uq_user_funding_accounts_user_provider (user_id, provider),
     CONSTRAINT fk_user_funding_accounts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -216,6 +311,9 @@ CREATE TABLE IF NOT EXISTS api_users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
     status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    rate_limit_per_minute INT NOT NULL DEFAULT 60,
+    monthly_limit INT NOT NULL DEFAULT 0,
+    billing_status ENUM('active','paused') NOT NULL DEFAULT 'active',
     created_by_admin_id INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -322,6 +420,81 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
     CONSTRAINT fk_rate_limit_api_key FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS api_request_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_user_id INT NULL,
+    api_key_id INT NULL,
+    user_id INT NULL,
+    method VARCHAR(12) NOT NULL DEFAULT 'GET',
+    endpoint VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(64) NULL,
+    status_code INT NULL,
+    request_status ENUM('accepted','rejected','failed') NOT NULL DEFAULT 'accepted',
+    error_message VARCHAR(255) NULL,
+    response_time_ms INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_api_request_logs_key_created (api_key_id, created_at),
+    INDEX idx_api_request_logs_user_created (user_id, created_at),
+    CONSTRAINT fk_api_request_logs_api_user FOREIGN KEY (api_user_id) REFERENCES api_users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_api_request_logs_api_key FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL,
+    CONSTRAINT fk_api_request_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_ip_whitelists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_user_id INT NOT NULL,
+    ip_address VARCHAR(64) NOT NULL,
+    status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+    notes VARCHAR(255) NULL,
+    created_by_admin_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_api_ip_whitelist (api_user_id, ip_address),
+    CONSTRAINT fk_api_ip_whitelist_api_user FOREIGN KEY (api_user_id) REFERENCES api_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_api_ip_whitelist_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_usage_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_user_id INT NOT NULL,
+    usage_date DATE NOT NULL,
+    request_count INT NOT NULL DEFAULT 0,
+    transaction_count INT NOT NULL DEFAULT 0,
+    volume_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_api_usage_day (api_user_id, usage_date),
+    CONSTRAINT fk_api_usage_records_api_user FOREIGN KEY (api_user_id) REFERENCES api_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS api_billing_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_user_id INT NOT NULL,
+    billing_period VARCHAR(20) NOT NULL,
+    usage_volume DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    charges DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    status ENUM('open','paid','waived') NOT NULL DEFAULT 'open',
+    notes VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_api_billing_period (api_user_id, billing_period),
+    CONSTRAINT fk_api_billing_records_api_user FOREIGN KEY (api_user_id) REFERENCES api_users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS api_webhook_configs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_user_id INT NOT NULL,
+    webhook_url VARCHAR(255) NOT NULL,
+    status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+    secret_preview VARCHAR(40) NULL,
+    last_success_at DATETIME NULL,
+    last_failure_at DATETIME NULL,
+    created_by_admin_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_api_webhook_configs_user_status (api_user_id, status),
+    CONSTRAINT fk_api_webhook_configs_api_user FOREIGN KEY (api_user_id) REFERENCES api_users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_api_webhook_configs_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS activity_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     actor_type ENUM('admin', 'user', 'api', 'system') NOT NULL,
@@ -409,6 +582,75 @@ CREATE TABLE IF NOT EXISTS provider_balance_logs (
     CONSTRAINT fk_provider_balance_logs_provider FOREIGN KEY (provider_account_id) REFERENCES provider_accounts(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS routing_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    service_slug VARCHAR(60) NULL,
+    routing_mode ENUM('manual','priority','cheapest','cheapest_health') NOT NULL DEFAULT 'priority',
+    manual_provider_account_id INT NULL,
+    fallback_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    minimum_success_rate DECIMAL(5,2) NOT NULL DEFAULT 80.00,
+    health_weight DECIMAL(5,2) NOT NULL DEFAULT 30.00,
+    cost_weight DECIMAL(5,2) NOT NULL DEFAULT 70.00,
+    updated_by_admin_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_routing_settings_service (service_slug),
+    INDEX idx_routing_settings_mode (routing_mode),
+    CONSTRAINT fk_routing_settings_provider FOREIGN KEY (manual_provider_account_id) REFERENCES provider_accounts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_routing_settings_admin FOREIGN KEY (updated_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_transaction_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    transaction_id INT NULL,
+    provider_account_id INT NULL,
+    provider_code VARCHAR(60) NULL,
+    routing_mode VARCHAR(40) NULL,
+    attempt_number INT NOT NULL DEFAULT 1,
+    status ENUM('pending','processing','successful','failed','skipped') NOT NULL DEFAULT 'pending',
+    request_reference VARCHAR(120) NULL,
+    provider_reference VARCHAR(120) NULL,
+    response_time_ms INT NULL,
+    error_message VARCHAR(255) NULL,
+    meta_json LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_provider_attempts_transaction (transaction_id, attempt_number),
+    INDEX idx_provider_attempts_provider_created (provider_account_id, created_at),
+    CONSTRAINT fk_provider_attempts_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
+    CONSTRAINT fk_provider_attempts_provider FOREIGN KEY (provider_account_id) REFERENCES provider_accounts(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_api_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    provider_account_id INT NULL,
+    transaction_id INT NULL,
+    direction ENUM('request','response','webhook') NOT NULL,
+    endpoint VARCHAR(255) NULL,
+    http_status INT NULL,
+    response_time_ms INT NULL,
+    redacted_payload LONGTEXT NULL,
+    error_message VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_provider_api_logs_provider_created (provider_account_id, created_at),
+    INDEX idx_provider_api_logs_transaction (transaction_id),
+    CONSTRAINT fk_provider_api_logs_provider FOREIGN KEY (provider_account_id) REFERENCES provider_accounts(id) ON DELETE SET NULL,
+    CONSTRAINT fk_provider_api_logs_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_health_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    provider_account_id INT NOT NULL,
+    status VARCHAR(40) NOT NULL,
+    health_score DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    success_rate DECIMAL(5,2) NULL,
+    balance_amount DECIMAL(12,2) NULL,
+    response_time_ms INT NULL,
+    error_message VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_provider_health_logs_provider_created (provider_account_id, created_at),
+    CONSTRAINT fk_provider_health_logs_provider FOREIGN KEY (provider_account_id) REFERENCES provider_accounts(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS provider_service_plans (
     id INT AUTO_INCREMENT PRIMARY KEY,
     provider_account_id INT NOT NULL,
@@ -465,6 +707,21 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     CONSTRAINT fk_webhook_events_transaction FOREIGN KEY (linked_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS webhook_dead_letters (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    webhook_event_id INT NULL,
+    source VARCHAR(80) NOT NULL,
+    target_url VARCHAR(255) NULL,
+    retry_count INT NOT NULL DEFAULT 0,
+    next_retry_at DATETIME NULL,
+    last_error VARCHAR(255) NULL,
+    status ENUM('pending','retrying','dead','resolved') NOT NULL DEFAULT 'pending',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_webhook_dead_letters_status_retry (status, next_retry_at),
+    CONSTRAINT fk_webhook_dead_letters_event FOREIGN KEY (webhook_event_id) REFERENCES webhook_events(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS fraud_events (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
@@ -473,6 +730,10 @@ CREATE TABLE IF NOT EXISTS fraud_events (
     risk_level ENUM('low','medium','high') NOT NULL DEFAULT 'low',
     fingerprint VARCHAR(190) NULL,
     description VARCHAR(255) NOT NULL,
+    review_status ENUM('open','reviewing','dismissed','confirmed') NOT NULL DEFAULT 'open',
+    reviewed_by_admin_id INT NULL,
+    reviewed_at DATETIME NULL,
+    admin_notes VARCHAR(255) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_fraud_events_user_created (user_id, created_at),
     CONSTRAINT fk_fraud_events_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
@@ -518,6 +779,83 @@ CREATE TABLE IF NOT EXISTS admin_saved_views (
     CONSTRAINT fk_admin_saved_views_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS announcements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    body LONGTEXT NOT NULL,
+    audience VARCHAR(40) NOT NULL DEFAULT 'all_users',
+    status ENUM('draft','published','archived') NOT NULL DEFAULT 'draft',
+    created_by_admin_id INT NOT NULL,
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_announcements_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS homepage_banners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    subtitle VARCHAR(255) NULL,
+    cta_label VARCHAR(80) NULL,
+    cta_url VARCHAR(255) NULL,
+    status ENUM('draft','active','archived') NOT NULL DEFAULT 'draft',
+    created_by_admin_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_homepage_banners_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS promo_codes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(60) NOT NULL UNIQUE,
+    description VARCHAR(255) NULL,
+    discount_type ENUM('percent','fixed') NOT NULL DEFAULT 'percent',
+    discount_value DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    status ENUM('draft','active','archived') NOT NULL DEFAULT 'draft',
+    starts_at DATETIME NULL,
+    ends_at DATETIME NULL,
+    created_by_admin_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_promo_codes_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS campaign_drafts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    channel ENUM('push','sms','email','in_app') NOT NULL DEFAULT 'in_app',
+    audience VARCHAR(80) NOT NULL DEFAULT 'all_users',
+    message LONGTEXT NOT NULL,
+    status ENUM('draft','scheduled','sent','archived') NOT NULL DEFAULT 'draft',
+    scheduled_at DATETIME NULL,
+    created_by_admin_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_campaign_drafts_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS referral_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(80) NOT NULL UNIQUE,
+    setting_value VARCHAR(255) NOT NULL,
+    updated_by_admin_id INT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_referral_settings_admin FOREIGN KEY (updated_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_notices (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    title VARCHAR(150) NOT NULL,
+    message LONGTEXT NOT NULL,
+    status ENUM('draft','active','archived') NOT NULL DEFAULT 'active',
+    created_by_admin_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_notices_user_status (user_id, status),
+    CONSTRAINT fk_user_notices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_notices_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
 INSERT IGNORE INTO admin_roles (id, slug, name, description) VALUES
     (1, 'super_admin', 'Super Admin', 'Full control over the platform'),
     (2, 'support', 'Support', 'User support and transaction assistance'),
@@ -535,7 +873,10 @@ INSERT IGNORE INTO admin_permissions (permission_key, label) VALUES
     ('reports.view', 'View reports'),
     ('settings.manage', 'Manage settings'),
     ('roles.manage', 'Manage roles and invites'),
-    ('alerts.manage', 'Manage alerts and broadcasts');
+    ('alerts.manage', 'Manage alerts and broadcasts'),
+    ('security.manage', 'Manage security and fraud center'),
+    ('api.manage', 'Manage API platform'),
+    ('cms.manage', 'Manage CMS and operations tools');
 
 INSERT IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 1, id FROM admin_permissions;
@@ -545,6 +886,9 @@ SELECT 2, id FROM admin_permissions WHERE permission_key IN ('dashboard.view','u
 
 INSERT IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 3, id FROM admin_permissions WHERE permission_key IN ('dashboard.view','users.view','wallet.manage','transactions.view','reports.view','settings.manage');
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
+SELECT 2, id FROM admin_permissions WHERE permission_key IN ('security.manage','alerts.manage');
 
 INSERT IGNORE INTO provider_accounts (code, name, driver, status, priority_order, supports_fallback, low_balance_threshold, credentials_key, base_url, supported_services_json, notes) VALUES
     ('albani', 'AlbaniAPI', 'albani', 'inactive', 1, 1, 5000.00, 'albani', 'https://albanidata.com/api/v1', '["airtime","data"]', 'Disabled by default until Albani credentials and plan mappings are configured.'),

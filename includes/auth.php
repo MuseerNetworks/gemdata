@@ -71,6 +71,15 @@ function require_admin(): array
     if ((int) ($admin['force_password_change'] ?? 0) === 1 && $currentScript !== 'change-password.php') {
         redirect(base_url('admin/change-password.php'));
     }
+    if (
+        ((bool) config('security.admin_2fa_enabled', false) || (int) ($admin['two_factor_enabled'] ?? 0) === 1 || ($admin['role_slug'] ?? '') === 'super_admin')
+        && empty($_SESSION['admin_2fa_verified'])
+        && $currentScript !== 'verify-2fa.php'
+    ) {
+        unset($_SESSION['admin_id']);
+        $_SESSION['admin_2fa_pending_id'] = (int) $admin['id'];
+        redirect(base_url('admin/verify-2fa.php'));
+    }
     return $admin;
 }
 

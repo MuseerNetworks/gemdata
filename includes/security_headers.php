@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * GemData security headers — called early in bootstrap after session start.
+ * GemData security headers - called early in bootstrap after session start.
  * Safe for cPanel shared hosting / LiteSpeed environments.
  */
 function emit_security_headers(): void
@@ -12,26 +12,17 @@ function emit_security_headers(): void
         return;
     }
 
-    // Prevent clickjacking
     header('X-Frame-Options: SAMEORIGIN');
-
-    // Prevent MIME-type sniffing
     header('X-Content-Type-Options: nosniff');
-
-    // XSS filter (legacy browsers)
     header('X-XSS-Protection: 1; mode=block');
-
-    // Referrer policy
     header('Referrer-Policy: strict-origin-when-cross-origin');
-
-    // Permissions policy — disable sensitive APIs not needed by VTU platform
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
-    // Content Security Policy — permissive enough for Tailwind CDN, Chart.js CDN, and inline scripts
+    $nonce = csp_nonce();
     $csp = implode('; ', [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
-        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
+        "script-src 'self' 'nonce-{$nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
+        "style-src 'self' 'nonce-{$nonce}' https://cdn.tailwindcss.com",
         "img-src 'self' data: https:",
         "font-src 'self' https:",
         "connect-src 'self'",
@@ -41,12 +32,10 @@ function emit_security_headers(): void
     ]);
     header('Content-Security-Policy: ' . $csp);
 
-    // HSTS — only send over HTTPS; tells browsers to always use HTTPS for this domain
     if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
     }
 
-    // Remove server fingerprinting headers
     header_remove('X-Powered-By');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 }

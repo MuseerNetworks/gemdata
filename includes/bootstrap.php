@@ -62,30 +62,33 @@ use GemData\Classes\ApiHandler;
 use GemData\Classes\ActivityLogger;
 use GemData\Classes\AdminService;
 use GemData\Classes\AdminOpsService;
+use GemData\Classes\ApiCredentialService;
 use GemData\Classes\AppLogger;
 use GemData\Classes\Commission;
 use GemData\Classes\CommissionWallet;
 use GemData\Classes\Database;
+use GemData\Classes\DashboardController;
 use GemData\Classes\FraudService;
 use GemData\Classes\MaintenanceService;
 use GemData\Classes\MockVtuProvider;
 use GemData\Classes\NotificationService;
-use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
-use GemData\Classes\PaystackWebhookService;
-use GemData\Classes\ZenithPayVirtualAccountService;
-use GemData\Classes\ZenithPayWebhookService;
+use GemData\Classes\XixaPay;
 use GemData\Classes\PricingService;
 use GemData\Classes\ProviderPlanService;
 use GemData\Classes\ProviderManager;
+use GemData\Classes\ProviderRouter;
 use GemData\Classes\RateLimiter;
 use GemData\Classes\ReportService;
 use GemData\Classes\Response;
+use GemData\Classes\RoleMiddleware;
 use GemData\Classes\SessionAuth;
 use GemData\Classes\SettingsService;
 use GemData\Classes\SimpleCache;
 use GemData\Classes\TransactionService;
 use GemData\Classes\UserSecurityService;
+use GemData\Classes\UserRoleManager;
+use GemData\Classes\UpgradeRequestService;
 use GemData\Classes\Validator;
 use GemData\Classes\Wallet;
 
@@ -109,22 +112,23 @@ try {
     $auth = new SessionAuth($database, $activityLogger);
     $wallet = new Wallet($database);
     $notifications = new NotificationService($database);
-    $dedicatedAccounts = new PaystackDedicatedAccountService($database, $activityLogger, $notifications);
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger);
-    $paystackWebhooks = new PaystackWebhookService($database, $payments, $activityLogger, $appLogger);
     $commissionWallet = new CommissionWallet($database);
     $commission = new Commission($database, $commissionWallet);
-    $zenithPayAccounts = new ZenithPayVirtualAccountService($database, $activityLogger, $notifications);
-    $zenithPayWebhooks = new ZenithPayWebhookService($database, $payments, $activityLogger, $appLogger);
+    $xixaPay = new XixaPay($database, $activityLogger, $notifications);
+    $userRoles = new UserRoleManager();
+    $roleMiddleware = new RoleMiddleware($userRoles);
     $mockProvider = new MockVtuProvider();
     $pricing = new PricingService($database, $cache);
     $providerPlans = new ProviderPlanService($database, $pricing, $cache);
     $fraud = new FraudService($database);
-    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache, $providerPlans);
+    $providerRouter = new ProviderRouter($database, $providerPlans, $pricing);
+    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache, $providerPlans, $providerRouter);
     $reportService = new ReportService($database);
     $adminOps = new AdminOpsService($database, $activityLogger, $providerManager);
     $transactionService = new TransactionService($database, $wallet, $commission, $notifications, $providerManager, $pricing, $providerPlans, $fraud, $activityLogger);
     $rateLimiter = new RateLimiter($database, (int) config('app.rate_limit_per_minute', 60));
+    $apiCredentials = new ApiCredentialService($database);
     $apiAuth = new ApiAuth($database, $rateLimiter);
     $apiHandler = new ApiHandler($database, $apiAuth, $transactionService);
 
@@ -140,22 +144,25 @@ try {
     register_service(SessionAuth::class, $auth);
     register_service(Wallet::class, $wallet);
     register_service(NotificationService::class, $notifications);
-    register_service(PaystackDedicatedAccountService::class, $dedicatedAccounts);
     register_service(PaymentGatewayService::class, $payments);
-    register_service(PaystackWebhookService::class, $paystackWebhooks);
     register_service(Commission::class, $commission);
     register_service(CommissionWallet::class, $commissionWallet);
-    register_service(ZenithPayVirtualAccountService::class, $zenithPayAccounts);
-    register_service(ZenithPayWebhookService::class, $zenithPayWebhooks);
+    register_service(XixaPay::class, $xixaPay);
+    register_service(UserRoleManager::class, $userRoles);
+    register_service(RoleMiddleware::class, $roleMiddleware);
     register_service(PricingService::class, $pricing);
     register_service(ProviderPlanService::class, $providerPlans);
+    register_service(ProviderRouter::class, $providerRouter);
     register_service(FraudService::class, $fraud);
     register_service(ProviderManager::class, $providerManager);
     register_service(ReportService::class, $reportService);
     register_service(TransactionService::class, $transactionService);
     register_service(RateLimiter::class, $rateLimiter);
+    register_service(ApiCredentialService::class, $apiCredentials);
     register_service(ApiAuth::class, $apiAuth);
     register_service(ApiHandler::class, $apiHandler);
+    register_service(DashboardController::class, new DashboardController($database, $wallet, $xixaPay, $providerPlans, $userRoles));
+    register_service(UpgradeRequestService::class, new UpgradeRequestService($database, $userRoles));
 
     $maintenance->enforce();
 } catch (Throwable $exception) {
@@ -252,7 +259,7 @@ function enforce_production_safety(string $environment): void
         throw new RuntimeException('Production database configuration is unsafe.');
     }
 
-    if ($gateway === 'mock_paystack' || $gateway === 'mock') {
+    if ($gateway === 'mock') {
         throw new RuntimeException('Mock payment gateway cannot run in production.');
     }
 
@@ -276,7 +283,13 @@ function bootstrap_runtime_preflight(): void
         (array) config('app.required_extensions', ['json', 'pdo_mysql'])
     ))));
 
-    if ((bool) config('payments.auto_assign_dedicated_account', false) && !in_array('curl', $required, true)) {
+    if (
+        (
+            trim((string) config('payments.xixapay_api_key', '')) !== ''
+            || trim((string) config('payments.xixapay_api_secret', '')) !== ''
+        )
+        && !in_array('curl', $required, true)
+    ) {
         $required[] = 'curl';
     }
 

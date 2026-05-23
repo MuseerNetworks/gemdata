@@ -84,6 +84,14 @@ function e(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function csp_nonce(): string
+{
+    if (empty($GLOBALS['__gemdata_csp_nonce'])) {
+        $GLOBALS['__gemdata_csp_nonce'] = bin2hex(random_bytes(16));
+    }
+    return $GLOBALS['__gemdata_csp_nonce'];
+}
+
 function redirect(string $path): void
 {
     header('Location: ' . $path);
@@ -115,6 +123,86 @@ function verify_csrf(): void
         http_response_code(419);
         exit('Invalid CSRF token.');
     }
+}
+
+function public_api_error_message(Throwable $throwable): string
+{
+    $message = strtolower($throwable->getMessage());
+    if (str_contains($message, 'rate limit')) {
+        return 'Rate limit exceeded. Try again later.';
+    }
+    if (str_contains($message, 'credential') || str_contains($message, 'api account') || str_contains($message, 'whitelist') || str_contains($message, 'authentication')) {
+        return 'API authentication failed.';
+    }
+    if (str_contains($message, 'insufficient')) {
+        return 'Insufficient wallet balance.';
+    }
+    if (str_contains($message, 'disabled') || str_contains($message, 'unavailable') || str_contains($message, 'outside the allowed')) {
+        return $throwable->getMessage();
+    }
+    return 'Request could not be processed right now.';
+}
+
+function base32_encode_secret(string $bytes): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $bits = '';
+    for ($i = 0, $length = strlen($bytes); $i < $length; $i++) {
+        $bits .= str_pad(decbin(ord($bytes[$i])), 8, '0', STR_PAD_LEFT);
+    }
+    $encoded = '';
+    foreach (str_split($bits, 5) as $chunk) {
+        if (strlen($chunk) < 5) {
+            $chunk = str_pad($chunk, 5, '0', STR_PAD_RIGHT);
+        }
+        $encoded .= $alphabet[bindec($chunk)];
+    }
+    return $encoded;
+}
+
+function base32_decode_secret(string $secret): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $secret = strtoupper(preg_replace('/[^A-Z2-7]/i', '', $secret) ?? '');
+    $bits = '';
+    for ($i = 0, $length = strlen($secret); $i < $length; $i++) {
+        $position = strpos($alphabet, $secret[$i]);
+        if ($position !== false) {
+            $bits .= str_pad(decbin($position), 5, '0', STR_PAD_LEFT);
+        }
+    }
+    $decoded = '';
+    foreach (str_split($bits, 8) as $byte) {
+        if (strlen($byte) === 8) {
+            $decoded .= chr(bindec($byte));
+        }
+    }
+    return $decoded;
+}
+
+function totp_code(string $secret, ?int $timeSlice = null): string
+{
+    $timeSlice ??= (int) floor(time() / 30);
+    $key = base32_decode_secret($secret);
+    $hash = hash_hmac('sha1', pack('N*', 0) . pack('N*', $timeSlice), $key, true);
+    $offset = ord(substr($hash, -1)) & 0x0F;
+    $value = (((ord($hash[$offset]) & 0x7F) << 24) | ((ord($hash[$offset + 1]) & 0xFF) << 16) | ((ord($hash[$offset + 2]) & 0xFF) << 8) | (ord($hash[$offset + 3]) & 0xFF)) % 1000000;
+    return str_pad((string) $value, 6, '0', STR_PAD_LEFT);
+}
+
+function verify_totp_code(string $secret, string $code, int $window = 1): bool
+{
+    $code = preg_replace('/\D+/', '', $code) ?? '';
+    if (strlen($code) !== 6 || trim($secret) === '') {
+        return false;
+    }
+    $current = (int) floor(time() / 30);
+    for ($offset = -$window; $offset <= $window; $offset++) {
+        if (hash_equals(totp_code($secret, $current + $offset), $code)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function old(string $key, string $default = ''): string

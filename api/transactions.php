@@ -6,5 +6,5 @@ try {
     unset($data['page'], $data['per_page']);
     app(\GemData\Classes\Response::class)->json('success', 'Transactions fetched successfully', $data, [], $meta);
 } catch (Throwable $e) {
-    app(\GemData\Classes\Response::class)->json('error', $e->getMessage(), [], [], [], 400);
+    app(\GemData\Classes\Response::class)->json('error', public_api_error_message($e), [], [], [], 400);
 }

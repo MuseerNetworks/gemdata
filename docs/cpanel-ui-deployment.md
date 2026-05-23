@@ -43,7 +43,7 @@
 ## 6. Verify
 - Review [smoke-test-checklist.md](/C:/xampp/htdocs/gemdata/docs/smoke-test-checklist.md)
 - Confirm the funding page shows bank-transfer-only production messaging
-- Confirm `api/webhook.php` accepts Paystack webhook traffic without exposing secrets
+- Confirm `api/xixapay.php` logs XixaPay webhook traffic without exposing secrets
 - Confirm `storage/logs/bootstrap.log` shows no ongoing bootstrap failures
 
 ## 7. Exit maintenance mode

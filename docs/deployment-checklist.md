@@ -29,7 +29,7 @@
 - Confirm the deployed `public_html/index.php` is the app entrypoint you expect.
 - Confirm the deployed `public_html/.htaccess` matches the recovery-safe version in the repo.
 - Confirm there is no accidental nested `public_html/gemdata/` deploy.
-- Confirm `paystack-node/` is not copied into `public_html/`.
+- Confirm old payment-provider demo folders are not copied into `public_html/`.
 
 ## Production config
 - Set `app.environment = 'production'`.
@@ -39,7 +39,7 @@
 - Keep `app.required_extensions` aligned with enabled production features.
 - Set real cPanel database credentials.
 - Set `payments.default_gateway = 'bank_transfer'`.
-- Set `payments.paystack_secret_key`.
+- Set `payments.xixapay_api_key`, `payments.xixapay_api_secret`, and `payments.xixapay_business_id`.
 - Set `webhooks.shared_secret`.
 - Keep every provider `enabled => false` until live verification is complete.
 

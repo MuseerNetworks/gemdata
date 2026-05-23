@@ -41,7 +41,7 @@ class MaintenanceService
             '/admin/login.php',
             '/admin/register.php',
             '/admin/change-password.php',
-            '/api/webhook.php',
+            '/api/xixapay.php',
             '/offline.html',
         ];
 

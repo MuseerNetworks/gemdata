@@ -72,10 +72,21 @@ class Commission
 
     public function upsert(?int $userId, int $serviceId, float $rate): void
     {
-        $existing = $this->db->first(
-            'SELECT id FROM commissions WHERE service_id = :service_id AND ((user_id IS NULL AND :user_id IS NULL) OR user_id = :user_id) LIMIT 1',
-            ['service_id' => $serviceId, 'user_id' => $userId]
-        );
+        if ($serviceId <= 0) {
+            throw new \InvalidArgumentException('A valid service is required.');
+        }
+        if ($rate < 0 || $rate > 100) {
+            throw new \InvalidArgumentException('Commission rate must be between 0 and 100 percent.');
+        }
+        $existing = $userId === null
+            ? $this->db->first(
+                'SELECT id FROM commissions WHERE service_id = :service_id AND user_id IS NULL LIMIT 1',
+                ['service_id' => $serviceId]
+            )
+            : $this->db->first(
+                'SELECT id FROM commissions WHERE service_id = :service_id AND user_id = :user_id LIMIT 1',
+                ['service_id' => $serviceId, 'user_id' => $userId]
+            );
         if ($existing) {
             $this->db->execute('UPDATE commissions SET rate_percent = :rate WHERE id = :id', [
                 'rate' => $rate, 'id' => $existing['id'],

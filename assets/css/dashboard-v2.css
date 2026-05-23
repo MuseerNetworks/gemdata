@@ -1,0 +1,174 @@
+* { box-sizing: border-box; }
+
+body[data-app-section="user"] {
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    background: var(--gd-bg, var(--bg-app, #F8FAFC));
+    background-image: var(--gd-layer, var(--bg-layer-1, none));
+    color: var(--gd-text-secondary, var(--text-secondary, #334155));
+}
+
+#sidebar,
+#sidebar-overlay {
+    transition: transform .3s ease, opacity .3s ease;
+}
+
+.wallet-card {
+    background: linear-gradient(135deg, #1B4DFF 0%, #1238CC 60%, #0B25A0 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.wallet-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at top right, rgba(255,255,255,.12) 0%, transparent 65%);
+}
+
+.wallet-card::after {
+    content: '';
+    position: absolute;
+    width: 240px;
+    height: 240px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.05);
+    bottom: -80px;
+    right: -60px;
+}
+
+.stat-card {
+    transition: box-shadow .2s, transform .2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(27,77,255,.12);
+}
+
+.service-icon {
+    transition: transform .2s, box-shadow .2s;
+}
+
+.service-icon:hover {
+    transform: translateY(-3px) scale(1.06);
+    box-shadow: 0 8px 20px rgba(0,0,0,.15);
+}
+
+.nav-link {
+    transition: background .15s, color .15s;
+}
+
+.nav-link.active,
+.nav-link:hover {
+    background: var(--gd-primary-soft, var(--accent-soft, #EEF2FF));
+    color: var(--gd-primary-strong, var(--accent-strong, #1B4DFF));
+}
+
+.nav-link.active svg,
+.nav-link:hover svg {
+    color: var(--gd-primary-strong, var(--accent-strong, #1B4DFF));
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 9999px;
+    font-size: .65rem;
+    font-weight: 700;
+}
+
+.progress-bar {
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--gd-surface-alt, var(--bg-soft, #E2E8F0));
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #1B4DFF, #00C6AE);
+}
+
+.activate-banner {
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--gd-warning-soft, var(--warning-soft, rgba(245, 158, 11, 0.14))) 78%, var(--gd-surface, var(--bg-surface, #ffffff)) 22%),
+        color-mix(in srgb, var(--gd-primary-soft, var(--accent-soft, rgba(27, 77, 255, 0.1))) 42%, var(--gd-surface, var(--bg-surface, #ffffff)) 58%)
+    );
+    border: 1px solid color-mix(in srgb, var(--gd-warning, var(--warning-text, #92400e)) 22%, var(--gd-border, var(--border-color, #FDE68A)));
+    color: var(--gd-text-secondary, var(--text-secondary, #334155));
+    box-shadow: var(--shadow-card, 0 18px 48px rgba(15, 23, 42, 0.08));
+}
+
+.activate-banner .text-gem-text,
+.activate-banner .font-bold {
+    color: var(--gd-text, var(--text-primary, #0F172A)) !important;
+}
+
+.activate-banner .text-gem-muted {
+    color: var(--gd-text-muted, var(--text-muted, #64748B)) !important;
+}
+
+.activate-banner .text-gem-blue,
+.activate-banner a {
+    color: var(--gd-primary-strong, var(--accent-strong, #1B4DFF)) !important;
+}
+
+.activate-banner .bg-amber-100 {
+    background: var(--gd-warning-soft, var(--warning-soft, rgba(245, 158, 11, 0.14))) !important;
+    color: var(--gd-warning, var(--warning-text, #92400e)) !important;
+}
+
+.bottom-nav-item {
+    transition: color .15s;
+}
+
+.bottom-nav-item.active {
+    color: var(--gd-primary-strong, var(--accent-strong, #1B4DFF));
+}
+
+.bottom-nav-item .dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--gd-primary-strong, var(--accent-strong, #1B4DFF));
+    margin: 2px auto 0;
+}
+
+.stagger-1 { animation: fadeUp .45s .05s ease both; }
+.stagger-2 { animation: fadeUp .45s .10s ease both; }
+.stagger-3 { animation: fadeUp .45s .15s ease both; }
+.stagger-4 { animation: fadeUp .45s .20s ease both; }
+.stagger-5 { animation: fadeUp .45s .25s ease both; }
+.stagger-6 { animation: fadeUp .45s .30s ease both; }
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.gd-copy-button.is-copied {
+    background: rgba(255,255,255,.24);
+}
+
+.dashboard-service-overlay {
+    z-index: 70;
+}
+
+#sidebar .nav-link svg,
+#sidebar a[href*="settings"] svg,
+header svg,
+nav[aria-label="Primary mobile navigation"] svg {
+    width: 100%;
+    height: 100%;
+}
+
+.topbar,
+.app-sidebar,
+.mobile-bottom-nav {
+    display: none;
+}

@@ -46,8 +46,8 @@ render_header('API Docs');
         <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 class="text-2xl font-bold">Sample cURL</h2>
 <pre class="mt-4 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-200"><code>curl -X POST "http://localhost/gemdata/api/buy-airtime.php" \
-  -H "X-API-KEY: gk_your_key" \
-  -H "X-API-SECRET: gs_your_secret" \
+  -H "X-API-KEY: gmd_live_your_key" \
+  -H "X-API-SECRET: your_one_time_secret" \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "08030000000",
@@ -60,8 +60,8 @@ render_header('API Docs');
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-API-KEY': 'gk_your_key',
-    'X-API-SECRET': 'gs_your_secret'
+    'X-API-KEY': 'gmd_live_your_key',
+    'X-API-SECRET': 'your_one_time_secret'
   },
   body: JSON.stringify({
     phone: '08030000000',

@@ -44,21 +44,6 @@ if (is_post()) {
             app(\GemData\Classes\Wallet::class)->ensure($userId);
             db()->commit();
 
-            $dedicatedAccounts = app(\GemData\Classes\PaystackDedicatedAccountService::class);
-            if ($dedicatedAccounts->shouldAutoAssign()) {
-                try {
-                    $dedicatedAccounts->ensureForUser($userId);
-                } catch (Throwable $assignmentError) {
-                    app(\GemData\Classes\ActivityLogger::class)->log(
-                        'system',
-                        0,
-                        'paystack_dedicated_account_registration_failed',
-                        'Dedicated account assignment failed after registration.',
-                        ['user_id' => $userId, 'error' => $assignmentError->getMessage()]
-                    );
-                }
-            }
-
             flash('success', 'Registration successful. Please sign in.');
             redirect(base_url('user/login.php'));
         } catch (Throwable $throwable) {
@@ -71,63 +56,75 @@ if (is_post()) {
 $fieldError = static function (array $errors, string $key): ?string {
     return $errors[$key][0] ?? null;
 };
+$fieldInvalid = static function (array $errors, string $key): string {
+    return isset($errors[$key]) ? ' is-invalid' : '';
+};
+$ariaInvalid = static function (array $errors, string $key): string {
+    return isset($errors[$key]) ? ' aria-invalid="true"' : '';
+};
 
 render_header('Register');
 ?>
-<div class="mx-auto max-w-5xl grid gap-8 lg:grid-cols-[0.92fr,1.08fr]">
-    <section class="rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-950 via-slate-900 to-cyan-950/70 p-8 text-white">
+<div class="gd-auth-wrap gd-auth-grid gd-auth-grid-two">
+    <section class="gd-auth-panel">
         <p class="eyebrow">GemData Workspace</p>
-        <h1 class="mt-4 text-4xl font-black">Create your GemData account.</h1>
-        <p class="mt-4 max-w-xl text-slate-300">Open your wallet, buy VTU services, and scale toward reseller API usage from a single Nigerian-focused platform.</p>
+        <h1 class="gd-auth-title">Create your GemData account.</h1>
+        <p class="gd-auth-copy max-w-xl">Open your wallet, buy VTU services, and scale toward reseller API usage from a single Nigerian-focused platform.</p>
         <div class="mt-8 space-y-4">
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="gd-auth-tip">
                 <p class="font-semibold">Use your Nigerian phone number</p>
-                <p class="mt-2 text-sm text-slate-300">Format as `080...`, `081...`, `070...`, `090...`, or `091...`.</p>
+                <p class="mt-2 text-sm text-white/75">Format as `080...`, `081...`, `070...`, `090...`, or `091...`.</p>
             </div>
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="gd-auth-tip">
                 <p class="font-semibold">Secure your password</p>
-                <p class="mt-2 text-sm text-slate-300">Use at least 8 characters with uppercase, lowercase, and a number.</p>
+                <p class="mt-2 text-sm text-white/75">Use at least 8 characters with uppercase, lowercase, and a number.</p>
             </div>
         </div>
     </section>
-    <section class="rounded-3xl border border-white/10 bg-white/5 p-8">
+    <section class="gd-auth-card">
     <p class="eyebrow">Quick onboarding</p>
-    <h1 class="surface-section-title">Create your account</h1>
-    <p class="surface-section-copy">Open a wallet, buy VTU services, and request reseller API access later.</p>
+    <h1 class="gd-auth-title">Create your account</h1>
+    <p class="gd-auth-copy">Open a wallet, buy VTU services, and request reseller API access later.</p>
     <?php if (!empty($errors)): ?>
         <div class="notice notice-error mt-6">Please correct the highlighted fields and try again.</div>
     <?php endif; ?>
-    <form method="post" class="mt-6 grid gap-4 md:grid-cols-2">
+    <form method="post" class="mt-6 gd-form-grid gd-form-grid-two" data-loading-form>
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-        <div class="md:col-span-2">
-            <label class="mb-2 block text-sm">Full name</label>
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="full_name" value="<?= e($input['full_name']); ?>" placeholder="Enter your full name">
-            <?php if ($message = $fieldError($errors, 'full_name')): ?><p class="mt-2 text-sm text-rose-300"><?= e($message); ?></p><?php endif; ?>
+        <div class="gd-field md:col-span-2<?= e($fieldInvalid($errors, 'full_name')); ?>">
+            <label>Full name</label>
+            <input class="gd-input<?= e($fieldInvalid($errors, 'full_name')); ?>" name="full_name" value="<?= e($input['full_name']); ?>" placeholder="Enter your full name" autocomplete="name"<?= $ariaInvalid($errors, 'full_name'); ?>>
+            <?php if ($message = $fieldError($errors, 'full_name')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
-        <div>
-            <label class="mb-2 block text-sm">Email</label>
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="email" type="email" value="<?= e($input['email']); ?>" placeholder="you@example.com">
-            <?php if ($message = $fieldError($errors, 'email')): ?><p class="mt-2 text-sm text-rose-300"><?= e($message); ?></p><?php endif; ?>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'email')); ?>">
+            <label>Email</label>
+            <input class="gd-input<?= e($fieldInvalid($errors, 'email')); ?>" name="email" type="email" value="<?= e($input['email']); ?>" placeholder="you@example.com" autocomplete="email"<?= $ariaInvalid($errors, 'email'); ?>>
+            <?php if ($message = $fieldError($errors, 'email')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
-        <div>
-            <label class="mb-2 block text-sm">Phone</label>
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="phone" value="<?= e($input['phone']); ?>" placeholder="08030000000">
-            <?php if ($message = $fieldError($errors, 'phone')): ?><p class="mt-2 text-sm text-rose-300"><?= e($message); ?></p><?php endif; ?>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'phone')); ?>">
+            <label>Phone</label>
+            <input class="gd-input<?= e($fieldInvalid($errors, 'phone')); ?>" name="phone" value="<?= e($input['phone']); ?>" placeholder="08030000000" autocomplete="tel"<?= $ariaInvalid($errors, 'phone'); ?>>
+            <?php if ($message = $fieldError($errors, 'phone')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
-        <div>
-            <label class="mb-2 block text-sm">Password</label>
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="password" type="password" placeholder="Create a password">
-            <?php if ($message = $fieldError($errors, 'password')): ?><p class="mt-2 text-sm text-rose-300"><?= e($message); ?></p><?php endif; ?>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'password')); ?>">
+            <label>Password</label>
+            <div class="password-field<?= e($fieldInvalid($errors, 'password')); ?>">
+                <input class="gd-input<?= e($fieldInvalid($errors, 'password')); ?>" name="password" type="password" placeholder="Create a password" autocomplete="new-password"<?= $ariaInvalid($errors, 'password'); ?>>
+                <button class="password-toggle" type="button" data-password-toggle aria-label="Show password"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></button>
+            </div>
+            <?php if ($message = $fieldError($errors, 'password')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
-        <div>
-            <label class="mb-2 block text-sm">Confirm password</label>
-            <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="password_confirmation" type="password" placeholder="Repeat your password">
-            <?php if ($message = $fieldError($errors, 'password_confirmation')): ?><p class="mt-2 text-sm text-rose-300"><?= e($message); ?></p><?php endif; ?>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'password_confirmation')); ?>">
+            <label>Confirm password</label>
+            <div class="password-field<?= e($fieldInvalid($errors, 'password_confirmation')); ?>">
+                <input class="gd-input<?= e($fieldInvalid($errors, 'password_confirmation')); ?>" name="password_confirmation" type="password" placeholder="Repeat your password" autocomplete="new-password"<?= $ariaInvalid($errors, 'password_confirmation'); ?>>
+                <button class="password-toggle" type="button" data-password-toggle aria-label="Show password"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></button>
+            </div>
+            <?php if ($message = $fieldError($errors, 'password_confirmation')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
-        <button class="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950" type="submit">Register</button>
+        <button class="gd-auth-button" type="submit" data-loading-label="Creating account...">Register</button>
     </form>
-    <div class="mt-5 text-sm text-slate-400">
-        Already have an account? <a class="text-cyan-300" href="<?= e(base_url('user/login.php')); ?>">Sign in</a>
+    <div class="mt-5 text-sm text-gem-muted">
+        Already have an account? <a class="text-gem-blue font-bold" href="<?= e(base_url('user/login.php')); ?>">Sign in</a>
     </div>
     </section>
 </div>

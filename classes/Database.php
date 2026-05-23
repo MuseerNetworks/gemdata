@@ -126,6 +126,23 @@ class Database
         }
     }
 
+    public function columnExists(string $tableName, string $columnName): bool
+    {
+        try {
+            $row = $this->first(
+                'SELECT COUNT(*) AS cnt
+                 FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = :table_name
+                   AND COLUMN_NAME = :column_name',
+                ['table_name' => $tableName, 'column_name' => $columnName]
+            );
+            return ((int) ($row['cnt'] ?? 0)) > 0;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     /**
      * Run a query but return an empty array on table-not-found errors instead of crashing.
      */

@@ -13,7 +13,8 @@ class ProviderManager
         private MockVtuProvider $mockProvider,
         private AppLogger $logger,
         private SimpleCache $cache,
-        private ProviderPlanService $planService
+        private ProviderPlanService $planService,
+        private ProviderRouter $router
     ) {
     }
 
@@ -21,8 +22,11 @@ class ProviderManager
     {
         $providers = $this->db->query('SELECT * FROM provider_accounts WHERE status = "active" ORDER BY priority_order ASC, id ASC');
         return array_values(array_filter($providers, function (array $provider): bool {
+            if ($this->recoverExpiredCircuit($provider)) {
+                $provider['circuit_breaker_status'] = 'half_open';
+            }
             $config = $this->providerConfig($provider);
-            return !empty($config['enabled']);
+            return !empty($config['enabled']) && !$this->isCircuitOpen($provider);
         }));
     }
 
@@ -51,40 +55,67 @@ class ProviderManager
 
     public function purchase(string $serviceSlug, array $payload): array
     {
-        $providers = $this->supportedProviders($serviceSlug);
+        $requestReference = trim((string) ($payload['reference'] ?? ''));
+        if ($requestReference === '') {
+            throw new RuntimeException('Provider request reference is required for idempotent fulfillment.');
+        }
+
+        $routing = $this->router->route($serviceSlug, $payload, $this->supportedProviders($serviceSlug));
+        $providers = $routing['providers'];
+        $routingSetting = $routing['setting'];
         if ($providers === []) {
             throw new RuntimeException('No enabled provider is mapped for this service.');
         }
 
         $attempts = [];
+        $attemptNumber = 0;
         foreach ($providers as $provider) {
+            $attemptNumber++;
+            $startedAt = microtime(true);
             try {
                 $response = $this->driver($provider)->purchase($serviceSlug, $payload);
                 $response = $this->normalizePurchaseResponse($response, $provider, $payload);
+                $responseTimeMs = (int) round((microtime(true) - $startedAt) * 1000);
                 $attempts[] = [
                     'provider_id' => (int) $provider['id'],
                     'provider_code' => $provider['code'],
                     'status' => $response['status'],
                     'provider_reference' => $response['provider_reference'] ?? null,
+                    'routing_mode' => $routingSetting['routing_mode'] ?? 'priority',
+                    'attempt_number' => $attemptNumber,
+                    'response_time_ms' => $responseTimeMs,
                 ];
+                $this->recordProviderAttempt((int) ($payload['transaction_id'] ?? 0), $provider, $routingSetting, $attemptNumber, $response['status'], (string) ($payload['reference'] ?? ''), $response['provider_reference'] ?? null, $responseTimeMs, null, $response);
+                $this->updateProviderOutcome($provider, $response['status'], null);
 
-                if (in_array(($response['status'] ?? 'failed'), ['successful', 'pending'], true) || (int) $provider['supports_fallback'] !== 1) {
+                $fallbackAllowed = !empty($routingSetting['fallback_enabled']) && (int) $provider['supports_fallback'] === 1;
+                if (in_array(($response['status'] ?? 'failed'), ['successful', 'pending'], true) || !$fallbackAllowed) {
                     $response['attempts'] = $attempts;
                     return $response;
                 }
             } catch (\Throwable $throwable) {
+                $responseTimeMs = (int) round((microtime(true) - $startedAt) * 1000);
                 $attempts[] = [
                     'provider_id' => (int) $provider['id'],
                     'provider_code' => $provider['code'],
                     'status' => 'failed',
                     'provider_reference' => null,
                     'error' => $throwable->getMessage(),
+                    'routing_mode' => $routingSetting['routing_mode'] ?? 'priority',
+                    'attempt_number' => $attemptNumber,
+                    'response_time_ms' => $responseTimeMs,
                 ];
+                $this->recordProviderAttempt((int) ($payload['transaction_id'] ?? 0), $provider, $routingSetting, $attemptNumber, 'failed', (string) ($payload['reference'] ?? ''), null, $responseTimeMs, $throwable->getMessage(), []);
+                $this->updateProviderOutcome($provider, 'failed', $throwable->getMessage());
                 $this->logger->warning('Provider purchase attempt failed.', [
                     'provider_code' => $provider['code'],
                     'service' => $serviceSlug,
                     'error' => $throwable->getMessage(),
                 ]);
+
+                if (empty($routingSetting['fallback_enabled']) || (int) $provider['supports_fallback'] !== 1) {
+                    break;
+                }
             }
         }
 
@@ -96,6 +127,21 @@ class ProviderManager
             'raw' => ['message' => 'All providers failed'],
             'attempts' => $attempts,
         ];
+    }
+
+    public function routingSettings(): array
+    {
+        return $this->router->allRoutingSettings();
+    }
+
+    public function routingSetting(string $serviceSlug): array
+    {
+        return $this->router->routingSetting($serviceSlug);
+    }
+
+    public function upsertRoutingSetting(array $payload, ?int $adminId = null): void
+    {
+        $this->router->upsertRoutingSetting($payload, $adminId);
     }
 
     public function testConnection(int $providerId): array
@@ -142,6 +188,15 @@ class ProviderManager
                 'notes' => $notes,
             ]
         );
+
+        if ($this->db->columnExists('provider_accounts', 'current_balance')) {
+            $this->db->execute(
+                'UPDATE provider_accounts
+                 SET current_balance = :current_balance, balance_refreshed_at = NOW()
+                 WHERE id = :id',
+                ['current_balance' => $amount, 'id' => $providerId]
+            );
+        }
     }
 
     public function upsertProvider(array $payload): void
@@ -154,7 +209,7 @@ class ProviderManager
             'code' => strtolower(trim((string) $payload['code'])),
             'name' => trim((string) $payload['name']),
             'driver' => trim((string) ($payload['driver'] ?? 'mock')),
-            'status' => ($payload['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active',
+            'status' => $this->normalizeProviderStatus((string) ($payload['status'] ?? 'active')),
             'priority_order' => max(1, (int) ($payload['priority_order'] ?? 1)),
             'supports_fallback' => !empty($payload['supports_fallback']) ? 1 : 0,
             'low_balance_threshold' => max(0, (float) ($payload['low_balance_threshold'] ?? 0)),
@@ -164,25 +219,102 @@ class ProviderManager
             'notes' => trim((string) ($payload['notes'] ?? '')),
         ];
 
+        $optional = [];
+        foreach ([
+            'cheapest_routing_enabled' => !empty($payload['cheapest_routing_enabled']) ? 1 : 0,
+            'sandbox_mode' => !empty($payload['sandbox_mode']) ? 1 : 0,
+            'auto_disable_enabled' => !empty($payload['auto_disable_enabled']) ? 1 : 0,
+            'failure_threshold' => max(1, (int) ($payload['failure_threshold'] ?? 5)),
+            'minimum_success_rate' => max(0, min(100, (float) ($payload['minimum_success_rate'] ?? 80))),
+            'health_score' => max(0, min(100, (float) ($payload['health_score'] ?? 100))),
+        ] as $column => $value) {
+            if ($this->db->columnExists('provider_accounts', $column)) {
+                $optional[$column] = $value;
+            }
+        }
+        $params = array_merge($params, $optional);
+
         if ($existing) {
             $params['id'] = $existing['id'];
+            $setClauses = [
+                'code = :code',
+                'name = :name',
+                'driver = :driver',
+                'status = :status',
+                'priority_order = :priority_order',
+                'supports_fallback = :supports_fallback',
+                'low_balance_threshold = :low_balance_threshold',
+                'credentials_key = :credentials_key',
+                'base_url = :base_url',
+                'supported_services_json = :supported_services_json',
+                'notes = :notes',
+            ];
+            foreach (array_keys($optional) as $column) {
+                $setClauses[] = $column . ' = :' . $column;
+            }
+            if ($params['status'] === 'archived' && $this->db->columnExists('provider_accounts', 'archived_at')) {
+                $setClauses[] = 'archived_at = COALESCE(archived_at, NOW())';
+            } elseif ($this->db->columnExists('provider_accounts', 'archived_at')) {
+                $setClauses[] = 'archived_at = NULL';
+            }
             $this->db->execute(
                 'UPDATE provider_accounts
-                 SET code = :code, name = :name, driver = :driver, status = :status, priority_order = :priority_order,
-                     supports_fallback = :supports_fallback, low_balance_threshold = :low_balance_threshold,
-                     credentials_key = :credentials_key, base_url = :base_url, supported_services_json = :supported_services_json, notes = :notes
+                 SET ' . implode(', ', $setClauses) . '
                  WHERE id = :id',
                 $params
             );
             return;
         }
 
+        $columns = array_merge([
+            'code',
+            'name',
+            'driver',
+            'status',
+            'priority_order',
+            'supports_fallback',
+            'low_balance_threshold',
+            'credentials_key',
+            'base_url',
+            'supported_services_json',
+            'notes',
+        ], array_keys($optional));
+
         $this->db->execute(
             'INSERT INTO provider_accounts
-             (code, name, driver, status, priority_order, supports_fallback, low_balance_threshold, credentials_key, base_url, supported_services_json, notes)
+             (' . implode(', ', $columns) . ')
              VALUES
-             (:code, :name, :driver, :status, :priority_order, :supports_fallback, :low_balance_threshold, :credentials_key, :base_url, :supported_services_json, :notes)',
+             (:' . implode(', :', $columns) . ')',
             $params
+        );
+    }
+
+    public function updateProviderStatus(int $providerId, string $status): void
+    {
+        $status = $this->normalizeProviderStatus($status);
+        $extra = '';
+        if ($this->db->columnExists('provider_accounts', 'archived_at')) {
+            $extra = $status === 'archived'
+                ? ', archived_at = COALESCE(archived_at, NOW())'
+                : ', archived_at = NULL';
+        }
+        $this->db->execute(
+            'UPDATE provider_accounts SET status = :status' . $extra . ' WHERE id = :id',
+            ['status' => $status, 'id' => $providerId]
+        );
+    }
+
+    public function resetCircuitBreaker(int $providerId): void
+    {
+        if (!$this->db->columnExists('provider_accounts', 'circuit_breaker_status')) {
+            return;
+        }
+
+        $this->db->execute(
+            'UPDATE provider_accounts
+             SET circuit_breaker_status = "closed", circuit_breaker_opened_at = NULL, circuit_breaker_until = NULL, last_api_error = NULL
+             WHERE id = :id',
+            ['id' => $providerId]
         );
     }
 
@@ -205,12 +337,172 @@ class ProviderManager
                     'threshold' => (float) ($provider['low_balance_threshold'] ?? 0),
                     'is_low_balance' => false,
                     'balance_status' => 'unavailable',
-                    'sandbox' => false,
+                    'sandbox' => !empty($provider['sandbox_mode']),
+                    'balance_refreshed_at' => $provider['balance_refreshed_at'] ?? null,
+                    'circuit_breaker_status' => $provider['circuit_breaker_status'] ?? 'closed',
                 ];
             }
         }
 
         return $summary;
+    }
+
+    private function recordProviderAttempt(
+        int $transactionId,
+        array $provider,
+        array $routingSetting,
+        int $attemptNumber,
+        string $status,
+        string $requestReference,
+        ?string $providerReference,
+        ?int $responseTimeMs,
+        ?string $errorMessage,
+        array $meta
+    ): void {
+        if (!$this->db->tableExists('provider_transaction_attempts')) {
+            return;
+        }
+
+        $normalizedStatus = in_array($status, ['pending', 'processing', 'successful', 'failed', 'skipped'], true) ? $status : 'failed';
+        $this->db->safeExecute(
+            'INSERT IGNORE INTO provider_transaction_attempts (
+                transaction_id, provider_account_id, provider_code, routing_mode, attempt_number,
+                status, request_reference, provider_reference, response_time_ms, error_message, meta_json
+             ) VALUES (
+                :transaction_id, :provider_account_id, :provider_code, :routing_mode, :attempt_number,
+                :status, :request_reference, :provider_reference, :response_time_ms, :error_message, :meta_json
+             )',
+            [
+                'transaction_id' => $transactionId > 0 ? $transactionId : null,
+                'provider_account_id' => (int) $provider['id'],
+                'provider_code' => (string) $provider['code'],
+                'routing_mode' => (string) ($routingSetting['routing_mode'] ?? 'priority'),
+                'attempt_number' => $attemptNumber,
+                'status' => $normalizedStatus,
+                'request_reference' => $requestReference !== '' ? $requestReference : null,
+                'provider_reference' => $providerReference,
+                'response_time_ms' => $responseTimeMs,
+                'error_message' => $errorMessage !== null ? substr($errorMessage, 0, 255) : null,
+                'meta_json' => json_encode([
+                    'fallback_enabled' => !empty($routingSetting['fallback_enabled']),
+                    'minimum_success_rate' => (float) ($routingSetting['minimum_success_rate'] ?? 80),
+                    'sandbox' => !empty($provider['sandbox_mode']),
+                    'response' => $this->redactProviderMeta($meta),
+                ]),
+            ]
+        );
+    }
+
+    private function updateProviderOutcome(array $provider, string $status, ?string $errorMessage): void
+    {
+        if (!$this->db->columnExists('provider_accounts', 'last_api_error')) {
+            return;
+        }
+
+        $providerId = (int) $provider['id'];
+        if (in_array($status, ['successful', 'pending'], true)) {
+            $this->db->safeExecute(
+                'UPDATE provider_accounts
+                 SET last_successful_at = CASE WHEN :status = "successful" THEN NOW() ELSE last_successful_at END,
+                     last_api_error = NULL,
+                     circuit_breaker_status = CASE WHEN circuit_breaker_status = "half_open" THEN "closed" ELSE circuit_breaker_status END,
+                     circuit_breaker_opened_at = CASE WHEN circuit_breaker_status = "closed" THEN NULL ELSE circuit_breaker_opened_at END,
+                     circuit_breaker_until = CASE WHEN circuit_breaker_status = "closed" THEN NULL ELSE circuit_breaker_until END
+                 WHERE id = :id',
+                ['status' => $status, 'id' => $providerId]
+            );
+            return;
+        }
+
+        $this->db->safeExecute(
+            'UPDATE provider_accounts SET last_api_error = :error WHERE id = :id',
+            ['error' => $errorMessage !== null ? substr($errorMessage, 0, 255) : 'Provider returned failed status.', 'id' => $providerId]
+        );
+
+        if (empty($provider['auto_disable_enabled']) || !$this->db->columnExists('provider_accounts', 'circuit_breaker_status')) {
+            return;
+        }
+
+        $threshold = max(1, (int) ($provider['failure_threshold'] ?? 5));
+        $recent = $this->db->safeFirst(
+            'SELECT COUNT(*) AS total
+             FROM provider_transaction_attempts
+             WHERE provider_account_id = :provider_id
+               AND status = "failed"
+               AND created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)',
+            ['provider_id' => $providerId]
+        );
+
+        if ((int) ($recent['total'] ?? 0) < $threshold) {
+            return;
+        }
+
+        $this->db->safeExecute(
+            'UPDATE provider_accounts
+             SET circuit_breaker_status = "open",
+                 circuit_breaker_opened_at = NOW(),
+                 circuit_breaker_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE)
+             WHERE id = :id',
+            ['id' => $providerId]
+        );
+
+        $this->db->safeExecute(
+            'INSERT INTO activity_logs (actor_type, actor_id, action, description, meta_json)
+             VALUES (:actor_type, :actor_id, :action, :description, :meta_json)',
+            [
+                'actor_type' => 'system',
+                'actor_id' => 0,
+                'action' => 'provider_circuit_opened',
+                'description' => 'Provider circuit breaker opened after repeated failures.',
+                'meta_json' => json_encode([
+                    'provider_id' => $providerId,
+                    'provider_code' => $provider['code'] ?? 'unknown',
+                    'failure_threshold' => $threshold,
+                    'cooldown_minutes' => 15,
+                ]),
+            ]
+        );
+
+        $this->logger->warning('Provider circuit breaker opened after repeated failures.', [
+            'provider_id' => $providerId,
+            'provider_code' => $provider['code'] ?? 'unknown',
+            'failure_threshold' => $threshold,
+        ]);
+    }
+
+    private function recoverExpiredCircuit(array $provider): bool
+    {
+        if (($provider['circuit_breaker_status'] ?? 'closed') !== 'open') {
+            return false;
+        }
+
+        $until = trim((string) ($provider['circuit_breaker_until'] ?? ''));
+        if ($until === '' || strtotime($until) > time()) {
+            return false;
+        }
+
+        $this->db->safeExecute(
+            'UPDATE provider_accounts
+             SET circuit_breaker_status = "half_open"
+             WHERE id = :id AND circuit_breaker_status = "open"',
+            ['id' => (int) $provider['id']]
+        );
+        return true;
+    }
+
+    private function redactProviderMeta(array $meta): array
+    {
+        foreach (['api_key', 'api_secret', 'secret', 'password', 'token', 'authorization'] as $key) {
+            if (array_key_exists($key, $meta)) {
+                $meta[$key] = '[redacted]';
+            }
+        }
+
+        if (isset($meta['raw']) && is_array($meta['raw'])) {
+            $meta['raw'] = $this->redactProviderMeta($meta['raw']);
+        }
+
+        return $meta;
     }
 
     private function driver(array $provider): VtuProviderInterface
@@ -239,6 +531,7 @@ class ProviderManager
             }
             $config['label'] = $config['label'] ?? (string) ($provider['name'] ?? $configKey);
             $config['driver'] = $config['driver'] ?? (string) ($provider['driver'] ?? 'mock');
+            $config['sandbox'] = !empty($provider['sandbox_mode']) || !empty($config['sandbox']);
 
             return $config;
         }
@@ -254,10 +547,31 @@ class ProviderManager
             return $cached;
         }
 
+        if (($provider['status'] ?? 'inactive') !== 'active') {
+            $latest = $this->latestBalanceLog((int) $provider['id']);
+            $result = [
+                'status' => (string) ($provider['status'] ?? 'inactive'),
+                'balance_amount' => (float) ($provider['current_balance'] ?? $latest['balance_amount'] ?? 0),
+                'provider_code' => (string) $provider['code'],
+                'provider_name' => (string) $provider['name'],
+                'threshold' => (float) $provider['low_balance_threshold'],
+                'is_low_balance' => false,
+                'balance_status' => 'not_checked',
+                'sandbox' => !empty($provider['sandbox_mode']),
+                'health_score' => (float) ($provider['health_score'] ?? 0),
+                'balance_refreshed_at' => $provider['balance_refreshed_at'] ?? ($latest['created_at'] ?? null),
+                'circuit_breaker_status' => $provider['circuit_breaker_status'] ?? 'closed',
+            ];
+            $this->cache->put($cacheKey, $result, 60);
+            return $result;
+        }
+
         try {
+            $startedAt = microtime(true);
             $driver = $this->driver($provider);
             $health = $driver->healthCheck();
             $balance = $driver->checkBalance();
+            $health['response_time_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
         } catch (\Throwable $e) {
             // Provider is disabled or misconfigured — return safe defaults
             $this->logger->warning('Provider health/balance check skipped.', [
@@ -267,15 +581,19 @@ class ProviderManager
             $latest = $this->latestBalanceLog((int) $provider['id']);
             $result = [
                 'status' => 'unavailable',
-                'balance_amount' => (float) ($latest['balance_amount'] ?? 0),
+                'balance_amount' => (float) ($provider['current_balance'] ?? $latest['balance_amount'] ?? 0),
                 'provider_code' => (string) $provider['code'],
                 'provider_name' => (string) $provider['name'],
                 'threshold' => (float) $provider['low_balance_threshold'],
                 'is_low_balance' => false,
                 'balance_status' => 'unavailable',
-                'sandbox' => false,
+                'sandbox' => !empty($provider['sandbox_mode']),
+                'health_score' => (float) ($provider['health_score'] ?? 0),
+                'balance_refreshed_at' => $provider['balance_refreshed_at'] ?? null,
+                'circuit_breaker_status' => $provider['circuit_breaker_status'] ?? 'closed',
                 'error' => $e->getMessage(),
             ];
+            $this->recordHealthSnapshot((int) $provider['id'], $result);
             $this->cache->put($cacheKey, $result, 60);
             return $result;
         }
@@ -290,12 +608,17 @@ class ProviderManager
         }
 
         $latest = $this->latestBalanceLog((int) $provider['id']);
-        $health['balance_amount'] = (float) ($latest['balance_amount'] ?? 0);
+        $health['balance_amount'] = (float) ($provider['current_balance'] ?? $latest['balance_amount'] ?? 0);
         $health['provider_code'] = (string) $provider['code'];
         $health['provider_name'] = (string) $provider['name'];
         $health['threshold'] = (float) $provider['low_balance_threshold'];
         $health['is_low_balance'] = $health['balance_amount'] <= (float) $provider['low_balance_threshold'];
         $health['balance_status'] = $balance['status'] ?? 'unknown';
+        $health['sandbox'] = !empty($provider['sandbox_mode']);
+        $health['health_score'] = (float) ($provider['health_score'] ?? (($health['status'] ?? '') === 'ready' ? 100 : 0));
+        $health['balance_refreshed_at'] = $provider['balance_refreshed_at'] ?? ($latest['created_at'] ?? null);
+        $health['circuit_breaker_status'] = $provider['circuit_breaker_status'] ?? 'closed';
+        $this->recordHealthSnapshot((int) $provider['id'], $health);
         $this->cache->put($cacheKey, $health, 60);
 
         return $health;
@@ -325,5 +648,48 @@ class ProviderManager
         $response['raw'] = is_array($response['raw'] ?? null) ? $response['raw'] : ['message' => 'Provider did not return a structured response.'];
 
         return $response;
+    }
+
+    private function normalizeProviderStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+        return in_array($status, ['active', 'inactive', 'maintenance', 'archived'], true) ? $status : 'inactive';
+    }
+
+    private function isCircuitOpen(array $provider): bool
+    {
+        if (($provider['circuit_breaker_status'] ?? 'closed') !== 'open') {
+            return false;
+        }
+
+        $until = trim((string) ($provider['circuit_breaker_until'] ?? ''));
+        return $until === '' || strtotime($until) > time();
+    }
+
+    private function recordHealthSnapshot(int $providerId, array $health): void
+    {
+        if (!$this->db->tableExists('provider_health_logs')) {
+            return;
+        }
+
+        $columns = ['provider_account_id', 'status', 'health_score', 'success_rate', 'balance_amount', 'error_message'];
+        $params = [
+            'provider_account_id' => $providerId,
+            'status' => (string) ($health['status'] ?? 'unknown'),
+            'health_score' => (float) ($health['health_score'] ?? 0),
+            'success_rate' => isset($health['success_rate']) ? (float) $health['success_rate'] : null,
+            'balance_amount' => isset($health['balance_amount']) ? (float) $health['balance_amount'] : null,
+            'error_message' => isset($health['error']) ? substr((string) $health['error'], 0, 255) : null,
+        ];
+        if ($this->db->columnExists('provider_health_logs', 'response_time_ms')) {
+            $columns[] = 'response_time_ms';
+            $params['response_time_ms'] = isset($health['response_time_ms']) ? (int) $health['response_time_ms'] : null;
+        }
+
+        $this->db->safeExecute(
+            'INSERT INTO provider_health_logs (' . implode(', ', $columns) . ')
+             VALUES (:' . implode(', :', $columns) . ')',
+            $params
+        );
     }
 }

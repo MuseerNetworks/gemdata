@@ -50,13 +50,21 @@ class PricingService
         $tier = $this->resolveUserTier($user, $isApiUser);
         $networkCode = $this->normalizeNetwork($network);
 
-        $custom = $this->db->first(
-            'SELECT selling_price
-             FROM user_custom_prices
-             WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
-             LIMIT 1',
-            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
-        );
+        $custom = $networkCode === null
+            ? $this->db->first(
+                'SELECT selling_price
+                 FROM user_custom_prices
+                 WHERE user_id = :user_id AND service_id = :service_id AND network_code IS NULL
+                 LIMIT 1',
+                ['user_id' => $userId, 'service_id' => $serviceId]
+            )
+            : $this->db->first(
+                'SELECT selling_price
+                 FROM user_custom_prices
+                 WHERE user_id = :user_id AND service_id = :service_id AND network_code = :network_code
+                 LIMIT 1',
+                ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+            );
         if ($custom) {
             $selling = (float) $custom['selling_price'];
             $resolved = [
@@ -73,13 +81,21 @@ class PricingService
             return $resolved;
         }
 
-        $price = $this->db->safeFirst(
-            'SELECT *
-             FROM service_prices
-             WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
-             LIMIT 1',
-            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
-        );
+        $price = $networkCode === null
+            ? $this->db->safeFirst(
+                'SELECT *
+                 FROM service_prices
+                 WHERE service_id = :service_id AND tier = :tier AND network_code IS NULL
+                 LIMIT 1',
+                ['service_id' => $serviceId, 'tier' => $tier]
+            )
+            : $this->db->safeFirst(
+                'SELECT *
+                 FROM service_prices
+                 WHERE service_id = :service_id AND tier = :tier AND network_code = :network_code
+                 LIMIT 1',
+                ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+            );
         if (!$price && $tier !== 'USER') {
             $price = $this->db->safeFirst(
                 'SELECT *
@@ -128,11 +144,29 @@ class PricingService
 
     public function upsertTierPrice(int $serviceId, ?string $networkCode, string $tier, float $costPrice, float $sellingPrice): void
     {
+        if ($serviceId <= 0) {
+            throw new \InvalidArgumentException('A valid service is required.');
+        }
+        $tier = strtoupper(trim($tier));
+        if (!in_array($tier, ['USER', 'RESELLER', 'AGENT', 'API_RESELLER'], true)) {
+            throw new \InvalidArgumentException('Invalid pricing tier.');
+        }
+        if ($costPrice < 0 || $sellingPrice < 0) {
+            throw new \InvalidArgumentException('Prices cannot be negative.');
+        }
+        if ($costPrice > 0 && $sellingPrice < $costPrice) {
+            throw new \InvalidArgumentException('Selling price cannot be below cost price.');
+        }
         $networkCode = $this->normalizeNetwork($networkCode);
-        $existing = $this->db->first(
-            'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
-            ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
-        );
+        $existing = $networkCode === null
+            ? $this->db->first(
+                'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND network_code IS NULL LIMIT 1',
+                ['service_id' => $serviceId, 'tier' => $tier]
+            )
+            : $this->db->first(
+                'SELECT id FROM service_prices WHERE service_id = :service_id AND tier = :tier AND network_code = :network_code LIMIT 1',
+                ['service_id' => $serviceId, 'tier' => $tier, 'network_code' => $networkCode]
+            );
 
         $profitMargin = $sellingPrice - $costPrice;
         if ($existing) {
@@ -168,11 +202,22 @@ class PricingService
 
     public function upsertUserPrice(int $userId, int $serviceId, ?string $networkCode, float $sellingPrice): void
     {
+        if ($userId <= 0 || $serviceId <= 0) {
+            throw new \InvalidArgumentException('A valid user and service are required.');
+        }
+        if ($sellingPrice < 0) {
+            throw new \InvalidArgumentException('Selling price cannot be negative.');
+        }
         $networkCode = $this->normalizeNetwork($networkCode);
-        $existing = $this->db->first(
-            'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code) LIMIT 1',
-            ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
-        );
+        $existing = $networkCode === null
+            ? $this->db->first(
+                'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND network_code IS NULL LIMIT 1',
+                ['user_id' => $userId, 'service_id' => $serviceId]
+            )
+            : $this->db->first(
+                'SELECT id FROM user_custom_prices WHERE user_id = :user_id AND service_id = :service_id AND network_code = :network_code LIMIT 1',
+                ['user_id' => $userId, 'service_id' => $serviceId, 'network_code' => $networkCode]
+            );
 
         if ($existing) {
             $this->db->execute('UPDATE user_custom_prices SET selling_price = :selling_price WHERE id = :id', [

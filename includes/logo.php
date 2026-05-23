@@ -5,7 +5,7 @@
  */
 
 // Increment this when brand assets change — busts all browser caches
-define('GEMDATA_BRAND_VERSION', '20260513c');
+define('GEMDATA_BRAND_VERSION', '20260522a');
 
 function gemdata_logo(
     string $variant = 'full',

@@ -8,8 +8,9 @@ $admin = require_permission('transactions.view');
 $transactionService = app(\GemData\Classes\TransactionService::class);
 $ops = app(\GemData\Classes\AdminOpsService::class);
 $pageKey = 'transactions';
-$filterKeys = ['q', 'status', 'channel', 'service', 'provider_code', 'tier', 'date_from', 'date_to'];
+$filterKeys = ['q', 'status', 'channel', 'service', 'provider_code', 'tier', 'failure_code', 'attempt_status', 'min_response_ms', 'date_from', 'date_to'];
 $selectedViewId = max(0, (int) ($_GET['view_id'] ?? $_POST['view_id'] ?? 0));
+$isSuperAdmin = (($admin['role_slug'] ?? '') === 'super_admin');
 
 if (is_post()) {
     verify_csrf();
@@ -94,6 +95,32 @@ if (is_post()) {
         }
         redirect(base_url('admin/transactions.php?' . http_build_query($redirectQuery)));
     }
+
+    if ($action === 'manual_refund') {
+        require_permission('transactions.manage');
+        try {
+            $transactionService->manualRefund($transactionId, trim((string) $_POST['reason']), (int) $admin['id']);
+            flash('success', 'Manual refund completed successfully.');
+        } catch (Throwable $throwable) {
+            flash('success', 'Manual refund failed: ' . $throwable->getMessage());
+        }
+        redirect(base_url('admin/transactions.php?' . http_build_query($redirectQuery)));
+    }
+
+    if ($action === 'force_success') {
+        require_permission('transactions.manage');
+        if (!$isSuperAdmin) {
+            flash('success', 'Force success is restricted to Super Admin accounts.');
+            redirect(base_url('admin/transactions.php?' . http_build_query($redirectQuery)));
+        }
+        try {
+            $transactionService->forceSuccess($transactionId, trim((string) $_POST['reason']), (int) $admin['id']);
+            flash('success', 'Transaction force-marked successful. Wallet balance was not changed.');
+        } catch (Throwable $throwable) {
+            flash('success', 'Force success failed: ' . $throwable->getMessage());
+        }
+        redirect(base_url('admin/transactions.php?' . http_build_query($redirectQuery)));
+    }
 }
 
 $filters = [
@@ -103,6 +130,9 @@ $filters = [
     'service' => trim((string) ($_GET['service'] ?? '')),
     'provider_code' => trim((string) ($_GET['provider_code'] ?? '')),
     'tier' => trim((string) ($_GET['tier'] ?? '')),
+    'failure_code' => trim((string) ($_GET['failure_code'] ?? '')),
+    'attempt_status' => trim((string) ($_GET['attempt_status'] ?? '')),
+    'min_response_ms' => trim((string) ($_GET['min_response_ms'] ?? '')),
     'date_from' => trim((string) ($_GET['date_from'] ?? '')),
     'date_to' => trim((string) ($_GET['date_to'] ?? '')),
 ];
@@ -139,9 +169,15 @@ foreach ($filters as $key => $value) {
     if ($value === '' || $key === 'q') {
         continue;
     }
-    if (in_array($key, ['status', 'channel', 'provider_code'], true)) {
+    if (in_array($key, ['status', 'channel', 'provider_code', 'failure_code'], true)) {
         $conditions[] = "t.{$key} = :{$key}";
         $params[$key] = $value;
+    } elseif ($key === 'attempt_status' && db()->tableExists('provider_transaction_attempts')) {
+        $conditions[] = 'EXISTS (SELECT 1 FROM provider_transaction_attempts pta WHERE pta.transaction_id = t.id AND pta.status = :attempt_status)';
+        $params['attempt_status'] = $value;
+    } elseif ($key === 'min_response_ms' && db()->tableExists('provider_transaction_attempts')) {
+        $conditions[] = 'EXISTS (SELECT 1 FROM provider_transaction_attempts pta WHERE pta.transaction_id = t.id AND pta.response_time_ms >= :min_response_ms)';
+        $params['min_response_ms'] = max(0, (int) $value);
     } elseif ($key === 'service') {
         $conditions[] = 's.slug = :service';
         $params['service'] = $value;
@@ -191,10 +227,22 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 }
 
 $eventsByTransaction = [];
+$attemptsByTransaction = [];
+$providerLogsByTransaction = [];
 if ($rows !== []) {
     $ids = implode(',', array_map(static fn(array $row): string => (string) (int) $row['id'], $rows));
     foreach (db()->query("SELECT * FROM transaction_events WHERE transaction_id IN ({$ids}) ORDER BY id DESC") as $event) {
         $eventsByTransaction[(int) $event['transaction_id']][] = $event;
+    }
+    if (db()->tableExists('provider_transaction_attempts')) {
+        foreach (db()->query("SELECT * FROM provider_transaction_attempts WHERE transaction_id IN ({$ids}) ORDER BY transaction_id DESC, attempt_number ASC, id ASC") as $attempt) {
+            $attemptsByTransaction[(int) $attempt['transaction_id']][] = $attempt;
+        }
+    }
+    if (db()->tableExists('provider_api_logs')) {
+        foreach (db()->query("SELECT * FROM provider_api_logs WHERE transaction_id IN ({$ids}) ORDER BY transaction_id DESC, id DESC") as $log) {
+            $providerLogsByTransaction[(int) $log['transaction_id']][] = $log;
+        }
     }
 }
 
@@ -264,7 +312,7 @@ render_header('Transactions', 'admin');
                 <?php endforeach; ?>
             </select>
             <div class="grid grid-cols-2 gap-3">
-                <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="status"><option value="">All statuses</option><?php foreach (['pending','successful','failed','refunded'] as $status): ?><option value="<?= e($status); ?>"<?= $filters['status'] === $status ? ' selected' : ''; ?>><?= e(ucfirst($status)); ?></option><?php endforeach; ?></select>
+                <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="status"><option value="">All statuses</option><?php foreach (['pending','processing','successful','failed','refunded','reversed','disputed'] as $status): ?><option value="<?= e($status); ?>"<?= $filters['status'] === $status ? ' selected' : ''; ?>><?= e(ucfirst($status)); ?></option><?php endforeach; ?></select>
                 <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="channel"><option value="">All channels</option><?php foreach (['web','api'] as $channel): ?><option value="<?= e($channel); ?>"<?= $filters['channel'] === $channel ? ' selected' : ''; ?>><?= e(strtoupper($channel)); ?></option><?php endforeach; ?></select>
             </div>
             <div class="grid grid-cols-2 gap-3">
@@ -276,7 +324,17 @@ render_header('Transactions', 'admin');
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="flex gap-3 xl:col-span-5">
+            <div class="grid grid-cols-3 gap-3 xl:col-span-3">
+                <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="failure_code" placeholder="Failure code" value="<?= e($filters['failure_code']); ?>">
+                <select class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="attempt_status">
+                    <option value="">Attempt status</option>
+                    <?php foreach (['pending','processing','successful','failed','skipped'] as $attemptStatus): ?>
+                        <option value="<?= e($attemptStatus); ?>"<?= $filters['attempt_status'] === $attemptStatus ? ' selected' : ''; ?>><?= e(ucfirst($attemptStatus)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="min_response_ms" type="number" min="0" step="1" placeholder="Min response ms" value="<?= e($filters['min_response_ms']); ?>">
+            </div>
+            <div class="flex gap-3 xl:col-span-2">
                 <button class="primary-action" type="submit">Apply filters</button>
                 <a class="secondary-action inline-flex items-center justify-center" href="<?= e(base_url('admin/transactions.php')); ?>">Reset</a>
             </div>
@@ -314,9 +372,22 @@ render_header('Transactions', 'admin');
                     </thead>
                     <tbody>
                         <?php if ($rows === []): ?>
-                            <tr><td colspan="9" class="text-slate-400">No transactions matched the current filters.</td></tr>
+                            <tr><td colspan="10" class="text-slate-400">No transactions matched the current filters.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($rows as $row): ?>
+                            <?php
+                            $rowEvents = $eventsByTransaction[(int) $row['id']] ?? [];
+                            $hasRefundEvent = false;
+                            foreach ($rowEvents as $event) {
+                                if (($event['event_type'] ?? '') === 'transaction_refunded') {
+                                    $hasRefundEvent = true;
+                                    break;
+                                }
+                            }
+                            $canRetry = admin_can('transactions.manage') && $row['status'] === 'failed' && !$hasRefundEvent;
+                            $canManualRefund = admin_can('transactions.manage') && in_array($row['status'], ['pending', 'failed'], true) && !$hasRefundEvent;
+                            $canForceSuccess = $isSuperAdmin && admin_can('transactions.manage') && in_array($row['status'], ['pending', 'failed'], true) && !$hasRefundEvent;
+                            ?>
                             <tr>
                                 <td class="align-top pt-5"><input form="bulk-transactions-form" type="checkbox" name="transaction_ids[]" value="<?= (int) $row['id']; ?>" data-bulk-item></td>
                                 <td>
@@ -362,8 +433,9 @@ render_header('Transactions', 'admin');
                                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                         <input type="hidden" name="transaction_id" value="<?= (int) $row['id']; ?>">
                                                         <input type="hidden" name="action" value="retry">
-                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required>
-                                                        <button class="action-button action-soft" type="submit"<?= ($row['status'] === 'refunded' || $row['status'] === 'successful') ? ' disabled' : ''; ?>>Queue retry</button>
+                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required<?= !$canRetry ? ' disabled' : ''; ?>>
+                                                        <button class="action-button action-soft" type="submit"<?= !$canRetry ? ' disabled' : ''; ?>>Queue failed retry</button>
+                                                        <?php if ($hasRefundEvent): ?><p class="text-xs text-amber-300">Refunded transactions cannot be retried.</p><?php endif; ?>
                                                     </form>
                                                     <form method="post" class="space-y-2">
                                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
@@ -374,7 +446,67 @@ render_header('Transactions', 'admin');
                                                         <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required<?= $row['status'] !== 'pending' ? ' disabled' : ''; ?>>
                                                         <button class="action-button action-warning" type="submit"<?= $row['status'] !== 'pending' ? ' disabled' : ''; ?>>Cancel and refund</button>
                                                     </form>
+                                                    <form method="post" class="space-y-2">
+                                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                        <input type="hidden" name="transaction_id" value="<?= (int) $row['id']; ?>">
+                                                        <input type="hidden" name="action" value="manual_refund">
+                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="reason" placeholder="Refund reason" required<?= !$canManualRefund ? ' disabled' : ''; ?>>
+                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required<?= !$canManualRefund ? ' disabled' : ''; ?>>
+                                                        <button class="action-button action-warning" type="submit"<?= !$canManualRefund ? ' disabled' : ''; ?>>Manual refund</button>
+                                                    </form>
+                                                    <?php if ($isSuperAdmin): ?>
+                                                        <form method="post" class="space-y-2 rounded-xl border border-red-400/30 bg-red-500/10 p-3">
+                                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                            <input type="hidden" name="transaction_id" value="<?= (int) $row['id']; ?>">
+                                                            <input type="hidden" name="action" value="force_success">
+                                                            <p class="text-xs text-red-200">Risk warning: force success changes only transaction status. It does not credit, debit, or refund wallet balance.</p>
+                                                            <input class="rounded-lg border border-red-300/30 bg-slate-950 px-3 py-2 text-sm" name="reason" placeholder="Force-success reason" required<?= !$canForceSuccess ? ' disabled' : ''; ?>>
+                                                            <input class="rounded-lg border border-red-300/30 bg-slate-950 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm Super Admin password" required<?= !$canForceSuccess ? ' disabled' : ''; ?>>
+                                                            <button class="action-button action-danger" type="submit"<?= !$canForceSuccess ? ' disabled' : ''; ?>>Force success</button>
+                                                        </form>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
+                                            </div>
+                                            <div class="admin-action-group">
+                                                <h3>Provider attempts</h3>
+                                                <div class="space-y-2">
+                                                    <?php foreach ($attemptsByTransaction[(int) $row['id']] ?? [] as $attempt): ?>
+                                                        <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3 text-sm">
+                                                            <div class="flex items-center justify-between gap-2">
+                                                                <strong class="text-white">Attempt #<?= (int) $attempt['attempt_number']; ?> | <?= e($attempt['provider_code'] ?? 'provider'); ?></strong>
+                                                                <span class="status-chip status-<?= e($attempt['status']); ?>"><?= e(ucfirst((string) $attempt['status'])); ?></span>
+                                                            </div>
+                                                            <div class="mt-2 grid gap-1 text-xs text-slate-300">
+                                                                <span>Routing: <?= e($attempt['routing_mode'] ?? '-'); ?></span>
+                                                                <span>Response: <?= $attempt['response_time_ms'] !== null ? e((string) $attempt['response_time_ms']) . 'ms' : '-'; ?></span>
+                                                                <span>Provider ref: <?= e($attempt['provider_reference'] ?? '-'); ?></span>
+                                                                <?php if (!empty($attempt['error_message'])): ?><span class="text-amber-300">Error: <?= e($attempt['error_message']); ?></span><?php endif; ?>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                    <?php if (empty($attemptsByTransaction[(int) $row['id']])): ?>
+                                                        <p class="text-sm text-slate-400">No provider attempts recorded yet.</p>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                            <div class="admin-action-group">
+                                                <h3>Provider logs</h3>
+                                                <div class="space-y-2">
+                                                    <?php foreach (array_slice($providerLogsByTransaction[(int) $row['id']] ?? [], 0, 3) as $log): ?>
+                                                        <div class="rounded-lg border border-white/10 bg-slate-900/40 p-3 text-sm">
+                                                            <div class="flex items-center justify-between gap-2">
+                                                                <strong class="text-white"><?= e(ucfirst((string) $log['direction'])); ?> <?= e((string) ($log['http_status'] ?? '')); ?></strong>
+                                                                <span class="text-xs text-slate-400"><?= e($log['created_at']); ?></span>
+                                                            </div>
+                                                            <div class="mt-1 text-xs text-slate-300"><?= e($log['endpoint'] ?? ''); ?><?= $log['response_time_ms'] !== null ? ' | ' . e((string) $log['response_time_ms']) . 'ms' : ''; ?></div>
+                                                            <?php if (!empty($log['error_message'])): ?><p class="mt-1 text-xs text-amber-300"><?= e($log['error_message']); ?></p><?php endif; ?>
+                                                            <?php if (!empty($log['redacted_payload'])): ?><?php $payloadPreview = (string) $log['redacted_payload']; ?><pre class="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-2 text-xs text-slate-300"><?= e(strlen($payloadPreview) > 700 ? substr($payloadPreview, 0, 700) . '...' : $payloadPreview); ?></pre><?php endif; ?>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                    <?php if (empty($providerLogsByTransaction[(int) $row['id']])): ?>
+                                                        <p class="text-sm text-slate-400">No provider API logs recorded yet.</p>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
                                             <div class="admin-action-group">
                                                 <h3>Timeline</h3>

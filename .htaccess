@@ -15,7 +15,11 @@ Options -Indexes
 
     # Force HTTPS — redirects all plain HTTP to HTTPS permanently
     RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:[0-9]+)?$ [NC]
     RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Allow public API documentation while keeping the rest of /docs protected
+    RewriteRule ^docs/api\.php$ - [L,NC]
 
     # Block direct access to sensitive internal directories
     RewriteRule ^(includes|classes|database|storage|cron|docs)(/|$) - [F,L,NC]
@@ -25,10 +29,14 @@ Options -Indexes
 
     # Block sensitive file types
     RewriteRule ^(\.git|\.env|\.cpanel\.yml|composer\.(json|lock)|package(-lock)?\.json)$ - [F,L,NC]
+
+    # Block emergency diagnostics in production deployments
+    RewriteRule ^(emergency-index|bootstrap_probe)\.php$ - [F,L,NC]
 </IfModule>
 
 # ── Security Headers ────────────────────────────────────────────────────────
 <IfModule mod_headers.c>
+    SetEnvIf Host "^(localhost|127\.0\.0\.1)(:[0-9]+)?$" local_dev=1
     # Prevent clickjacking
     Header always set X-Frame-Options "SAMEORIGIN"
 
@@ -45,7 +53,7 @@ Options -Indexes
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
 
     # HSTS — activated (max 1 year, include subdomains)
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=!local_dev
 
     # Remove server fingerprinting
     Header always unset X-Powered-By
