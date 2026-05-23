@@ -899,8 +899,8 @@ Modes:
 Important current status:
 
 - `api/payment-callback.php` is disabled with HTTP 410.
-- `api/xixapay.php` currently logs incoming XixaPay webhook payloads to `xixapay_test_log.txt` and returns success.
-- `PaymentGatewayService::reconcileIncomingFunding()` contains logic to credit wallets from bank transfer webhooks, but the live webhook endpoint is not yet wired to call it.
+- `api/xixapay.php` accepts POST-only XixaPay webhook traffic, validates configured webhook authentication, stores operational logs under `storage/logs/`, and rejects invalid traffic with safe JSON responses.
+- Wallet crediting must remain idempotent through the stored webhook event/reference records before live auto-credit is enabled.
 
 ### XixaPay Virtual/Funding Account
 

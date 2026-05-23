@@ -5,7 +5,7 @@
 - In `cPanel > Git Version Control`, click `Update from Remote`, then `Deploy HEAD Commit`.
 - Open `https://gemdata.com.ng/`, `https://gemdata.com.ng/user/login.php`, and `https://gemdata.com.ng/admin/login.php`.
 - If any page throws `500`, rename `public_html/.htaccess` to `.htaccess.off`, then reload.
-- If the site still fails, inspect `cPanel > Metrics > Errors` and open `fallback_test.php` or `emergency-index.php`.
+- If the site still fails, inspect `cPanel > Metrics > Errors`, the domain PHP error log, and `storage/logs/bootstrap.log` if present.
 
 ## 1. Prepare production config
 - Create `/home/<cpanel_user>/gemdata-config.php`
@@ -53,7 +53,7 @@
 - Replace `public_html/index.php` temporarily with plain `<?php echo "PHP WORKING";` and reload the site.
 - If that still returns `500`, rename `public_html/.htaccess` to `.htaccess.off` and test again.
 - If plain PHP still fails, inspect `cPanel > Metrics > Errors`, the latest `error_log`, and any `.user.ini` in `public_html` or parent directories.
-- Upload [emergency-index.php](/C:/xampp/htdocs/gemdata/emergency-index.php) or [fallback_test.php](/C:/xampp/htdocs/gemdata/fallback_test.php) and open it directly.
+- Do not upload public diagnostic probes. Use cPanel error logs, PHP error logs, and host-level configuration checks during a private maintenance window.
 - Verify `MultiPHP Manager` shows PHP 8.3 for `gemdata.com.ng`.
 - Verify there is no inherited `auto_prepend_file`, `auto_append_file`, or unsupported handler directive from cPanel or a parent folder.
 - Check permissions: directories `755`, PHP files `644`, writable app paths `775` or the host-approved equivalent.

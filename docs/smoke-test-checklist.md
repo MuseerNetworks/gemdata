@@ -15,7 +15,7 @@
 - User wallet page shows dedicated transfer account state correctly
 - No mock funding button appears in production
 - The XixaPay logging webhook returns success without exposing secrets
-- `xixapay_test_log.txt` records the first live payload for review
+- Webhook payload handling records operational review data under protected application logs, not public web-root files
 
 ## Transactions
 - One transaction can be queued successfully

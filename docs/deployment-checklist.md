@@ -4,7 +4,7 @@
 - Confirm [`.cpanel.yml`](C:/xampp/htdocs/gemdata/.cpanel.yml) points to the real cPanel username and `/home/<cpanel_user>/public_html/`.
 - In cPanel, run `Git Version Control > Update from Remote`, then `Deploy HEAD Commit`.
 - Open `https://gemdata.com.ng/`, `https://gemdata.com.ng/user/login.php`, and `https://gemdata.com.ng/admin/login.php`.
-- If any of those fail, open `https://gemdata.com.ng/fallback_test.php` or `https://gemdata.com.ng/emergency-index.php` if deployed.
+- If any of those fail, inspect `cPanel > Metrics > Errors`, the domain PHP error log, and `storage/logs/bootstrap.log` if present.
 - If plain PHP still fails, rename `public_html/.htaccess` to `.htaccess.off` and check cPanel `Errors`.
 - Only after the site loads cleanly, disable maintenance mode and continue with deeper smoke tests.
 
@@ -65,7 +65,7 @@
 - Temporarily replace `public_html/index.php` with `<?php echo "PHP WORKING";` to test whether plain PHP executes.
 - If the plain index still fails, rename `public_html/.htaccess` to `.htaccess.off` and retry immediately.
 - If it still fails after disabling `.htaccess`, inspect cPanel `Errors`, the domain's PHP error log, `.user.ini`, and any inherited parent `.htaccess`.
-- Temporarily upload `fallback_test.php` or `emergency-index.php` to confirm the PHP handler, script path, and file readability.
+- Do not upload public diagnostic probes. Use cPanel error logs, PHP error logs, and a temporary private maintenance window for host-level debugging.
 - Verify the domain is set to PHP 8.3 in `MultiPHP Manager` for the actual domain, not just the account default.
 - Confirm there is no `auto_prepend_file` or `auto_append_file` forcing a fatal before `index.php`.
 - Confirm permissions are sane: directories `755`, PHP files `644`, writable app directories `775` or the host-approved equivalent.

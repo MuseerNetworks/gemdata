@@ -19,10 +19,7 @@ Use this when you need the smallest possible deployment/recovery flow in cPanel.
    - `cPanel > Metrics > Errors`
    - `public_html/.user.ini`
    - `public_html/error_log` if present
-4. Open one of these direct probes if deployed:
-   - `https://gemdata.com.ng/fallback_test.php`
-   - `https://gemdata.com.ng/emergency-index.php`
-   - `https://gemdata.com.ng/bootstrap_probe.php`
+4. Inspect `storage/logs/bootstrap.log` if it exists and is reachable through cPanel File Manager, not through the browser.
 5. Confirm `MultiPHP Manager` shows PHP `8.3` for `gemdata.com.ng`.
 
 ## Minimum success signal
