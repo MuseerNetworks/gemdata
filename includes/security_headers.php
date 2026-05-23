@@ -19,17 +19,19 @@ function emit_security_headers(): void
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
     $nonce = csp_nonce();
+
     $csp = implode('; ', [
         "default-src 'self'",
         "script-src 'self' 'nonce-{$nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
-        "style-src 'self' 'nonce-{$nonce}' https://cdn.tailwindcss.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.bunny.net",
         "img-src 'self' data: https:",
-        "font-src 'self' https:",
-        "connect-src 'self'",
+        "font-src 'self' https: data:",
+        "connect-src 'self' https://fonts.bunny.net",
         "frame-ancestors 'self'",
         "base-uri 'self'",
         "form-action 'self'",
     ]);
+
     header('Content-Security-Policy: ' . $csp);
 
     if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
