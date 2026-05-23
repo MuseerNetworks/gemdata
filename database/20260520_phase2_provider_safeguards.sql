@@ -4,21 +4,46 @@
 ALTER TABLE provider_accounts
     MODIFY COLUMN status ENUM('active','inactive','maintenance','archived') NOT NULL DEFAULT 'inactive';
 
-ALTER TABLE provider_accounts
-    ADD COLUMN IF NOT EXISTS cheapest_routing_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER supports_fallback,
-    ADD COLUMN IF NOT EXISTS sandbox_mode TINYINT(1) NOT NULL DEFAULT 0 AFTER cheapest_routing_enabled,
-    ADD COLUMN IF NOT EXISTS auto_disable_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER sandbox_mode,
-    ADD COLUMN IF NOT EXISTS failure_threshold INT NOT NULL DEFAULT 5 AFTER auto_disable_enabled,
-    ADD COLUMN IF NOT EXISTS minimum_success_rate DECIMAL(5,2) NOT NULL DEFAULT 80.00 AFTER failure_threshold,
-    ADD COLUMN IF NOT EXISTS health_score DECIMAL(5,2) NOT NULL DEFAULT 100.00 AFTER minimum_success_rate,
-    ADD COLUMN IF NOT EXISTS current_balance DECIMAL(12,2) NULL AFTER low_balance_threshold,
-    ADD COLUMN IF NOT EXISTS balance_refreshed_at DATETIME NULL AFTER current_balance,
-    ADD COLUMN IF NOT EXISTS circuit_breaker_status ENUM('closed','open','half_open') NOT NULL DEFAULT 'closed' AFTER balance_refreshed_at,
-    ADD COLUMN IF NOT EXISTS circuit_breaker_opened_at DATETIME NULL AFTER circuit_breaker_status,
-    ADD COLUMN IF NOT EXISTS circuit_breaker_until DATETIME NULL AFTER circuit_breaker_opened_at,
-    ADD COLUMN IF NOT EXISTS last_api_error VARCHAR(255) NULL AFTER circuit_breaker_until,
-    ADD COLUMN IF NOT EXISTS last_successful_at DATETIME NULL AFTER last_api_error,
-    ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL AFTER last_successful_at;
+DROP PROCEDURE IF EXISTS add_provider_column_if_missing;
+
+DELIMITER $$
+CREATE PROCEDURE add_provider_column_if_missing(
+    IN table_name_value VARCHAR(64),
+    IN column_name_value VARCHAR(64),
+    IN column_definition_value TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = table_name_value
+          AND COLUMN_NAME = column_name_value
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', table_name_value, '` ADD COLUMN ', column_definition_value);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL add_provider_column_if_missing('provider_accounts', 'cheapest_routing_enabled', 'cheapest_routing_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER supports_fallback');
+CALL add_provider_column_if_missing('provider_accounts', 'sandbox_mode', 'sandbox_mode TINYINT(1) NOT NULL DEFAULT 0 AFTER cheapest_routing_enabled');
+CALL add_provider_column_if_missing('provider_accounts', 'auto_disable_enabled', 'auto_disable_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER sandbox_mode');
+CALL add_provider_column_if_missing('provider_accounts', 'failure_threshold', 'failure_threshold INT NOT NULL DEFAULT 5 AFTER auto_disable_enabled');
+CALL add_provider_column_if_missing('provider_accounts', 'minimum_success_rate', 'minimum_success_rate DECIMAL(5,2) NOT NULL DEFAULT 80.00 AFTER failure_threshold');
+CALL add_provider_column_if_missing('provider_accounts', 'health_score', 'health_score DECIMAL(5,2) NOT NULL DEFAULT 100.00 AFTER minimum_success_rate');
+CALL add_provider_column_if_missing('provider_accounts', 'current_balance', 'current_balance DECIMAL(12,2) NULL AFTER low_balance_threshold');
+CALL add_provider_column_if_missing('provider_accounts', 'balance_refreshed_at', 'balance_refreshed_at DATETIME NULL AFTER current_balance');
+CALL add_provider_column_if_missing('provider_accounts', 'circuit_breaker_status', 'circuit_breaker_status ENUM(''closed'',''open'',''half_open'') NOT NULL DEFAULT ''closed'' AFTER balance_refreshed_at');
+CALL add_provider_column_if_missing('provider_accounts', 'circuit_breaker_opened_at', 'circuit_breaker_opened_at DATETIME NULL AFTER circuit_breaker_status');
+CALL add_provider_column_if_missing('provider_accounts', 'circuit_breaker_until', 'circuit_breaker_until DATETIME NULL AFTER circuit_breaker_opened_at');
+CALL add_provider_column_if_missing('provider_accounts', 'last_api_error', 'last_api_error VARCHAR(255) NULL AFTER circuit_breaker_until');
+CALL add_provider_column_if_missing('provider_accounts', 'last_successful_at', 'last_successful_at DATETIME NULL AFTER last_api_error');
+CALL add_provider_column_if_missing('provider_accounts', 'archived_at', 'archived_at DATETIME NULL AFTER last_successful_at');
+
+DROP PROCEDURE IF EXISTS add_provider_column_if_missing;
 
 CREATE TABLE IF NOT EXISTS routing_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,

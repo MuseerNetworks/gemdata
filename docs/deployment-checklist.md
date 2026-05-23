@@ -17,7 +17,8 @@
 - Enable maintenance mode from Admin Settings before any schema import or repair.
 
 ## Database
-- Import `database/database.sql` for fresh installs only.
+- Import `database/database.sql` first for fresh installs.
+- Then import current dated migrations from `20260515_reseller_api_refactor.sql` through `20260523_auth_security_hardening.sql` in chronological order.
 - For existing or partially migrated databases, import `database/production-repair.sql` first.
 - Verify `schema_migrations`, `provider_accounts`, `webhook_events`, `transaction_events`, and `system_settings` exist after import.
 - Keep all provider rows inactive until credentials are configured and tested.

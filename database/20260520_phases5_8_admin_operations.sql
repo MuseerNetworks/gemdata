@@ -18,11 +18,34 @@ INSERT IGNORE INTO role_permissions (role_id, permission_id)
 SELECT 3, id FROM admin_permissions
 WHERE permission_key IN ('reports.view');
 
-ALTER TABLE fraud_events
-    ADD COLUMN IF NOT EXISTS review_status ENUM('open','reviewing','dismissed','confirmed') NOT NULL DEFAULT 'open' AFTER description,
-    ADD COLUMN IF NOT EXISTS reviewed_by_admin_id INT NULL AFTER review_status,
-    ADD COLUMN IF NOT EXISTS reviewed_at DATETIME NULL AFTER reviewed_by_admin_id,
-    ADD COLUMN IF NOT EXISTS admin_notes VARCHAR(255) NULL AFTER reviewed_at;
+DROP PROCEDURE IF EXISTS add_ops_column_if_missing;
+
+DELIMITER $$
+CREATE PROCEDURE add_ops_column_if_missing(
+    IN table_name_value VARCHAR(64),
+    IN column_name_value VARCHAR(64),
+    IN column_definition_value TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = table_name_value
+          AND COLUMN_NAME = column_name_value
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', table_name_value, '` ADD COLUMN ', column_definition_value);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+CALL add_ops_column_if_missing('fraud_events', 'review_status', 'review_status ENUM(''open'',''reviewing'',''dismissed'',''confirmed'') NOT NULL DEFAULT ''open'' AFTER description');
+CALL add_ops_column_if_missing('fraud_events', 'reviewed_by_admin_id', 'reviewed_by_admin_id INT NULL AFTER review_status');
+CALL add_ops_column_if_missing('fraud_events', 'reviewed_at', 'reviewed_at DATETIME NULL AFTER reviewed_by_admin_id');
+CALL add_ops_column_if_missing('fraud_events', 'admin_notes', 'admin_notes VARCHAR(255) NULL AFTER reviewed_at');
 
 CREATE TABLE IF NOT EXISTS api_request_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,10 +80,9 @@ CREATE TABLE IF NOT EXISTS api_ip_whitelists (
     CONSTRAINT fk_api_ip_whitelist_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE SET NULL
 );
 
-ALTER TABLE api_users
-    ADD COLUMN IF NOT EXISTS rate_limit_per_minute INT NOT NULL DEFAULT 60 AFTER status,
-    ADD COLUMN IF NOT EXISTS monthly_limit INT NOT NULL DEFAULT 0 AFTER rate_limit_per_minute,
-    ADD COLUMN IF NOT EXISTS billing_status ENUM('active','paused') NOT NULL DEFAULT 'active' AFTER monthly_limit;
+CALL add_ops_column_if_missing('api_users', 'rate_limit_per_minute', 'rate_limit_per_minute INT NOT NULL DEFAULT 60 AFTER status');
+CALL add_ops_column_if_missing('api_users', 'monthly_limit', 'monthly_limit INT NOT NULL DEFAULT 0 AFTER rate_limit_per_minute');
+CALL add_ops_column_if_missing('api_users', 'billing_status', 'billing_status ENUM(''active'',''paused'') NOT NULL DEFAULT ''active'' AFTER monthly_limit');
 
 CREATE TABLE IF NOT EXISTS api_usage_records (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -195,3 +217,7 @@ CREATE TABLE IF NOT EXISTS user_notices (
     CONSTRAINT fk_user_notices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_user_notices_admin FOREIGN KEY (created_by_admin_id) REFERENCES admins(id) ON DELETE CASCADE
 );
+
+DROP PROCEDURE IF EXISTS add_ops_column_if_missing;
+
+INSERT IGNORE INTO schema_migrations (migration_key) VALUES ('20260520_phases5_8_admin_operations');
