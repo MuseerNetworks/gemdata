@@ -6,12 +6,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $service = app(\GemData\Classes\UserSecurityService::class);
 $resetId = (int) ($_GET['reset'] ?? $_POST['reset'] ?? 0);
-$queryToken = trim((string) ($_GET['token'] ?? ''));
-if ($resetId > 0 && $queryToken !== '') {
-    $_SESSION['password_reset_tokens'][$resetId] = $queryToken;
-    redirect(base_url('user/reset-password.php?reset=' . $resetId));
-}
-$token = trim((string) ($_SESSION['password_reset_tokens'][$resetId] ?? $_POST['token'] ?? ''));
+$token = trim((string) ($_POST['token'] ?? $_GET['token'] ?? $_SESSION['password_reset_tokens'][$resetId] ?? ''));
 $reset = ($resetId > 0 && $token !== '') ? $service->validatePasswordReset($resetId, $token) : null;
 $error = null;
 
@@ -61,6 +56,7 @@ render_header('Reset Password');
         <form method="post" class="mt-6 gd-form-grid" data-loading-form>
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
             <input type="hidden" name="reset" value="<?= (int) $resetId; ?>">
+            <input type="hidden" name="token" value="<?= e($token); ?>">
             <div class="gd-field">
                 <label>New Password</label>
                 <div class="password-field">
