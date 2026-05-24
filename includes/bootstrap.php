@@ -70,6 +70,7 @@ use GemData\Classes\CommissionWallet;
 use GemData\Classes\Database;
 use GemData\Classes\DashboardController;
 use GemData\Classes\FraudService;
+use GemData\Classes\MailService;
 use GemData\Classes\MaintenanceService;
 use GemData\Classes\MockVtuProvider;
 use GemData\Classes\NotificationService;
@@ -106,6 +107,7 @@ try {
     $validator = new Validator();
     $response = new Response();
     $activityLogger = new ActivityLogger($database, $appLogger);
+    $mailService = new MailService(config('mail', []), $appLogger);
     $settings = new SettingsService($database);
     $maintenance = new MaintenanceService($settings, $response);
     $adminService = new AdminService($database, $activityLogger);
@@ -137,6 +139,7 @@ try {
     register_service(Validator::class, $validator);
     register_service(Response::class, $response);
     register_service(ActivityLogger::class, $activityLogger);
+    register_service(MailService::class, $mailService);
     register_service(MaintenanceService::class, $maintenance);
     register_service(SettingsService::class, $settings);
     register_service(AdminService::class, $adminService);

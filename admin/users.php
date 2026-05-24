@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 $admin = require_permission('users.view');
 $logger = app(\GemData\Classes\ActivityLogger::class);
 $userSecurity = app(\GemData\Classes\UserSecurityService::class);
+$mailService = app(\GemData\Classes\MailService::class);
 $ops = app(\GemData\Classes\AdminOpsService::class);
 $pageKey = 'users';
 
@@ -158,7 +159,20 @@ if (is_post()) {
             redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
         }
         $reset = $userSecurity->createPasswordReset($userId, (int) $admin['id']);
-        flash('success', 'Password reset token created and queued for secure delivery.');
+        $resetUrl = absolute_url('user/reset-password.php?' . http_build_query([
+            'reset' => (int) $reset['id'],
+            'token' => (string) $reset['token'],
+        ]));
+        $sent = $mailService->sendPasswordReset((string) $reset['email'], $resetUrl, [
+            'source' => 'admin',
+            'reset_id' => (int) $reset['id'],
+            'admin_id' => (int) $admin['id'],
+            'user_id' => $userId,
+        ]);
+        flash('success', $sent
+            ? 'Password reset link sent through the configured delivery channel.'
+            : 'Password reset token created, but email delivery failed. Check server logs.'
+        );
         redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
     }
 }

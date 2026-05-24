@@ -9,13 +9,24 @@ if (user()) {
 }
 
 $service = app(\GemData\Classes\UserSecurityService::class);
+$mailService = app(\GemData\Classes\MailService::class);
 $message = null;
 
 if (is_post()) {
     verify_csrf();
     $email = strtolower(trim((string) ($_POST['email'] ?? '')));
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $service->createSelfServicePasswordResetByEmail($email);
+        $reset = $service->createSelfServicePasswordResetByEmail($email);
+        if ($reset) {
+            $resetUrl = absolute_url('user/reset-password.php?' . http_build_query([
+                'reset' => (int) $reset['id'],
+                'token' => (string) $reset['token'],
+            ]));
+            $mailService->sendPasswordReset((string) $reset['email'], $resetUrl, [
+                'source' => 'self_service',
+                'reset_id' => (int) $reset['id'],
+            ]);
+        }
     }
     $message = 'If an active account matches that email, a password reset link will be sent through the configured delivery channel.';
 }
