@@ -24,7 +24,6 @@ class UserSecurityService
 
         $token = bin2hex(random_bytes(24));
         $tokenHash = password_hash($token, PASSWORD_DEFAULT);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+60 minutes'));
 
         $this->db->execute(
             'UPDATE user_password_reset_tokens
@@ -35,16 +34,21 @@ class UserSecurityService
 
         $this->db->execute(
             'INSERT INTO user_password_reset_tokens (user_id, token_hash, expires_at, created_by_admin_id)
-             VALUES (:user_id, :token_hash, :expires_at, :created_by_admin_id)',
+             VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 HOUR), :created_by_admin_id)',
             [
                 'user_id' => $userId,
                 'token_hash' => $tokenHash,
-                'expires_at' => $expiresAt,
                 'created_by_admin_id' => $adminId,
             ]
         );
 
         $resetId = $this->db->lastInsertId();
+        $reset = $this->db->first(
+            'SELECT expires_at FROM user_password_reset_tokens WHERE id = :id LIMIT 1',
+            ['id' => $resetId]
+        );
+        $expiresAt = (string) ($reset['expires_at'] ?? '');
+
         $this->logger->log('admin', $adminId, 'user_password_reset_link_created', 'Created user password reset link.', [
             'user_id' => $userId,
             'reset_id' => $resetId,
@@ -72,7 +76,6 @@ class UserSecurityService
 
         $token = bin2hex(random_bytes(24));
         $tokenHash = password_hash($token, PASSWORD_DEFAULT);
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+60 minutes'));
 
         $this->db->execute(
             'UPDATE user_password_reset_tokens
@@ -83,15 +86,20 @@ class UserSecurityService
 
         $this->db->execute(
             'INSERT INTO user_password_reset_tokens (user_id, token_hash, expires_at, created_by_admin_id)
-             VALUES (:user_id, :token_hash, :expires_at, NULL)',
+             VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 HOUR), NULL)',
             [
                 'user_id' => $user['id'],
                 'token_hash' => $tokenHash,
-                'expires_at' => $expiresAt,
             ]
         );
 
         $resetId = $this->db->lastInsertId();
+        $reset = $this->db->first(
+            'SELECT expires_at FROM user_password_reset_tokens WHERE id = :id LIMIT 1',
+            ['id' => $resetId]
+        );
+        $expiresAt = (string) ($reset['expires_at'] ?? '');
+
         $this->logger->log('user', (int) $user['id'], 'user_password_reset_requested', 'User requested a self-service password reset link.', [
             'reset_id' => $resetId,
             'email' => $email,
