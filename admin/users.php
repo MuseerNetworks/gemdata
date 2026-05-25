@@ -396,28 +396,28 @@ render_header('Users', 'admin');
                                     <span class="status-chip status-neutral">Disabled</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="w-[22rem]">
-                                <div class="flex flex-wrap gap-2">
+                            <td class="admin-actions-cell w-[22rem]">
+                                <div class="admin-user-action-links flex flex-wrap gap-2">
                                     <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/user-detail.php?user_id=' . $row['id'])); ?>">Details</a>
                                     <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/wallet.php?user_id=' . $row['id'])); ?>">Wallet</a>
                                 </div>
                                 <?php if (admin_can('users.manage')): ?>
                                     <details class="admin-inline-drawer mt-3">
                                         <summary>Manage user</summary>
-                                        <div class="admin-drawer-grid">
-                                            <div class="admin-action-group">
+                                        <div class="admin-drawer-grid admin-manage-grid">
+                                            <div class="admin-action-group admin-manage-card">
                                                 <h3>Access</h3>
-                                                <form method="post" class="space-y-2">
+                                                <form method="post" class="admin-action-form">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                     <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
                                                     <input type="hidden" name="action" value="toggle_status">
                                                     <input type="hidden" name="status" value="<?= $row['status'] === 'active' ? 'inactive' : 'active'; ?>">
                                                     <?php if ($row['status'] === 'active'): ?>
-                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
                                                     <?php endif; ?>
                                                     <button class="action-button <?= $row['status'] === 'active' ? 'action-danger' : 'action-soft'; ?>" type="submit"><?= $row['status'] === 'active' ? 'Deactivate User' : 'Activate User'; ?></button>
                                                 </form>
-                                                <form method="post" class="space-y-2">
+                                                <form method="post" class="admin-action-form">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                     <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
                                                     <input type="hidden" name="action" value="set_tier">
@@ -429,16 +429,16 @@ render_header('Users', 'admin');
                                                     <button class="action-button action-soft" type="submit">Save Tier</button>
                                                 </form>
                                             </div>
-                                            <div class="admin-action-group">
+                                            <div class="admin-action-group admin-manage-card">
                                                 <h3>API Access</h3>
-                                                <form method="post">
+                                                <form method="post" class="admin-action-form">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                     <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
                                                     <input type="hidden" name="action" value="toggle_api">
-                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full mt-2" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
                                                     <button class="action-button action-soft" type="submit"><?= (int) $row['is_api_user'] === 1 ? 'Disable API Access' : 'Enable API Access'; ?></button>
                                                 </form>
-                                                <form method="post" class="space-y-2">
+                                                <form method="post" class="admin-action-form">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                     <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
                                                     <input type="hidden" name="action" value="generate_key">
@@ -446,13 +446,13 @@ render_header('Users', 'admin');
                                                     <button class="action-button action-soft" type="submit">Rotate API Credentials</button>
                                                 </form>
                                             </div>
-                                            <div class="admin-action-group">
+                                            <div class="admin-action-group admin-manage-card">
                                                 <h3>Security</h3>
-                                                <form method="post" class="space-y-2">
+                                                <form method="post" class="admin-action-form">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                     <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
                                                     <input type="hidden" name="action" value="reset_password">
-                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
                                                     <button class="action-button action-warning" type="submit">Create Reset Link</button>
                                                 </form>
                                                 <p class="text-xs text-slate-400">This issues a time-limited reset link instead of exposing a plaintext password.</p>

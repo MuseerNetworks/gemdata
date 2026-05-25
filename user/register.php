@@ -27,17 +27,28 @@ if (is_post()) {
     if ($_POST['password'] !== ($_POST['password_confirmation'] ?? '')) {
         $errors['password_confirmation'][] = 'Passwords do not match.';
     }
+    $walletPin = trim((string) ($_POST['wallet_pin'] ?? ''));
+    $walletPinConfirmation = trim((string) ($_POST['wallet_pin_confirmation'] ?? ''));
+    if ($walletPin === '') {
+        $errors['wallet_pin'][] = 'Wallet PIN is required.';
+    } elseif (!preg_match('/^\d{4,6}$/', $walletPin)) {
+        $errors['wallet_pin'][] = 'Wallet PIN must be 4 to 6 digits.';
+    }
+    if ($walletPin !== $walletPinConfirmation) {
+        $errors['wallet_pin_confirmation'][] = 'Wallet PINs do not match.';
+    }
 
     if ($errors === []) {
         try {
             db()->beginTransaction();
             db()->execute(
-                'INSERT INTO users (full_name, email, phone, password_hash) VALUES (:full_name, :email, :phone, :password_hash)',
+                'INSERT INTO users (full_name, email, phone, password_hash, transaction_pin_hash) VALUES (:full_name, :email, :phone, :password_hash, :transaction_pin_hash)',
                 [
                     'full_name' => $input['full_name'],
                     'email' => $input['email'],
                     'phone' => $input['phone'],
                     'password_hash' => password_hash($_POST['password'], PASSWORD_DEFAULT),
+                    'transaction_pin_hash' => password_hash($walletPin, PASSWORD_DEFAULT),
                 ]
             );
             $userId = db()->lastInsertId();
@@ -78,6 +89,10 @@ render_header('Register');
             <div class="gd-auth-tip">
                 <p class="font-semibold">Secure your password</p>
                 <p class="mt-2 text-sm text-white/75">Use at least 8 characters with uppercase, lowercase, and a number.</p>
+            </div>
+            <div class="gd-auth-tip">
+                <p class="font-semibold">Create your Wallet PIN</p>
+                <p class="mt-2 text-sm text-white/75">Use 4 to 6 digits. You will enter it for dashboard purchases.</p>
             </div>
         </div>
     </section>
@@ -120,6 +135,16 @@ render_header('Register');
                 <button class="password-toggle" type="button" data-password-toggle aria-label="Show password"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></button>
             </div>
             <?php if ($message = $fieldError($errors, 'password_confirmation')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
+        </div>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'wallet_pin')); ?>">
+            <label>Wallet PIN</label>
+            <input class="gd-input<?= e($fieldInvalid($errors, 'wallet_pin')); ?>" name="wallet_pin" type="password" inputmode="numeric" maxlength="6" placeholder="4-6 digits" autocomplete="off"<?= $ariaInvalid($errors, 'wallet_pin'); ?>>
+            <?php if ($message = $fieldError($errors, 'wallet_pin')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
+        </div>
+        <div class="gd-field<?= e($fieldInvalid($errors, 'wallet_pin_confirmation')); ?>">
+            <label>Confirm Wallet PIN</label>
+            <input class="gd-input<?= e($fieldInvalid($errors, 'wallet_pin_confirmation')); ?>" name="wallet_pin_confirmation" type="password" inputmode="numeric" maxlength="6" placeholder="Repeat PIN" autocomplete="off"<?= $ariaInvalid($errors, 'wallet_pin_confirmation'); ?>>
+            <?php if ($message = $fieldError($errors, 'wallet_pin_confirmation')): ?><p class="mt-2 text-sm text-gem-red"><?= e($message); ?></p><?php endif; ?>
         </div>
         <button class="gd-auth-button" type="submit" data-loading-label="Creating account...">Register</button>
     </form>

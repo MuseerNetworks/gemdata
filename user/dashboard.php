@@ -203,32 +203,15 @@ render_header('Dashboard', 'user');
 
     <?php if (!$walletPinConfigured): ?>
         <section class="user-premium-card bg-white rounded-2xl shadow-card border border-gem-border p-5 stagger-2">
-            <div class="flex flex-col xl:flex-row xl:items-center gap-5">
-                <div class="flex-1">
-                    <div class="flex items-center gap-3">
-                        <div class="user-icon-box user-icon-orange !w-11 !h-11"><?= dashboard_template_icon('account_status_stat'); ?></div>
-                        <div>
-                            <h2 class="text-[18px] font-extrabold text-gem-text">Set your Wallet PIN</h2>
-                            <p class="text-[13px] text-gem-muted mt-0.5">Create a 4-6 digit PIN to protect manual dashboard purchases.</p>
-                        </div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="user-icon-box user-icon-orange !w-11 !h-11"><?= dashboard_template_icon('account_status_stat'); ?></div>
+                    <div>
+                        <h2 class="text-[18px] font-extrabold text-gem-text">Set your Wallet PIN before making purchases.</h2>
+                        <p class="text-[13px] text-gem-muted mt-0.5">Create a 4-6 digit PIN to protect manual dashboard purchases.</p>
                     </div>
                 </div>
-                <form class="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-4 gap-3 xl:min-w-[680px]" method="post" action="<?= e(base_url('user/settings.php#security')); ?>">
-                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                    <input type="hidden" name="action" value="set_pin">
-                    <label class="text-[11px] font-bold text-gem-muted uppercase tracking-wider">Current Password
-                        <input class="mt-1.5 w-full rounded-xl bg-gem-gray border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="current_password" type="password" autocomplete="current-password" required>
-                    </label>
-                    <label class="text-[11px] font-bold text-gem-muted uppercase tracking-wider">New PIN
-                        <input class="mt-1.5 w-full rounded-xl bg-gem-gray border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="wallet_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="\d{4,6}" required>
-                    </label>
-                    <label class="text-[11px] font-bold text-gem-muted uppercase tracking-wider">Confirm PIN
-                        <input class="mt-1.5 w-full rounded-xl bg-gem-gray border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="wallet_pin_confirmation" type="password" inputmode="numeric" maxlength="6" autocomplete="off" pattern="\d{4,6}" required>
-                    </label>
-                    <div class="flex items-end">
-                        <button class="w-full bg-gem-blue hover:bg-gem-blueDk text-white text-[13px] font-bold px-4 py-3 rounded-xl shadow-panel" type="submit">Save PIN</button>
-                    </div>
-                </form>
+                <a class="inline-flex items-center justify-center bg-gem-blue hover:bg-gem-blueDk text-white text-[13px] font-bold px-4 py-3 rounded-xl shadow-panel" href="<?= e(base_url('user/settings.php#security')); ?>">Open security settings</a>
             </div>
         </section>
     <?php endif; ?>

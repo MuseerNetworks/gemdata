@@ -32,7 +32,7 @@ if (is_post()) {
     $currentPassword = (string) ($_POST['current_password'] ?? '');
     $passwordHash = (string) ($securityUser['password_hash'] ?? '');
 
-    if ($currentPassword === '' || !password_verify($currentPassword, $passwordHash)) {
+    if ($action === 'change_password' && ($currentPassword === '' || !password_verify($currentPassword, $passwordHash))) {
         $errors['current_password'][] = 'Enter your current password to confirm this change.';
     }
 
@@ -195,10 +195,6 @@ render_header('Settings', 'user');
                 <input type="hidden" name="action" value="<?= $hasWalletPin ? 'change_pin' : 'set_pin'; ?>">
                 <h3 class="text-[15px] font-bold text-gem-text"><?= $hasWalletPin ? 'Change Wallet PIN' : 'Set Wallet PIN'; ?></h3>
                 <div class="grid gap-3 mt-4">
-                    <label class="text-[12px] font-semibold text-gem-muted uppercase tracking-wider">Current Password
-                        <input class="mt-1.5 w-full rounded-xl bg-white border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="current_password" type="password" autocomplete="current-password">
-                        <?php if ($message = $fieldError($errors, 'current_password')): ?><span class="block mt-1 text-[12px] text-gem-red"><?= e($message); ?></span><?php endif; ?>
-                    </label>
                     <?php if ($hasWalletPin): ?>
                         <label class="text-[12px] font-semibold text-gem-muted uppercase tracking-wider">Current Wallet PIN
                             <input class="mt-1.5 w-full rounded-xl bg-white border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="current_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
@@ -209,7 +205,7 @@ render_header('Settings', 'user');
                         <input class="mt-1.5 w-full rounded-xl bg-white border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="wallet_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
                         <?php if ($message = $fieldError($errors, 'wallet_pin')): ?><span class="block mt-1 text-[12px] text-gem-red"><?= e($message); ?></span><?php endif; ?>
                     </label>
-                    <label class="text-[12px] font-semibold text-gem-muted uppercase tracking-wider">Confirm Wallet PIN
+                    <label class="text-[12px] font-semibold text-gem-muted uppercase tracking-wider"><?= $hasWalletPin ? 'Confirm New Wallet PIN' : 'Confirm Wallet PIN'; ?>
                         <input class="mt-1.5 w-full rounded-xl bg-white border border-gem-border px-4 py-3 text-[13px] text-gem-text" name="wallet_pin_confirmation" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
                         <?php if ($message = $fieldError($errors, 'wallet_pin_confirmation')): ?><span class="block mt-1 text-[12px] text-gem-red"><?= e($message); ?></span><?php endif; ?>
                     </label>
