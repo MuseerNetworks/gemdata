@@ -11,14 +11,16 @@ if (!$user) {
     redirect(base_url('admin/users.php'));
 }
 
-$fundingAccounts = app(\GemData\Classes\PaystackDedicatedAccountService::class);
+$fundingAccounts = app(\GemData\Classes\FundingAccountProviderService::class);
 if (is_post()) {
     verify_csrf();
     $action = (string) ($_POST['action'] ?? '');
-    if ($action === 'generate_funding_account') {
+    if (in_array($action, ['generate_funding_account', 'generate_katpay_account'], true)) {
         require_permission('users.manage');
         try {
-            $account = $fundingAccounts->ensureAccountForUser($userId, true, (int) $admin['id']);
+            $account = $action === 'generate_katpay_account'
+                ? $fundingAccounts->ensureAccountForProvider('katpay', $userId, true, (int) $admin['id'])
+                : $fundingAccounts->ensureActiveAccountForUser($userId, true, (int) $admin['id']);
             if (($account['status'] ?? '') === 'assigned') {
                 flash('success', 'Funding account is assigned.');
             } elseif (($account['status'] ?? '') === 'pending') {
@@ -50,7 +52,9 @@ $transactions = db()->query(
 $walletRows = db()->query('SELECT * FROM wallet_transactions WHERE user_id = :user_id ORDER BY id DESC LIMIT 20', ['user_id' => $userId]);
 $activity = db()->query('SELECT * FROM activity_logs WHERE actor_id = :actor_id AND actor_type = "user" ORDER BY id DESC LIMIT 20', ['actor_id' => $userId]);
 $apiUser = db()->first('SELECT au.*, ak.api_key, ak.status AS key_status FROM api_users au LEFT JOIN api_keys ak ON ak.api_user_id = au.id WHERE au.user_id = :user_id LIMIT 1', ['user_id' => $userId]);
-$fundingAccount = $fundingAccounts->getForUser($userId);
+$fundingAccount = $fundingAccounts->getActiveAccountForUser($userId);
+$allFundingAccounts = $fundingAccounts->allAccountsForUser($userId);
+$activeFundingProvider = $fundingAccounts->activeProvider();
 $fundingStatus = (string) ($fundingAccount['status'] ?? 'pending');
 $fundingAssigned = $fundingStatus === 'assigned' && trim((string) ($fundingAccount['dedicated_account_number'] ?? '')) !== '';
 $customPrices = db()->query(
@@ -106,18 +110,46 @@ render_header('User Detail', 'admin');
                             <?php elseif ($fundingStatus === 'failed'): ?>
                                 <p class="mt-1 text-xs text-slate-400"><?= e((string) ($fundingAccount['last_error_message'] ?? 'Generation failed.')); ?></p>
                             <?php else: ?>
-                                <p class="mt-1 text-xs text-slate-400">Paystack assignment is pending or not requested yet.</p>
+                                <p class="mt-1 text-xs text-slate-400">Active provider: <?= e(ucfirst($activeFundingProvider)); ?>. Assignment is pending or not requested yet.</p>
                             <?php endif; ?>
                         </div>
                         <?php if (admin_can('users.manage')): ?>
-                            <form method="post">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                <input type="hidden" name="action" value="generate_funding_account">
-                                <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retrieve/Generate Funding Account</button>
-                            </form>
+                            <div class="flex flex-wrap gap-2">
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                    <input type="hidden" name="action" value="generate_funding_account">
+                                    <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retrieve/Generate Funding Account</button>
+                                </form>
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                    <input type="hidden" name="action" value="generate_katpay_account">
+                                    <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retry KatPay</button>
+                                </form>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
+            </div>
+            <div class="table-shell mt-5">
+                <table>
+                    <thead><tr class="text-slate-400"><th>Provider</th><th>Account</th><th>Status</th><th>Requested</th><th>Assigned</th><th>Safe Message</th></tr></thead>
+                    <tbody>
+                    <?php if ($allFundingAccounts === []): ?>
+                        <tr><td colspan="6" class="text-slate-400">No funding account rows yet.</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($allFundingAccounts as $row): ?>
+                            <tr>
+                                <td><?= e(ucwords(str_replace('_', ' ', (string) $row['provider']))); ?></td>
+                                <td><span class="font-mono"><?= e((string) ($row['dedicated_account_number'] ?? '-')); ?></span><br><span class="text-xs text-slate-400"><?= e((string) ($row['bank_name'] ?? '')); ?> <?= e((string) ($row['account_name'] ?? '')); ?></span></td>
+                                <td><?= e((string) ($row['status'] ?? 'pending')); ?></td>
+                                <td><?= e((string) ($row['requested_at'] ?? '-')); ?></td>
+                                <td><?= e((string) ($row['assigned_at'] ?? '-')); ?></td>
+                                <td><?= e((string) ($row['last_error_message'] ?? '')); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
             <div class="table-shell mt-5">
                 <table>

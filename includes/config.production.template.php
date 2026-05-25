@@ -139,6 +139,8 @@ return [
     'payments' => [
         'default_gateway'      => 'xixapay',
         'display_gateway_name' => 'XixaPay',
+        'active_funding_provider' => 'katpay',
+        'multi_provider_funding' => false,
 
         // XixaPay Virtual Account (LIVE)
         'xixapay_api_key'     => '',                    // FILL IN
@@ -147,6 +149,12 @@ return [
         'xixapay_base_url'    => 'https://api.xixapay.com',
         'xixapay_bank_codes'  => ['20867'],
         'xixapay_webhook_url' => 'https://gemdata.com.ng/api/xixapay.php',
+        'katpay_enabled'     => false,
+        'katpay_api_key'     => '',                    // FILL IN
+        'katpay_secret_key'  => '',                    // FILL IN
+        'katpay_base_url'    => 'https://api.katpay.co/v1',
+        'katpay_merchant_id' => '',                    // FILL IN
+        'katpay_bank_codes'  => ['PALMPAY', 'OPAY'],
     ],
 
     // ══════════════════════════════════════════════════════

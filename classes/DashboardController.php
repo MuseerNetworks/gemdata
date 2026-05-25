@@ -9,7 +9,7 @@ class DashboardController
     public function __construct(
         private Database $db,
         private Wallet $wallet,
-        private PaystackDedicatedAccountService $paystackAccounts,
+        private FundingAccountProviderService $fundingAccounts,
         private ProviderPlanService $providerPlans,
         private UserRoleManager $roles
     ) {
@@ -20,7 +20,8 @@ class DashboardController
         $userId = (int) $user['id'];
         $role = $this->roles->roleFor($user);
         $wallet = $this->wallet->ensure($userId);
-        $fundingAccount = $this->paystackAccounts->getForUser($userId);
+        $fundingAccount = $this->fundingAccounts->primaryDisplayAccountForUser($userId);
+        $fundingAccountRows = $this->fundingAccounts->displayAccountsForUser($userId);
         $services = $this->services();
         $recentTransactions = $this->recentTransactions($userId);
 
@@ -30,6 +31,9 @@ class DashboardController
             'role_label' => $this->roles->label($role),
             'wallet' => $wallet,
             'funding_account' => $fundingAccount,
+            'funding_accounts' => $fundingAccountRows,
+            'funding_active_provider' => $this->fundingAccounts->activeProvider(),
+            'funding_multi_provider' => $this->fundingAccounts->multiProviderFunding(),
             'services' => $services,
             'service_meta' => $this->serviceMeta(),
             'service_networks' => $this->serviceNetworks(),

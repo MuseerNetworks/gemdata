@@ -49,6 +49,8 @@ return [
     'payments' => [
         'default_gateway' => 'xixapay',
         'display_gateway_name' => 'XixaPay',
+        'active_funding_provider' => 'katpay',
+        'multi_provider_funding' => false,
         'auto_verify_mock_funding' => false,
         'xixapay_api_key' => '__CHANGE_ME_XIXAPAY_API_KEY__',
         'xixapay_api_secret' => '__CHANGE_ME_XIXAPAY_API_SECRET__',
@@ -56,6 +58,12 @@ return [
         'xixapay_base_url' => 'https://api.xixapay.com',
         'xixapay_bank_codes' => ['__CHANGE_ME_BANK_CODE__'],
         'xixapay_webhook_url' => 'https://gemdata.com.ng/api/xixapay.php',
+        'katpay_enabled' => false,
+        'katpay_api_key' => '__CHANGE_ME_KATPAY_API_KEY__',
+        'katpay_secret_key' => '__CHANGE_ME_KATPAY_SECRET_KEY__',
+        'katpay_base_url' => 'https://api.katpay.co/v1',
+        'katpay_merchant_id' => '__CHANGE_ME_KATPAY_MERCHANT_ID__',
+        'katpay_bank_codes' => ['PALMPAY', 'OPAY'],
     ],
 
     'mail' => [

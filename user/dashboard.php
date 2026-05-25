@@ -9,6 +9,8 @@ $dashboard = app(\GemData\Classes\DashboardController::class)->dataFor($user);
 $role = $dashboard['role'];
 $wallet = $dashboard['wallet'];
 $fundingAccount = $dashboard['funding_account'];
+$fundingAccounts = $dashboard['funding_accounts'] ?? [];
+$multiProviderFunding = (bool) ($dashboard['funding_multi_provider'] ?? false);
 $services = $dashboard['services'];
 $serviceMeta = $dashboard['service_meta'];
 $serviceNetworks = $dashboard['service_networks'];
@@ -20,11 +22,14 @@ $reseller = $dashboard['reseller'];
 $api = $dashboard['api'];
 
 $accountAssigned = ($fundingAccount['status'] ?? '') === 'assigned'
-    || trim((string) ($fundingAccount['dedicated_account_number'] ?? '')) !== '';
+    && trim((string) ($fundingAccount['dedicated_account_number'] ?? '')) !== '';
 $accountNumber = (string) ($fundingAccount['dedicated_account_number'] ?? '');
 $accountName = (string) ($fundingAccount['account_name'] ?? '');
 $bankName = (string) ($fundingAccount['bank_name'] ?? '');
 $fullAccountCopy = trim($bankName . "\n" . $accountNumber . "\n" . $accountName);
+$assignedFundingAccounts = array_values(array_filter($fundingAccounts, static function (array $row): bool {
+    return ($row['status'] ?? '') === 'assigned' && trim((string) ($row['dedicated_account_number'] ?? '')) !== '';
+}));
 $successRate = $stats['transactions'] > 0 ? 98.7 : 0;
 $firstName = trim(explode(' ', (string) ($user['full_name'] ?? 'GemData user'))[0] ?? 'GemData');
 $recentRecipients = array_values(array_unique(array_filter(array_map(static fn(array $row): string => (string) ($row['recipient'] ?? ''), $recentTransactions))));
@@ -234,24 +239,34 @@ render_header('Dashboard', 'user');
                 <div class="mt-4 pt-3 border-t border-white/15">
                     <div class="flex items-center justify-between gap-3 mb-2.5">
                         <div>
-                            <div class="text-[13px] font-bold text-white">Your Funding Account</div>
+                            <div class="text-[13px] font-bold text-white"><?= $multiProviderFunding ? 'Your Funding Accounts' : 'Your Funding Account'; ?></div>
                             <div class="text-[11px] text-blue-200">Bank transfer funding</div>
                         </div>
-                        <?php if ($accountAssigned): ?>
+                        <?php if ($assignedFundingAccounts !== []): ?>
                             <span class="bg-green-400/20 text-green-200 text-[11px] font-bold px-2.5 py-1 rounded-full">Active</span>
                         <?php else: ?>
                             <span class="bg-amber-400/20 text-amber-100 text-[11px] font-bold px-2.5 py-1 rounded-full"><?= ($fundingAccount['status'] ?? '') === 'failed' ? 'Failed' : 'Pending'; ?></span>
                         <?php endif; ?>
                     </div>
-                    <?php if ($accountAssigned): ?>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Bank Name</div><div class="text-[12px] font-bold mt-1"><?= e($bankName); ?></div></div>
-                            <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Number</div><div class="text-[12px] font-mono font-bold mt-1"><?= e($accountNumber); ?></div></div>
-                            <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Name</div><div class="text-[12px] font-bold mt-1"><?= e($accountName); ?></div></div>
-                        </div>
-                        <div class="flex flex-wrap gap-2 mt-2.5">
-                            <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($accountNumber); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Account Number</button>
-                            <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($fullAccountCopy); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Full Details</button>
+                    <?php if ($assignedFundingAccounts !== []): ?>
+                        <div class="space-y-2">
+                            <?php foreach ($assignedFundingAccounts as $fundingRow): ?>
+                                <?php
+                                $rowBankName = (string) ($fundingRow['bank_name'] ?? '');
+                                $rowAccountNumber = (string) ($fundingRow['dedicated_account_number'] ?? '');
+                                $rowAccountName = (string) ($fundingRow['account_name'] ?? '');
+                                $rowFullAccountCopy = trim($rowBankName . "\n" . $rowAccountNumber . "\n" . $rowAccountName);
+                                ?>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Bank Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowBankName); ?></div></div>
+                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Number</div><div class="text-[12px] font-mono font-bold mt-1"><?= e($rowAccountNumber); ?></div></div>
+                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowAccountName); ?></div></div>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($rowAccountNumber); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Account Number</button>
+                                    <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($rowFullAccountCopy); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Full Details</button>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     <?php elseif (($fundingAccount['status'] ?? '') === 'failed'): ?>
                         <p class="text-[12px] text-blue-100">We could not generate your funding account. Please contact support or try again.</p>

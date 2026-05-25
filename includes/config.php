@@ -24,7 +24,7 @@ $config = [
         'provider_log_to_file' => true,
         'provider_log_file' => dirname(__DIR__) . '/storage/logs/provider.log',
         'required_extensions' => ['json', 'pdo_mysql'],
-        'maintenance_bypass_paths' => ['/admin/', '/api/xixapay.php', '/api/paystack.php'],
+        'maintenance_bypass_paths' => ['/admin/', '/api/xixapay.php', '/api/paystack.php', '/api/katpay.php'],
     ],
     'db' => [
         'host' => '127.0.0.1',
@@ -104,7 +104,7 @@ $config = [
     ],
     'webhooks' => [
         'shared_secret' => '',
-        'allowed_sources' => ['xixapay', 'paystack'],
+        'allowed_sources' => ['xixapay', 'paystack', 'katpay'],
     ],
     'security' => [
         'admin_2fa_enabled' => false,
@@ -113,6 +113,8 @@ $config = [
     'payments' => [
         'default_gateway' => 'paystack',
         'display_gateway_name' => 'Paystack',
+        'active_funding_provider' => 'katpay',
+        'multi_provider_funding' => false,
         'auto_verify_mock_funding' => false,
         'xixapay_api_key' => '',
         'xixapay_api_secret' => '',
@@ -124,6 +126,12 @@ $config = [
         'paystack_preferred_bank' => 'titan-paystack',
         'paystack_base_url' => 'https://api.paystack.co',
         'paystack_webhook_url' => '/api/paystack.php',
+        'katpay_enabled' => false,
+        'katpay_api_key' => '',
+        'katpay_secret_key' => '',
+        'katpay_base_url' => 'https://api.katpay.co/v1',
+        'katpay_merchant_id' => '',
+        'katpay_bank_codes' => ['PALMPAY', 'OPAY'],
     ],
     'mail' => [
         'driver' => 'log',
