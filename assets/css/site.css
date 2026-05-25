@@ -3894,7 +3894,7 @@ body.purchase-modal-open {
 }
 
 .admin-actions-cell {
-    min-width: 18rem;
+    min-width: 12rem;
     max-width: 100%;
     vertical-align: top;
 }
@@ -3907,6 +3907,69 @@ body.purchase-modal-open {
 .admin-user-action-links .secondary-action {
     min-width: 0;
     white-space: normal;
+}
+
+.admin-manage-section {
+    scroll-margin-top: 6rem;
+}
+
+.admin-manage-section .admin-manage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.admin-manage-section .admin-manage-card {
+    display: grid;
+    gap: 0.85rem;
+    align-content: start;
+    min-width: 0;
+    max-width: 100%;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.9rem;
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.admin-manage-section .admin-manage-card h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.admin-manage-section .admin-manage-card h3,
+.admin-manage-section .admin-manage-card p {
+    overflow-wrap: anywhere;
+}
+
+.admin-manage-section .admin-action-form {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-manage-section .admin-action-form input,
+.admin-manage-section .admin-action-form select,
+.admin-manage-section .admin-action-form button,
+.admin-manage-section .admin-manage-card .action-button {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.admin-manage-section .admin-manage-card .action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    text-align: center;
 }
 
 .admin-inline-drawer .admin-manage-grid {

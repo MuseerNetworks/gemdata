@@ -5,9 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/bootstrap.php';
 
 $admin = require_permission('users.view');
-$logger = app(\GemData\Classes\ActivityLogger::class);
-$userSecurity = app(\GemData\Classes\UserSecurityService::class);
-$mailService = app(\GemData\Classes\MailService::class);
 $ops = app(\GemData\Classes\AdminOpsService::class);
 $pageKey = 'users';
 
@@ -70,109 +67,6 @@ if (is_post()) {
         } catch (Throwable $throwable) {
             flash('success', 'Bulk action failed: ' . $throwable->getMessage());
         }
-        redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-    }
-
-    if ($action === 'toggle_api') {
-        require_permission('users.manage');
-        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
-            flash('success', 'Admin password confirmation failed. API access was not changed.');
-            redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-        }
-        $user = db()->first('SELECT * FROM users WHERE id = :id', ['id' => $userId]);
-        if ($user) {
-            $apiUser = db()->first('SELECT * FROM api_users WHERE user_id = :user_id', ['user_id' => $userId]);
-            if (!$apiUser) {
-                db()->execute("INSERT INTO api_users (user_id, status, created_by_admin_id) VALUES (:user_id, 'active', :admin_id)", ['user_id' => $userId, 'admin_id' => $admin['id']]);
-                db()->execute('UPDATE users SET is_api_user = 1 WHERE id = :id', ['id' => $userId]);
-                flash('success', 'User upgraded to API user.');
-            } else {
-                $newStatus = $apiUser['status'] === 'active' ? 'inactive' : 'active';
-                db()->execute('UPDATE api_users SET status = :status WHERE id = :id', ['status' => $newStatus, 'id' => $apiUser['id']]);
-                db()->execute('UPDATE users SET is_api_user = :is_api_user WHERE id = :id', ['is_api_user' => $newStatus === 'active' ? 1 : 0, 'id' => $userId]);
-                flash('success', 'API user status updated.');
-            }
-            $logger->log('admin', (int) $admin['id'], 'user_api_status_changed', 'Admin updated API access.', ['user_id' => $userId]);
-        }
-        redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-    }
-
-    if ($action === 'generate_key') {
-        require_permission('users.manage');
-        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
-            flash('success', 'Admin password confirmation failed. API credentials were not rotated.');
-            redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-        }
-        $apiUser = db()->first('SELECT * FROM api_users WHERE user_id = :user_id', ['user_id' => $userId]);
-        if ($apiUser) {
-            $apiKey = 'gk_' . bin2hex(random_bytes(12));
-            $secret = 'gs_' . bin2hex(random_bytes(24));
-            $record = db()->first('SELECT * FROM api_keys WHERE api_user_id = :api_user_id', ['api_user_id' => $apiUser['id']]);
-            if ($record) {
-                db()->execute("UPDATE api_keys SET api_key = :api_key, secret_hash = :secret_hash, status = 'active' WHERE id = :id", [
-                    'api_key' => $apiKey,
-                    'secret_hash' => password_hash($secret, PASSWORD_DEFAULT),
-                    'id' => $record['id'],
-                ]);
-            } else {
-                db()->execute("INSERT INTO api_keys (api_user_id, api_key, secret_hash, status) VALUES (:api_user_id, :api_key, :secret_hash, 'active')", [
-                    'api_user_id' => $apiUser['id'],
-                    'api_key' => $apiKey,
-                    'secret_hash' => password_hash($secret, PASSWORD_DEFAULT),
-                ]);
-            }
-            $_SESSION['flash']['generated_api_secret'] = $secret;
-            flash('success', 'API credentials generated successfully.');
-            $logger->log('admin', (int) $admin['id'], 'user_api_key_generated', 'Admin generated API credentials.', ['user_id' => $userId]);
-        }
-        redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-    }
-
-    if ($action === 'toggle_status') {
-        require_permission('users.manage');
-        $newStatus = ($_POST['status'] ?? 'inactive') === 'active' ? 'active' : 'inactive';
-        if ($newStatus === 'inactive' && !auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
-            flash('success', 'Admin password confirmation failed. User status was not changed.');
-            redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-        }
-        db()->execute('UPDATE users SET status = :status WHERE id = :id', ['status' => $newStatus, 'id' => $userId]);
-        $logger->log('admin', (int) $admin['id'], 'user_status_changed', 'Admin changed user status.', ['user_id' => $userId, 'status' => $newStatus]);
-        flash('success', 'User status updated.');
-        redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-    }
-
-    if ($action === 'set_tier') {
-        require_permission('users.manage');
-        $tier = strtoupper((string) ($_POST['tier'] ?? 'USER'));
-        if (in_array($tier, ['USER', 'RESELLER', 'AGENT', 'API_RESELLER'], true)) {
-            db()->execute('UPDATE users SET tier = :tier WHERE id = :id', ['tier' => $tier, 'id' => $userId]);
-            $logger->log('admin', (int) $admin['id'], 'user_tier_changed', 'Admin changed user tier.', ['user_id' => $userId, 'tier' => $tier]);
-            flash('success', 'User tier updated.');
-        }
-        redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-    }
-
-    if ($action === 'reset_password') {
-        require_permission('users.manage');
-        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
-            flash('success', 'Admin password confirmation failed. Reset link was not created.');
-            redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
-        }
-        $reset = $userSecurity->createPasswordReset($userId, (int) $admin['id']);
-        $resetUrl = absolute_url('user/reset-password.php?' . http_build_query([
-            'reset' => (int) $reset['id'],
-            'token' => (string) $reset['token'],
-        ]));
-        $sent = $mailService->sendPasswordReset((string) $reset['email'], $resetUrl, [
-            'source' => 'admin',
-            'reset_id' => (int) $reset['id'],
-            'admin_id' => (int) $admin['id'],
-            'user_id' => $userId,
-        ]);
-        flash('success', $sent
-            ? 'Password reset link sent through the configured delivery channel.'
-            : 'Password reset token created, but email delivery failed. Check server logs.'
-        );
         redirect(base_url('admin/users.php?' . http_build_query($redirectQuery)));
     }
 }
@@ -396,70 +290,14 @@ render_header('Users', 'admin');
                                     <span class="status-chip status-neutral">Disabled</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="admin-actions-cell w-[22rem]">
+                            <td class="admin-actions-cell">
                                 <div class="admin-user-action-links flex flex-wrap gap-2">
                                     <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/user-detail.php?user_id=' . $row['id'])); ?>">Details</a>
                                     <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/wallet.php?user_id=' . $row['id'])); ?>">Wallet</a>
+                                    <?php if (admin_can('users.manage')): ?>
+                                        <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/user-detail.php?user_id=' . $row['id'] . '#manage')); ?>">Manage</a>
+                                    <?php endif; ?>
                                 </div>
-                                <?php if (admin_can('users.manage')): ?>
-                                    <details class="admin-inline-drawer mt-3">
-                                        <summary>Manage user</summary>
-                                        <div class="admin-drawer-grid admin-manage-grid">
-                                            <div class="admin-action-group admin-manage-card">
-                                                <h3>Access</h3>
-                                                <form method="post" class="admin-action-form">
-                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
-                                                    <input type="hidden" name="action" value="toggle_status">
-                                                    <input type="hidden" name="status" value="<?= $row['status'] === 'active' ? 'inactive' : 'active'; ?>">
-                                                    <?php if ($row['status'] === 'active'): ?>
-                                                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
-                                                    <?php endif; ?>
-                                                    <button class="action-button <?= $row['status'] === 'active' ? 'action-danger' : 'action-soft'; ?>" type="submit"><?= $row['status'] === 'active' ? 'Deactivate User' : 'Activate User'; ?></button>
-                                                </form>
-                                                <form method="post" class="admin-action-form">
-                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
-                                                    <input type="hidden" name="action" value="set_tier">
-                                                    <select class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="tier">
-                                                        <?php foreach (['USER', 'RESELLER', 'AGENT', 'API_RESELLER'] as $tier): ?>
-                                                            <option value="<?= e($tier); ?>"<?= $row['tier'] === $tier ? ' selected' : ''; ?>><?= e($tier); ?></option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                    <button class="action-button action-soft" type="submit">Save Tier</button>
-                                                </form>
-                                            </div>
-                                            <div class="admin-action-group admin-manage-card">
-                                                <h3>API Access</h3>
-                                                <form method="post" class="admin-action-form">
-                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
-                                                    <input type="hidden" name="action" value="toggle_api">
-                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
-                                                    <button class="action-button action-soft" type="submit"><?= (int) $row['is_api_user'] === 1 ? 'Disable API Access' : 'Enable API Access'; ?></button>
-                                                </form>
-                                                <form method="post" class="admin-action-form">
-                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
-                                                    <input type="hidden" name="action" value="generate_key">
-                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
-                                                    <button class="action-button action-soft" type="submit">Rotate API Credentials</button>
-                                                </form>
-                                            </div>
-                                            <div class="admin-action-group admin-manage-card">
-                                                <h3>Security</h3>
-                                                <form method="post" class="admin-action-form">
-                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $row['id']; ?>">
-                                                    <input type="hidden" name="action" value="reset_password">
-                                                    <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
-                                                    <button class="action-button action-warning" type="submit">Create Reset Link</button>
-                                                </form>
-                                                <p class="text-xs text-slate-400">This issues a time-limited reset link instead of exposing a plaintext password.</p>
-                                            </div>
-                                        </div>
-                                    </details>
-                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>

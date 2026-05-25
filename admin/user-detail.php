@@ -11,10 +11,118 @@ if (!$user) {
     redirect(base_url('admin/users.php'));
 }
 
+$logger = app(\GemData\Classes\ActivityLogger::class);
+$userSecurity = app(\GemData\Classes\UserSecurityService::class);
+$mailService = app(\GemData\Classes\MailService::class);
 $fundingAccounts = app(\GemData\Classes\FundingAccountProviderService::class);
 if (is_post()) {
     verify_csrf();
     $action = (string) ($_POST['action'] ?? '');
+    $adminPassword = (string) ($_POST['admin_password'] ?? '');
+    $manageUrl = base_url('admin/user-detail.php?user_id=' . $userId . '#manage');
+
+    if ($action === 'toggle_api') {
+        require_permission('users.manage');
+        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
+            flash('success', 'Admin password confirmation failed. API access was not changed.');
+            redirect($manageUrl);
+        }
+
+        $apiUser = db()->first('SELECT * FROM api_users WHERE user_id = :user_id', ['user_id' => $userId]);
+        if (!$apiUser) {
+            db()->execute("INSERT INTO api_users (user_id, status, created_by_admin_id) VALUES (:user_id, 'active', :admin_id)", ['user_id' => $userId, 'admin_id' => $admin['id']]);
+            db()->execute('UPDATE users SET is_api_user = 1 WHERE id = :id', ['id' => $userId]);
+            flash('success', 'User upgraded to API user.');
+        } else {
+            $newStatus = $apiUser['status'] === 'active' ? 'inactive' : 'active';
+            db()->execute('UPDATE api_users SET status = :status WHERE id = :id', ['status' => $newStatus, 'id' => $apiUser['id']]);
+            db()->execute('UPDATE users SET is_api_user = :is_api_user WHERE id = :id', ['is_api_user' => $newStatus === 'active' ? 1 : 0, 'id' => $userId]);
+            flash('success', 'API user status updated.');
+        }
+        $logger->log('admin', (int) $admin['id'], 'user_api_status_changed', 'Admin updated API access.', ['user_id' => $userId]);
+        redirect($manageUrl);
+    }
+
+    if ($action === 'generate_key') {
+        require_permission('users.manage');
+        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
+            flash('success', 'Admin password confirmation failed. API credentials were not rotated.');
+            redirect($manageUrl);
+        }
+
+        $apiUser = db()->first('SELECT * FROM api_users WHERE user_id = :user_id', ['user_id' => $userId]);
+        if ($apiUser) {
+            $apiKey = 'gk_' . bin2hex(random_bytes(12));
+            $secret = 'gs_' . bin2hex(random_bytes(24));
+            $record = db()->first('SELECT * FROM api_keys WHERE api_user_id = :api_user_id', ['api_user_id' => $apiUser['id']]);
+            if ($record) {
+                db()->execute("UPDATE api_keys SET api_key = :api_key, secret_hash = :secret_hash, status = 'active' WHERE id = :id", [
+                    'api_key' => $apiKey,
+                    'secret_hash' => password_hash($secret, PASSWORD_DEFAULT),
+                    'id' => $record['id'],
+                ]);
+            } else {
+                db()->execute("INSERT INTO api_keys (api_user_id, api_key, secret_hash, status) VALUES (:api_user_id, :api_key, :secret_hash, 'active')", [
+                    'api_user_id' => $apiUser['id'],
+                    'api_key' => $apiKey,
+                    'secret_hash' => password_hash($secret, PASSWORD_DEFAULT),
+                ]);
+            }
+            $_SESSION['flash']['generated_api_secret'] = $secret;
+            flash('success', 'API credentials generated successfully.');
+            $logger->log('admin', (int) $admin['id'], 'user_api_key_generated', 'Admin generated API credentials.', ['user_id' => $userId]);
+        }
+        redirect($manageUrl);
+    }
+
+    if ($action === 'toggle_status') {
+        require_permission('users.manage');
+        $newStatus = ($_POST['status'] ?? 'inactive') === 'active' ? 'active' : 'inactive';
+        if ($newStatus === 'inactive' && !auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
+            flash('success', 'Admin password confirmation failed. User status was not changed.');
+            redirect($manageUrl);
+        }
+        db()->execute('UPDATE users SET status = :status WHERE id = :id', ['status' => $newStatus, 'id' => $userId]);
+        $logger->log('admin', (int) $admin['id'], 'user_status_changed', 'Admin changed user status.', ['user_id' => $userId, 'status' => $newStatus]);
+        flash('success', 'User status updated.');
+        redirect($manageUrl);
+    }
+
+    if ($action === 'set_tier') {
+        require_permission('users.manage');
+        $tier = strtoupper((string) ($_POST['tier'] ?? 'USER'));
+        if (in_array($tier, ['USER', 'RESELLER', 'AGENT', 'API_RESELLER'], true)) {
+            db()->execute('UPDATE users SET tier = :tier WHERE id = :id', ['tier' => $tier, 'id' => $userId]);
+            $logger->log('admin', (int) $admin['id'], 'user_tier_changed', 'Admin changed user tier.', ['user_id' => $userId, 'tier' => $tier]);
+            flash('success', 'User tier updated.');
+        }
+        redirect($manageUrl);
+    }
+
+    if ($action === 'reset_password') {
+        require_permission('users.manage');
+        if (!auth()->confirmAdminPassword((int) $admin['id'], $adminPassword)) {
+            flash('success', 'Admin password confirmation failed. Reset link was not created.');
+            redirect($manageUrl);
+        }
+        $reset = $userSecurity->createPasswordReset($userId, (int) $admin['id']);
+        $resetUrl = absolute_url('user/reset-password.php?' . http_build_query([
+            'reset' => (int) $reset['id'],
+            'token' => (string) $reset['token'],
+        ]));
+        $sent = $mailService->sendPasswordReset((string) $reset['email'], $resetUrl, [
+            'source' => 'admin',
+            'reset_id' => (int) $reset['id'],
+            'admin_id' => (int) $admin['id'],
+            'user_id' => $userId,
+        ]);
+        flash('success', $sent
+            ? 'Password reset link sent through the configured delivery channel.'
+            : 'Password reset token created, but email delivery failed. Check server logs.'
+        );
+        redirect($manageUrl);
+    }
+
     if (in_array($action, ['generate_funding_account', 'generate_katpay_account'], true)) {
         require_permission('users.manage');
         try {
@@ -37,7 +145,7 @@ if (is_post()) {
             flash('error', 'Funding account generation failed. Review configuration and schema readiness.');
         }
 
-        redirect(base_url('admin/user-detail.php?user_id=' . $userId));
+        redirect($manageUrl);
     }
 }
 
@@ -86,6 +194,86 @@ render_header('User Detail', 'admin');
 
     <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
     <?php if ($message = flash('error')): ?><div class="notice notice-error"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($secret = flash('generated_api_secret')): ?><div class="notice notice-success">Generated API secret: <span class="font-mono text-sm"><?= e($secret); ?></span></div><?php endif; ?>
+
+    <?php if (admin_can('users.manage')): ?>
+        <section id="manage" class="surface-card p-6 admin-manage-section">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <p class="eyebrow">Management</p>
+                    <h2 class="mt-2 text-2xl font-black text-white">Manage User</h2>
+                </div>
+                <a class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" href="<?= e(base_url('admin/users.php')); ?>">Back to Users</a>
+            </div>
+
+            <div class="admin-manage-grid mt-5">
+                <div class="admin-manage-card">
+                    <h3>Access</h3>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="toggle_status">
+                        <input type="hidden" name="status" value="<?= $user['status'] === 'active' ? 'inactive' : 'active'; ?>">
+                        <?php if ($user['status'] === 'active'): ?>
+                            <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                        <?php endif; ?>
+                        <button class="action-button <?= $user['status'] === 'active' ? 'action-danger' : 'action-soft'; ?>" type="submit"><?= $user['status'] === 'active' ? 'Deactivate User' : 'Activate User'; ?></button>
+                    </form>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="set_tier">
+                        <select class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="tier">
+                            <?php foreach (['USER', 'RESELLER', 'AGENT', 'API_RESELLER'] as $tier): ?>
+                                <option value="<?= e($tier); ?>"<?= $user['tier'] === $tier ? ' selected' : ''; ?>><?= e($tier); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button class="action-button action-soft" type="submit">Save Tier</button>
+                    </form>
+                </div>
+
+                <div class="admin-manage-card">
+                    <h3>API Access</h3>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="toggle_api">
+                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                        <button class="action-button action-soft" type="submit"><?= (int) $user['is_api_user'] === 1 ? 'Disable API Access' : 'Enable API Access'; ?></button>
+                    </form>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="generate_key">
+                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                        <button class="action-button action-soft" type="submit">Rotate API Credentials</button>
+                    </form>
+                </div>
+
+                <div class="admin-manage-card">
+                    <h3>Security</h3>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="reset_password">
+                        <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm w-full" name="admin_password" type="password" placeholder="Confirm admin password" required>
+                        <button class="action-button action-warning" type="submit">Create Reset Link</button>
+                    </form>
+                    <p class="text-xs text-slate-400">This issues a time-limited reset link instead of exposing a plaintext password.</p>
+                </div>
+
+                <div class="admin-manage-card">
+                    <h3>Funding Account</h3>
+                    <p class="text-xs text-slate-400">Active provider: <?= e(ucfirst($activeFundingProvider)); ?>. Current status: <?= e($fundingAssigned ? 'assigned' : $fundingStatus); ?>.</p>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="generate_funding_account">
+                        <button class="action-button action-soft" type="submit">Retrieve/Generate Funding Account</button>
+                    </form>
+                    <form method="post" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                        <input type="hidden" name="action" value="generate_katpay_account">
+                        <button class="action-button action-soft" type="submit">Retry KatPay</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <div class="grid gap-6 xl:grid-cols-2">
         <section class="surface-card p-6">
@@ -113,20 +301,6 @@ render_header('User Detail', 'admin');
                                 <p class="mt-1 text-xs text-slate-400">Active provider: <?= e(ucfirst($activeFundingProvider)); ?>. Assignment is pending or not requested yet.</p>
                             <?php endif; ?>
                         </div>
-                        <?php if (admin_can('users.manage')): ?>
-                            <div class="flex flex-wrap gap-2">
-                                <form method="post">
-                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                    <input type="hidden" name="action" value="generate_funding_account">
-                                    <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retrieve/Generate Funding Account</button>
-                                </form>
-                                <form method="post">
-                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                    <input type="hidden" name="action" value="generate_katpay_account">
-                                    <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retry KatPay</button>
-                                </form>
-                            </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>
