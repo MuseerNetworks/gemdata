@@ -101,11 +101,17 @@ const bindAjaxForms = (scope = document) => {
                 const payload = await response.json();
                 if (target) {
                     const message = escapeHTML(payload.message || '');
-                    const errors = payload.errors ? escapeHTML(JSON.stringify(payload.errors, null, 2)) : '';
+                    const errorList = payload.errors && typeof payload.errors === 'object'
+                        ? Object.values(payload.errors).flat().filter(Boolean).map((error) => `<li>${escapeHTML(String(error))}</li>`).join('')
+                        : '';
+                    const actionLink = payload.meta?.redirect_url
+                        ? `<a class="inline-flex mt-3 font-bold underline" href="${safeAttr(payload.meta.redirect_url)}">Open security settings</a>`
+                        : '';
                     target.innerHTML = `
                         <div class="notice ${payload.status === 'success' ? 'notice-success' : 'notice-error'}">
                             <strong>${message}</strong>
-                            ${errors ? `<pre class="mt-3 whitespace-pre-wrap text-xs">${errors}</pre>` : ''}
+                            ${errorList ? `<ul class="mt-3 list-disc pl-5 text-xs">${errorList}</ul>` : ''}
+                            ${actionLink}
                         </div>`;
                 }
                 if (payload.status === 'success' && form.dataset.resetOnSuccess === 'true') {
@@ -1113,10 +1119,14 @@ const setupPurchaseModal = () => {
     const formatMoney = (amount) => `NGN ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const makeIdempotencyKey = () => generateIdempotencyKey('txn');
 
-    const setMessage = (text = '', tone = 'error') => {
+    const setMessage = (text = '', tone = 'error', asHtml = false) => {
         if (!messageTarget) return;
         messageTarget.hidden = text === '';
-        messageTarget.textContent = text;
+        if (asHtml) {
+            messageTarget.innerHTML = text;
+        } else {
+            messageTarget.textContent = text;
+        }
         messageTarget.className = `purchase-modal-message is-${tone}`;
     };
 
@@ -1230,7 +1240,7 @@ const setupPurchaseModal = () => {
             }
         });
         const pin = fieldValue('security_pin');
-        if (!pin) {
+        if (config.pin_configured !== false && !pin) {
             errors.push(['security_pin', 'Wallet PIN is required.']);
         }
         errors.forEach(([name, text]) => {
@@ -1265,9 +1275,12 @@ const setupPurchaseModal = () => {
         form.elements.idempotency_key.value = makeIdempotencyKey();
         submitButton.onclick = null;
         submitButton.disabled = false;
+        const pinMarkup = config.pin_configured === false
+            ? `<div class="purchase-empty-state">Set your Wallet PIN before making purchases. <a class="font-bold text-gem-blue" href="${safeAttr(config.pin_settings_url || 'user/settings.php#security')}">Open security settings</a></div>`
+            : `<label class="purchase-field" data-field-wrap="security_pin">Wallet PIN<input name="security_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Enter wallet PIN" required><small class="purchase-field-error" data-field-error="security_pin"></small></label>`;
         fieldsTarget.innerHTML = [
             ...(activeService.fields || []).map(renderField),
-            `<label class="purchase-field" data-field-wrap="security_pin">Wallet PIN<input name="security_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Enter wallet PIN" required><small class="purchase-field-error" data-field-error="security_pin"></small></label>`
+            pinMarkup
         ].join('');
         summaryTarget.innerHTML = '';
         setMessage('');
@@ -1360,6 +1373,10 @@ const setupPurchaseModal = () => {
         if (!activeService || submitButton.disabled) return;
         setMessage('');
         if (step === 'form') {
+            if (config.pin_configured === false) {
+                setMessage('Set your Wallet PIN before making purchases.', 'error');
+                return;
+            }
             if (!validateForm()) {
                 setMessage('Please complete the highlighted fields.', 'error');
                 return;
@@ -1381,6 +1398,10 @@ const setupPurchaseModal = () => {
             });
             const payload = await response.json();
             if (!response.ok || payload.status !== 'success') {
+                if (payload.meta?.redirect_url) {
+                    setMessage(`${escapeHTML(payload.message || 'Action required.')} <a class="font-bold underline" href="${safeAttr(payload.meta.redirect_url)}">Open security settings</a>`, 'error', true);
+                    return;
+                }
                 throw new Error(payload.message || 'Transaction could not be completed.');
             }
             updateDashboard(payload.data || {});

@@ -18,6 +18,25 @@ if ($serviceSlug === 'cable_tv' && empty($payload['provider']) && !empty($payloa
 }
 
 try {
+    $db = db();
+    $settingsUrl = base_url('user/settings.php#security');
+    if (!$db->columnExists('users', 'transaction_pin_hash')) {
+        app(\GemData\Classes\Response::class)->json('error', 'Wallet PIN protection is not configured.', [], ['security_pin' => ['Wallet PIN protection is required.']], [], 503);
+    }
+
+    $pinRow = $db->first('SELECT transaction_pin_hash FROM users WHERE id = :id LIMIT 1', ['id' => $user['id']]);
+    $pinHash = (string) ($pinRow['transaction_pin_hash'] ?? '');
+    if ($pinHash === '') {
+        app(\GemData\Classes\Response::class)->json(
+            'error',
+            'Set your Wallet PIN before making purchases.',
+            [],
+            ['security_pin' => ['Set your Wallet PIN before making purchases.']],
+            ['redirect_url' => $settingsUrl],
+            403
+        );
+    }
+
     $pin = trim((string) ($payload['security_pin'] ?? $payload['wallet_pin'] ?? ''));
     if ($pin === '') {
         app(\GemData\Classes\Response::class)->json('error', 'Wallet PIN is required.', [], ['security_pin' => ['Wallet PIN is required.']], [], 422);
@@ -36,18 +55,8 @@ try {
             app(\GemData\Classes\Response::class)->json('error', 'Please verify or confirm your meter number before payment.', [], ['meter_number' => ['Confirm your meter number before payment.']], [], 422);
         }
     }
-    $db = db();
-    if ($db->columnExists('users', 'transaction_pin_hash')) {
-        $pinRow = $db->first('SELECT transaction_pin_hash FROM users WHERE id = :id LIMIT 1', ['id' => $user['id']]);
-        $pinHash = (string) ($pinRow['transaction_pin_hash'] ?? '');
-        if ($pinHash === '') {
-            app(\GemData\Classes\Response::class)->json('error', 'Set up your wallet PIN before making purchases.', [], ['security_pin' => ['Wallet PIN setup is required.']], [], 403);
-        }
-        if (!password_verify($pin, $pinHash)) {
-            app(\GemData\Classes\Response::class)->json('error', 'Invalid wallet PIN.', [], ['security_pin' => ['Invalid wallet PIN.']], [], 422);
-        }
-    } else {
-        app(\GemData\Classes\Response::class)->json('error', 'Wallet PIN protection is not configured.', [], ['security_pin' => ['Wallet PIN protection is required.']], [], 503);
+    if (!password_verify($pin, $pinHash)) {
+        app(\GemData\Classes\Response::class)->json('error', 'Invalid wallet PIN.', [], ['security_pin' => ['Invalid wallet PIN.']], [], 422);
     }
 
     $result = app(\GemData\Classes\TransactionService::class)->purchase($serviceSlug, (int) $user['id'], $payload, 'web', false);

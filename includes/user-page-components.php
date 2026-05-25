@@ -79,6 +79,8 @@ function render_service_shortcut_page(string $title, string $slug, string $copy)
 
 function render_purchase_form(string $slug, array $service, array $dashboard): void
 {
+    $user = $dashboard['user'] ?? [];
+    $pinConfigured = user_wallet_pin_configured((int) ($user['id'] ?? 0));
     $serviceNetworks = $dashboard['service_networks'] ?? [];
     $dataPlanCatalog = $dashboard['data_plan_catalog'] ?? [];
     $cablePlanCatalog = purchase_plan_catalog('cable_tv');
@@ -109,7 +111,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
             <?php render_purchase_provider_control('network', 'Network', $serviceNetworks['airtime'] ?? [], 'airtime-network', false); ?>
             <label>Phone Number <input name="phone" inputmode="tel" autocomplete="tel" placeholder="08030000000" required></label>
             <label>Amount <input name="amount" inputmode="decimal" placeholder="1000" required></label>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'data'): ?>
             <?php
             $dataProviders = purchase_provider_options(
@@ -158,7 +160,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
             <div class="purchase-summary-row"><span>Plan Price</span><strong data-plan-price-display>NGN 0</strong></div>
             <label>Recipient Phone Number <input name="phone" inputmode="tel" autocomplete="tel" placeholder="08012345678" required></label>
             <input type="hidden" name="amount" value="" data-plan-amount>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'electricity'): ?>
             <?php
             $electricityProviders = purchase_provider_options(
@@ -190,7 +192,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
                 <strong data-electricity-customer-name>Awaiting verification</strong>
             </div>
             <label>Amount <input name="amount" inputmode="decimal" placeholder="5000" required></label>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'cable_tv'): ?>
             <?php
             $providers = purchase_provider_options(
@@ -237,7 +239,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
                 </label>
                 <div class="purchase-empty-state">No cable TV packages available right now.</div>
             <?php endif; ?>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'exam_pin'): ?>
             <?php
             $examProviders = purchase_provider_options(
@@ -272,7 +274,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
                 <div class="purchase-empty-state">No exam PIN providers available right now.</div>
             <?php endif; ?>
             <label>Quantity <input name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" autocomplete="off" placeholder="1" required></label>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'bulk_sms'): ?>
             <?php $submitDisabled = !$bulkSmsPricingAvailable; ?>
             <div class="purchase-empty-state" data-bulk-sms-pricing-state<?= $bulkSmsPricingAvailable ? ' hidden' : ''; ?>>Bulk SMS pricing is unavailable right now.</div>
@@ -285,7 +287,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
                 <div><strong data-bulk-sms-cost><?= e(money(0)); ?></strong><span>Est. Cost</span></div>
             </div>
             <input type="hidden" name="amount" value="" data-bulk-sms-amount>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'recharge_card'): ?>
             <?php
             $rechargeNetworks = purchase_provider_options(
@@ -308,13 +310,13 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
             <label>Name on Card (Business Name) <input name="card_name" autocomplete="organization" placeholder="<?= e((string) ($dashboard['user']['business_name'] ?? $dashboard['user']['full_name'] ?? 'GemData')); ?>"></label>
             <div class="purchase-summary-row"><span>Total Cost</span><strong data-recharge-total><?= e(money(0)); ?></strong></div>
             <input type="hidden" name="amount" value="" data-recharge-amount>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'data_card'): ?>
             <?php render_purchase_provider_control('network', 'Network', $serviceNetworks['data_card'] ?? [], 'data-card-network', false); ?>
             <label>Plan <input name="plan" placeholder="Package or denomination" required></label>
             <label>Quantity <input name="quantity" inputmode="numeric" placeholder="5" required></label>
             <label>Amount <input name="amount" inputmode="decimal" placeholder="3000" required></label>
-            <?php render_security_pin_field(); ?>
+            <?php render_security_pin_field($pinConfigured); ?>
         <?php endif; ?>
 
         <button class="primary-action purchase-submit" type="submit" data-loading-label="Processing..."<?= $submitDisabled ? ' disabled aria-disabled="true"' : ''; ?>><?= e($submitLabel); ?></button>
@@ -579,8 +581,27 @@ function purchase_label_from_code(string $code): string
     };
 }
 
-function render_security_pin_field(): void
+function user_wallet_pin_configured(int $userId): bool
 {
+    if ($userId <= 0 || !db()->columnExists('users', 'transaction_pin_hash')) {
+        return false;
+    }
+
+    $row = db()->first('SELECT transaction_pin_hash FROM users WHERE id = :id LIMIT 1', ['id' => $userId]);
+    return trim((string) ($row['transaction_pin_hash'] ?? '')) !== '';
+}
+
+function render_security_pin_field(bool $pinConfigured): void
+{
+    if (!$pinConfigured) {
+        ?>
+        <div class="purchase-empty-state">
+            Set your Wallet PIN before making purchases.
+            <a class="font-bold text-gem-blue" href="<?= e(base_url('user/settings.php#security')); ?>">Open security settings</a>
+        </div>
+        <?php
+        return;
+    }
     ?>
     <label>Security PIN <input name="security_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Enter PIN"></label>
     <?php

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(20) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    transaction_pin_hash VARCHAR(255) NULL,
     status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
     tier ENUM('USER','RESELLER','AGENT','API_RESELLER') NOT NULL DEFAULT 'USER',
     referral_code VARCHAR(60) NULL,
