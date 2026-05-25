@@ -24,7 +24,7 @@ $config = [
         'provider_log_to_file' => true,
         'provider_log_file' => dirname(__DIR__) . '/storage/logs/provider.log',
         'required_extensions' => ['json', 'pdo_mysql'],
-        'maintenance_bypass_paths' => ['/admin/', '/api/xixapay.php'],
+        'maintenance_bypass_paths' => ['/admin/', '/api/xixapay.php', '/api/paystack.php'],
     ],
     'db' => [
         'host' => '127.0.0.1',
@@ -104,15 +104,15 @@ $config = [
     ],
     'webhooks' => [
         'shared_secret' => '',
-        'allowed_sources' => ['xixapay'],
+        'allowed_sources' => ['xixapay', 'paystack'],
     ],
     'security' => [
         'admin_2fa_enabled' => false,
         'email_verification_required_for_money_movement' => true,
     ],
     'payments' => [
-        'default_gateway' => 'xixapay',
-        'display_gateway_name' => 'XixaPay',
+        'default_gateway' => 'paystack',
+        'display_gateway_name' => 'Paystack',
         'auto_verify_mock_funding' => false,
         'xixapay_api_key' => '',
         'xixapay_api_secret' => '',
@@ -120,6 +120,10 @@ $config = [
         'xixapay_base_url' => 'https://api.xixapay.com',
         'xixapay_bank_codes' => ['20867'],
         'xixapay_webhook_url' => '/api/xixapay.php',
+        'paystack_secret_key' => '',
+        'paystack_preferred_bank' => 'titan-paystack',
+        'paystack_base_url' => 'https://api.paystack.co',
+        'paystack_webhook_url' => '/api/paystack.php',
     ],
     'mail' => [
         'driver' => 'log',

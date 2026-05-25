@@ -235,12 +235,12 @@ render_header('Dashboard', 'user');
                     <div class="flex items-center justify-between gap-3 mb-2.5">
                         <div>
                             <div class="text-[13px] font-bold text-white">Your Funding Account</div>
-                            <div class="text-[11px] text-blue-200">XixaPay bank transfer funding</div>
+                            <div class="text-[11px] text-blue-200">Bank transfer funding</div>
                         </div>
                         <?php if ($accountAssigned): ?>
                             <span class="bg-green-400/20 text-green-200 text-[11px] font-bold px-2.5 py-1 rounded-full">Active</span>
                         <?php else: ?>
-                            <span class="bg-amber-400/20 text-amber-100 text-[11px] font-bold px-2.5 py-1 rounded-full"><?= ($fundingAccount['status'] ?? '') === 'pending' ? 'Pending' : 'Unavailable'; ?></span>
+                            <span class="bg-amber-400/20 text-amber-100 text-[11px] font-bold px-2.5 py-1 rounded-full"><?= ($fundingAccount['status'] ?? '') === 'failed' ? 'Failed' : 'Pending'; ?></span>
                         <?php endif; ?>
                     </div>
                     <?php if ($accountAssigned): ?>
@@ -253,10 +253,10 @@ render_header('Dashboard', 'user');
                             <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($accountNumber); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Account Number</button>
                             <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($fullAccountCopy); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Full Details</button>
                         </div>
-                    <?php elseif (($fundingAccount['status'] ?? '') === 'pending' || !$fundingAccount): ?>
-                        <p class="text-[12px] text-blue-100">Generating your funding account...</p>
+                    <?php elseif (($fundingAccount['status'] ?? '') === 'failed'): ?>
+                        <p class="text-[12px] text-blue-100">We could not generate your funding account. Please contact support or try again.</p>
                     <?php else: ?>
-                        <p class="text-[12px] text-blue-100">Generating your funding account...</p>
+                        <p class="text-[12px] text-blue-100">We are preparing your funding account.</p>
                     <?php endif; ?>
                 </div>
             </div>

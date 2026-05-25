@@ -6,28 +6,56 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $user = require_user();
 $payments = app(\GemData\Classes\PaymentGatewayService::class);
-$xixaPay = app(\GemData\Classes\XixaPay::class);
+$fundingAccounts = app(\GemData\Classes\PaystackDedicatedAccountService::class);
 
 if (is_post()) {
-    http_response_code(400);
-    exit;
+    verify_csrf();
+    $action = (string) ($_POST['action'] ?? '');
+    if ($action !== 'generate_funding_account') {
+        http_response_code(400);
+        exit;
+    }
+
+    try {
+        $existing = $fundingAccounts->getForUser((int) $user['id']);
+        $account = $fundingAccounts->ensureAccountForUser(
+            (int) $user['id'],
+            !$existing || ($existing['status'] ?? '') !== 'assigned'
+        );
+        if (($account['status'] ?? '') === 'assigned') {
+            flash('success', 'Your funding account is ready.');
+        } elseif (($account['status'] ?? '') === 'pending') {
+            flash('success', 'We are preparing your funding account.');
+        } else {
+            flash('error', 'We could not generate your funding account. Please contact support or try again.');
+        }
+    } catch (Throwable $throwable) {
+        app_logger()->warning('Funding account generation failed.', [
+            'user_id' => $user['id'] ?? null,
+            'error' => $throwable->getMessage(),
+        ]);
+        flash('error', 'We could not generate your funding account. Please contact support or try again.');
+    }
+
+    redirect(base_url('user/fund-wallet.php'));
 }
 
 $recentFunding = $payments->userFundingRequests((int) $user['id']);
 $walletBalance = app(\GemData\Classes\Wallet::class)->balance((int) $user['id']);
-$account = $xixaPay->getForUser((int) $user['id']);
+$account = $fundingAccounts->getForUser((int) $user['id']);
 $status = (string) ($account['status'] ?? '');
 $accountNumber = (string) ($account['dedicated_account_number'] ?? '');
 $bankName = (string) ($account['bank_name'] ?? '');
 $accountName = (string) ($account['account_name'] ?? '');
 $fullDetails = trim($bankName . "\n" . $accountNumber . "\n" . $accountName);
+$accountAssigned = $status === 'assigned' && $accountNumber !== '';
 
 render_header('Fund Wallet', 'user');
 ?>
 <div class="space-y-6">
     <div class="stagger-1">
         <h1 class="text-2xl font-extrabold text-gem-text">Fund Wallet</h1>
-        <p class="text-[14px] text-gem-muted mt-0.5">Use your XixaPay funding account to add money to your wallet.</p>
+        <p class="text-[14px] text-gem-muted mt-0.5">Use your funding account to add money to your wallet.</p>
     </div>
 
     <?php if ($message = flash('success')): ?>
@@ -56,16 +84,16 @@ render_header('Fund Wallet', 'user');
             <div class="flex items-start justify-between gap-4 mb-4">
                 <div>
                     <h2 class="text-[16px] font-bold text-gem-text">Your Funding Account</h2>
-                    <p class="text-[13px] text-gem-muted mt-0.5">Transfer from any Nigerian bank to this XixaPay account.</p>
+                    <p class="text-[13px] text-gem-muted mt-0.5">Transfer from any Nigerian bank to this account.</p>
                 </div>
-                <?php if ($status === 'assigned'): ?>
+                <?php if ($accountAssigned): ?>
                     <span class="inline-flex items-center gap-1 bg-green-50 text-gem-green text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-gem-green"></span>Active</span>
                 <?php else: ?>
                     <span class="inline-flex items-center gap-1 bg-amber-50 text-amber-600 text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Not ready</span>
                 <?php endif; ?>
             </div>
 
-            <?php if ($status === 'assigned'): ?>
+            <?php if ($accountAssigned): ?>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="user-premium-card rounded-2xl bg-gem-gray border border-gem-border p-4">
                         <div class="text-[11px] text-gem-muted font-bold uppercase tracking-wider">Bank Name</div>
@@ -90,11 +118,18 @@ render_header('Fund Wallet', 'user');
                         Copy Full Details
                     </button>
                 </div>
-                <p class="text-[12px] text-gem-muted mt-4">Webhook wallet crediting remains disabled until the real XixaPay payload is reviewed.</p>
+                <p class="text-[12px] text-gem-muted mt-4">Webhook wallet crediting remains disabled until the real funding payload is reviewed.</p>
             <?php else: ?>
                 <div class="user-empty-state rounded-2xl bg-gem-gray border border-gem-border p-4 text-[13px] text-gem-muted">
-                    <?= $status === 'pending' ? 'Generating your funding account...' : 'Funding account temporarily unavailable. Please contact support.'; ?>
+                    <?= $status === 'failed' ? 'We could not generate your funding account. Please contact support or try again.' : 'We are preparing your funding account.'; ?>
                 </div>
+                <form method="post" class="mt-4">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                    <input type="hidden" name="action" value="generate_funding_account">
+                    <button class="inline-flex items-center gap-2 bg-gem-blue hover:bg-gem-blueDk text-white text-[13px] font-bold px-4 py-2.5 rounded-xl shadow-panel" type="submit">
+                        Generate Funding Account
+                    </button>
+                </form>
             <?php endif; ?>
         </section>
     </div>

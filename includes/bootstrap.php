@@ -74,6 +74,7 @@ use GemData\Classes\MailService;
 use GemData\Classes\MaintenanceService;
 use GemData\Classes\MockVtuProvider;
 use GemData\Classes\NotificationService;
+use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
 use GemData\Classes\XixaPay;
 use GemData\Classes\PricingService;
@@ -116,6 +117,7 @@ try {
     $wallet = new Wallet($database);
     $notifications = new NotificationService($database);
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger);
+    $paystackDva = new PaystackDedicatedAccountService($database, $activityLogger, $notifications);
     $commissionWallet = new CommissionWallet($database);
     $commission = new Commission($database, $commissionWallet);
     $xixaPay = new XixaPay($database, $activityLogger, $notifications);
@@ -149,6 +151,7 @@ try {
     register_service(Wallet::class, $wallet);
     register_service(NotificationService::class, $notifications);
     register_service(PaymentGatewayService::class, $payments);
+    register_service(PaystackDedicatedAccountService::class, $paystackDva);
     register_service(Commission::class, $commission);
     register_service(CommissionWallet::class, $commissionWallet);
     register_service(XixaPay::class, $xixaPay);
@@ -165,7 +168,7 @@ try {
     register_service(ApiCredentialService::class, $apiCredentials);
     register_service(ApiAuth::class, $apiAuth);
     register_service(ApiHandler::class, $apiHandler);
-    register_service(DashboardController::class, new DashboardController($database, $wallet, $xixaPay, $providerPlans, $userRoles));
+    register_service(DashboardController::class, new DashboardController($database, $wallet, $paystackDva, $providerPlans, $userRoles));
     register_service(UpgradeRequestService::class, new UpgradeRequestService($database, $userRoles));
 
     $maintenance->enforce();
@@ -291,6 +294,7 @@ function bootstrap_runtime_preflight(): void
         (
             trim((string) config('payments.xixapay_api_key', '')) !== ''
             || trim((string) config('payments.xixapay_api_secret', '')) !== ''
+            || trim((string) config('payments.paystack_secret_key', '')) !== ''
         )
         && !in_array('curl', $required, true)
     ) {

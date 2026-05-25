@@ -4,11 +4,39 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-require_permission('users.view');
+$admin = require_permission('users.view');
 $userId = (int) ($_GET['user_id'] ?? 0);
 $user = db()->first('SELECT u.*, w.balance FROM users u LEFT JOIN wallets w ON w.user_id = u.id WHERE u.id = :id', ['id' => $userId]);
 if (!$user) {
     redirect(base_url('admin/users.php'));
+}
+
+$fundingAccounts = app(\GemData\Classes\PaystackDedicatedAccountService::class);
+if (is_post()) {
+    verify_csrf();
+    $action = (string) ($_POST['action'] ?? '');
+    if ($action === 'generate_funding_account') {
+        require_permission('users.manage');
+        try {
+            $account = $fundingAccounts->ensureAccountForUser($userId, true, (int) $admin['id']);
+            if (($account['status'] ?? '') === 'assigned') {
+                flash('success', 'Funding account is assigned.');
+            } elseif (($account['status'] ?? '') === 'pending') {
+                flash('success', 'Funding account assignment has been requested.');
+            } else {
+                flash('error', 'Funding account generation failed. Review the safe status below.');
+            }
+        } catch (Throwable $throwable) {
+            app_logger()->warning('Admin funding account generation failed.', [
+                'admin_id' => $admin['id'] ?? null,
+                'user_id' => $userId,
+                'error' => $throwable->getMessage(),
+            ]);
+            flash('error', 'Funding account generation failed. Review configuration and schema readiness.');
+        }
+
+        redirect(base_url('admin/user-detail.php?user_id=' . $userId));
+    }
 }
 
 $transactions = db()->query(
@@ -22,6 +50,9 @@ $transactions = db()->query(
 $walletRows = db()->query('SELECT * FROM wallet_transactions WHERE user_id = :user_id ORDER BY id DESC LIMIT 20', ['user_id' => $userId]);
 $activity = db()->query('SELECT * FROM activity_logs WHERE actor_id = :actor_id AND actor_type = "user" ORDER BY id DESC LIMIT 20', ['actor_id' => $userId]);
 $apiUser = db()->first('SELECT au.*, ak.api_key, ak.status AS key_status FROM api_users au LEFT JOIN api_keys ak ON ak.api_user_id = au.id WHERE au.user_id = :user_id LIMIT 1', ['user_id' => $userId]);
+$fundingAccount = $fundingAccounts->getForUser($userId);
+$fundingStatus = (string) ($fundingAccount['status'] ?? 'pending');
+$fundingAssigned = $fundingStatus === 'assigned' && trim((string) ($fundingAccount['dedicated_account_number'] ?? '')) !== '';
 $customPrices = db()->query(
     'SELECT ucp.*, s.name AS service_name
      FROM user_custom_prices ucp
@@ -49,6 +80,9 @@ render_header('User Detail', 'admin');
         </div>
     </section>
 
+    <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($message = flash('error')): ?><div class="notice notice-error"><?= e($message); ?></div><?php endif; ?>
+
     <div class="grid gap-6 xl:grid-cols-2">
         <section class="surface-card p-6">
             <h2 class="text-2xl font-black text-white">API & Pricing Summary</h2>
@@ -61,6 +95,28 @@ render_header('User Detail', 'admin');
                 <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4">
                     <p class="text-sm text-slate-400">Referral Code</p>
                     <p class="mt-1 text-white"><?= e($user['referral_code'] ?: '-'); ?></p>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm text-slate-400">Funding Account</p>
+                            <p class="mt-1 text-white"><?= e($fundingAssigned ? 'assigned' : $fundingStatus); ?></p>
+                            <?php if ($fundingAssigned): ?>
+                                <p class="mt-1 text-xs text-slate-400"><?= e((string) ($fundingAccount['bank_name'] ?? '')); ?> / <?= e((string) ($fundingAccount['dedicated_account_number'] ?? '')); ?></p>
+                            <?php elseif ($fundingStatus === 'failed'): ?>
+                                <p class="mt-1 text-xs text-slate-400"><?= e((string) ($fundingAccount['last_error_message'] ?? 'Generation failed.')); ?></p>
+                            <?php else: ?>
+                                <p class="mt-1 text-xs text-slate-400">Paystack assignment is pending or not requested yet.</p>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (admin_can('users.manage')): ?>
+                            <form method="post">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                <input type="hidden" name="action" value="generate_funding_account">
+                                <button class="secondary-action inline-flex items-center justify-center px-3 py-2 text-sm" type="submit">Retrieve/Generate Funding Account</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <div class="table-shell mt-5">

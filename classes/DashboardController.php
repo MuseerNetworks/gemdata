@@ -9,7 +9,7 @@ class DashboardController
     public function __construct(
         private Database $db,
         private Wallet $wallet,
-        private XixaPay $xixaPay,
+        private PaystackDedicatedAccountService $paystackAccounts,
         private ProviderPlanService $providerPlans,
         private UserRoleManager $roles
     ) {
@@ -20,7 +20,7 @@ class DashboardController
         $userId = (int) $user['id'];
         $role = $this->roles->roleFor($user);
         $wallet = $this->wallet->ensure($userId);
-        $fundingAccount = $this->xixaPay->getForUser($userId);
+        $fundingAccount = $this->paystackAccounts->getForUser($userId);
         $services = $this->services();
         $recentTransactions = $this->recentTransactions($userId);
 
