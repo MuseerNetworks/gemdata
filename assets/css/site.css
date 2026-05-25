@@ -3893,6 +3893,72 @@ body.purchase-modal-open {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.admin-actions-cell {
+    min-width: 18rem;
+    max-width: 100%;
+    vertical-align: top;
+}
+
+.admin-user-action-links {
+    align-items: center;
+    max-width: 100%;
+}
+
+.admin-user-action-links .secondary-action {
+    min-width: 0;
+    white-space: normal;
+}
+
+.admin-inline-drawer .admin-manage-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr));
+    align-items: stretch;
+    max-width: 100%;
+}
+
+.admin-inline-drawer .admin-manage-card {
+    min-width: 0;
+    max-width: 100%;
+    gap: 0.85rem;
+    padding: 1rem;
+    border-radius: 0.9rem;
+    background: var(--bg-surface);
+    border-color: var(--border-color);
+    overflow: hidden;
+}
+
+.admin-inline-drawer .admin-manage-card h3,
+.admin-inline-drawer .admin-manage-card p {
+    overflow-wrap: anywhere;
+}
+
+.admin-inline-drawer .admin-action-form {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-inline-drawer .admin-action-form input,
+.admin-inline-drawer .admin-action-form select,
+.admin-inline-drawer .admin-action-form button,
+.admin-inline-drawer .admin-manage-card .action-button {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.admin-inline-drawer .admin-manage-card .action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    text-align: center;
+}
+
 .admin-action-group {
     display: grid;
     gap: 0.75rem;
@@ -3940,6 +4006,153 @@ body.purchase-modal-open {
     background: color-mix(in srgb, #ef4444 12%, var(--bg-surface));
     color: #991b1b;
     border-color: rgba(239, 68, 68, 0.2);
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell {
+    background-color: var(--gd-bg) !important;
+    background-image:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--gd-primary) 10%, transparent), transparent 28%),
+        radial-gradient(circle at right, color-mix(in srgb, #00c6ae 10%, transparent), transparent 24%),
+        var(--gd-layer) !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-section,
+body[data-app-section="guest"][data-page-key="landing"] main > section {
+    padding-top: 2.25rem !important;
+    padding-bottom: 2.25rem !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero {
+    padding-top: 3rem !important;
+    padding-bottom: 4rem !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-title {
+    font-size: clamp(1.85rem, 1.28rem + 2.1vw, 3.15rem) !important;
+    line-height: 1.14 !important;
+    letter-spacing: 0 !important;
+    text-wrap: balance;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-copy {
+    line-height: 1.68 !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card {
+    background: #ffffff !important;
+    border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    color: #0f172a !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card p {
+    color: #0f172a !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card .text-slate-500 {
+    color: #64748b !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-price {
+    background: #eef2ff !important;
+    color: #1b4dff !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button {
+    border: 0 !important;
+    color: #0f172a !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button-primary {
+    background: #e2e8f0 !important;
+}
+
+body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button-secondary {
+    background: #eef2ff !important;
+    color: #1b4dff !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"],
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell {
+    background-color: #070d1a !important;
+    background-image:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%),
+        radial-gradient(circle at right, rgba(20, 184, 166, 0.12), transparent 26%),
+        linear-gradient(180deg, #070d1a 0%, #0b1220 55%, #0f172a 100%) !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] header,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] footer,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] [data-public-nav-panel] {
+    background: rgba(15, 23, 42, 0.94) !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell article,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .rounded-3xl.bg-white\/80,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .rounded-\[2rem\].bg-white\/80,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .rounded-\[2rem\].bg-white\/85,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .rounded-3xl.bg-slate-50,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .rounded-\[2rem\].bg-white\/85 {
+    background: rgba(15, 23, 42, 0.92) !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-shell .gd-landing-device .bg-white {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-secondary {
+    background: rgba(15, 23, 42, 0.78) !important;
+    border-color: rgba(148, 163, 184, 0.28) !important;
+    color: #e5edf8 !important;
+    box-shadow: none !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-secondary:hover {
+    background: rgba(30, 41, 59, 0.88) !important;
+    border-color: rgba(148, 163, 184, 0.42) !important;
+    color: #ffffff !important;
+}
+
+
+@media (max-width: 767px) {
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-section,
+    body[data-app-section="guest"][data-page-key="landing"] main > section {
+        padding-top: 1.75rem !important;
+        padding-bottom: 1.75rem !important;
+    }
+
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero {
+        padding-top: 2rem !important;
+        padding-bottom: 2.5rem !important;
+    }
+
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-title {
+        font-size: clamp(1.45rem, 1.25rem + 1vw, 1.75rem) !important;
+        line-height: 1.18 !important;
+    }
+
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-copy {
+        margin-top: 1.15rem !important;
+        font-size: 1rem !important;
+        line-height: 1.62 !important;
+    }
+
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-actions {
+        margin-top: 1.35rem !important;
+        gap: 0.75rem !important;
+    }
+
+    body[data-app-section="guest"][data-page-key="landing"] .gd-landing-hero-actions a {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.82rem !important;
+    }
+
+    .admin-inline-drawer .admin-manage-grid {
+        grid-template-columns: 1fr;
+        padding: 0.85rem;
+    }
 }
 
 .pagination-shell {
@@ -5100,6 +5313,39 @@ body[data-app-section] .gd-landing-device .bg-white h3,
 body[data-app-section] .gd-landing-device .bg-white p,
 body[data-app-section] .gd-landing-device .bg-white .text-slate-900 {
     color: #0f172a !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card {
+    background: rgba(15, 23, 42, 0.96) !important;
+    border: 1px solid rgba(148, 163, 184, 0.18) !important;
+    color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card p,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card .text-slate-500,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card .text-slate-900 {
+    color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-card p.font-bold {
+    color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-price {
+    background: rgba(124, 58, 237, 0.22) !important;
+    color: #ddd6fe !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button,
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button-primary {
+    background: linear-gradient(135deg, #1b4dff 0%, #00a99a 100%) !important;
+    color: #e5edf8 !important;
+}
+
+html[data-theme="dark"] body[data-app-section="guest"][data-page-key="landing"] .gd-landing-device .gd-landing-quick-button-secondary {
+    background: rgba(37, 99, 235, 0.18) !important;
+    border: 1px solid rgba(147, 197, 253, 0.24) !important;
+    color: #bfdbfe !important;
 }
 
 body[data-app-section="guest"] .gd-download-banner {

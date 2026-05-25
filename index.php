@@ -159,18 +159,18 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : (strin
         </header>
 
         <main>
-            <section id="home" class="mx-auto max-w-7xl px-4 pb-20 pt-12 sm:px-6 lg:px-8 lg:pb-28 lg:pt-20">
+            <section id="home" class="gd-landing-section gd-landing-hero mx-auto max-w-7xl px-4 pb-20 pt-12 sm:px-6 lg:px-8 lg:pb-28 lg:pt-20">
                 <div class="grid items-center gap-12 lg:grid-cols-[1.05fr,0.95fr]">
                     <div>
                         <span class="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-gem-700">Nigeria-ready VTU platform</span>
-                        <h1 class="mt-6 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">Fast, secure, and repeat-friendly VTU for everyday users and resellers.</h1>
-                        <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+                        <h1 class="gd-landing-hero-title mt-6 max-w-3xl font-black tracking-tight text-slate-950">Fast, secure, and repeat-friendly VTU for everyday users and resellers.</h1>
+                        <p class="gd-landing-hero-copy mt-6 max-w-2xl text-lg leading-8 text-slate-600">
                             Sell SME data, airtime, electricity, cable TV, exam PINs, and developer API services from one polished GemData Workspace built to feel trustworthy at every step.
                         </p>
-                        <div class="mt-8 flex flex-wrap gap-4">
-                            <a class="rounded-full bg-gem-600 px-6 py-3.5 text-sm font-bold text-white shadow-float transition hover:bg-gem-700" href="<?= e(base_url('user/register.php')); ?>">Get Started</a>
-                            <a class="rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-soft transition hover:border-slate-400" href="<?= e(base_url('user/login.php')); ?>">Login</a>
-                            <a class="rounded-full border border-gem-100 bg-gem-50 px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-white" href="#download">Download App</a>
+                        <div class="gd-landing-hero-actions mt-8 flex flex-wrap gap-4">
+                            <a class="gd-landing-hero-primary rounded-full bg-gem-600 px-6 py-3.5 text-sm font-bold text-white shadow-float transition hover:bg-gem-700" href="<?= e(base_url('user/register.php')); ?>">Get Started</a>
+                            <a class="gd-landing-hero-secondary rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-soft transition hover:border-slate-400" href="<?= e(base_url('user/login.php')); ?>">Login</a>
+                            <a class="gd-landing-hero-secondary rounded-full border border-gem-100 bg-gem-50 px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-white" href="#download">Download App</a>
                         </div>
                         <div class="mt-10 grid gap-4 sm:grid-cols-3">
                             <div class="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-soft">
@@ -219,17 +219,17 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : (strin
                                         <p class="mt-2 text-lg font-bold">Ready</p>
                                     </div>
                                 </div>
-                                <div class="mt-6 rounded-3xl bg-white p-4 text-slate-900">
+                                <div class="gd-landing-quick-card mt-6 rounded-3xl p-4">
                                     <div class="flex items-center justify-between">
                                         <div>
                                             <p class="text-sm font-bold">Quick Purchase</p>
                                             <p class="mt-1 text-xs text-slate-500">MTN 1GB SME</p>
                                         </div>
-                                        <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-gem-700">NGN 620</span>
+                                        <span class="gd-landing-quick-price rounded-full px-3 py-1 text-xs font-bold">NGN 620</span>
                                     </div>
                                     <div class="mt-4 grid grid-cols-2 gap-3">
-                                        <button class="rounded-2xl bg-slate-100 px-4 py-3 text-left text-sm font-semibold">Buy Airtime</button>
-                                        <button class="rounded-2xl bg-gem-50 px-4 py-3 text-left text-sm font-semibold text-gem-700">Fund Wallet</button>
+                                        <button class="gd-landing-quick-button gd-landing-quick-button-primary rounded-2xl px-4 py-3 text-left text-sm font-semibold">Buy Airtime</button>
+                                        <button class="gd-landing-quick-button gd-landing-quick-button-secondary rounded-2xl px-4 py-3 text-left text-sm font-semibold">Fund Wallet</button>
                                     </div>
                                 </div>
                             </div>
