@@ -85,8 +85,9 @@ class ProviderManager
                     'attempt_number' => $attemptNumber,
                     'response_time_ms' => $responseTimeMs,
                 ];
-                $this->recordProviderAttempt((int) ($payload['transaction_id'] ?? 0), $provider, $routingSetting, $attemptNumber, $response['status'], (string) ($payload['reference'] ?? ''), $response['provider_reference'] ?? null, $responseTimeMs, null, $response);
-                $this->updateProviderOutcome($provider, $response['status'], null);
+                $attemptError = $this->providerAttemptErrorMessage($response);
+                $this->recordProviderAttempt((int) ($payload['transaction_id'] ?? 0), $provider, $routingSetting, $attemptNumber, $response['status'], (string) ($payload['reference'] ?? ''), $response['provider_reference'] ?? null, $responseTimeMs, $attemptError, $response);
+                $this->updateProviderOutcome($provider, $response['status'], $attemptError);
 
                 $fallbackAllowed = !empty($routingSetting['fallback_enabled']) && (int) $provider['supports_fallback'] === 1;
                 if (in_array(($response['status'] ?? 'failed'), ['successful', 'pending'], true) || !$fallbackAllowed) {
@@ -364,6 +365,26 @@ class ProviderManager
         }
 
         $normalizedStatus = in_array($status, ['pending', 'processing', 'successful', 'failed', 'skipped'], true) ? $status : 'failed';
+        $safeMeta = $this->redactProviderMeta($meta);
+        $rawMeta = is_array($safeMeta['raw'] ?? null) ? $safeMeta['raw'] : [];
+        $requestMeta = is_array($rawMeta['request'] ?? null)
+            ? $rawMeta['request']
+            : (is_array($safeMeta['request'] ?? null) ? $safeMeta['request'] : null);
+        $responseMeta = is_array($rawMeta['response'] ?? null)
+            ? $rawMeta['response']
+            : (is_array($safeMeta['response'] ?? null) ? $safeMeta['response'] : null);
+        if ($responseMeta === null && $rawMeta !== []) {
+            $responseMeta = [
+                'http_code' => $rawMeta['http_code'] ?? null,
+                'curl_errno' => $rawMeta['curl_errno'] ?? null,
+                'curl_error' => $rawMeta['curl_error'] ?? null,
+                'latency_ms' => $rawMeta['latency_ms'] ?? null,
+                'json' => $rawMeta['json'] ?? null,
+                'body' => $rawMeta['body'] ?? null,
+                'message' => $rawMeta['message'] ?? null,
+            ];
+        }
+
         $this->db->safeExecute(
             'INSERT IGNORE INTO provider_transaction_attempts (
                 transaction_id, provider_account_id, provider_code, routing_mode, attempt_number,
@@ -387,10 +408,45 @@ class ProviderManager
                     'fallback_enabled' => !empty($routingSetting['fallback_enabled']),
                     'minimum_success_rate' => (float) ($routingSetting['minimum_success_rate'] ?? 80),
                     'sandbox' => !empty($provider['sandbox_mode']),
-                    'response' => $this->redactProviderMeta($meta),
-                ]),
+                    'request' => $requestMeta,
+                    'response' => $responseMeta,
+                    'provider_result' => $safeMeta,
+                ], JSON_UNESCAPED_SLASHES),
             ]
         );
+    }
+
+    private function providerAttemptErrorMessage(array $response): ?string
+    {
+        $status = strtolower((string) ($response['status'] ?? ''));
+        if (in_array($status, ['successful', 'pending', 'processing'], true)) {
+            return null;
+        }
+
+        $raw = is_array($response['raw'] ?? null) ? $response['raw'] : [];
+        $request = is_array($raw['request'] ?? null) ? $raw['request'] : [];
+        $method = strtoupper((string) ($request['method'] ?? ''));
+        $url = (string) ($request['url'] ?? '');
+        $httpCode = (int) ($raw['http_code'] ?? ($raw['response']['http_code'] ?? 0));
+        $curlError = trim((string) ($raw['curl_error'] ?? ($raw['response']['curl_error'] ?? '')));
+        $message = trim((string) ($raw['message'] ?? 'Provider returned failed status.'));
+
+        $parts = [];
+        if ($httpCode > 0) {
+            $parts[] = 'HTTP ' . $httpCode;
+        }
+        if ($method !== '') {
+            $parts[] = $method;
+        }
+        if ($url !== '') {
+            $parts[] = $url;
+        }
+
+        $prefix = trim(implode(' ', $parts));
+        $detail = $curlError !== '' ? $curlError : $message;
+        $error = $prefix !== '' ? $prefix . ': ' . $detail : $detail;
+
+        return substr($this->logger->sanitizeProviderMeta(['error' => $error], 255)['error'], 0, 255);
     }
 
     private function updateProviderOutcome(array $provider, string $status, ?string $errorMessage): void
@@ -492,17 +548,7 @@ class ProviderManager
 
     private function redactProviderMeta(array $meta): array
     {
-        foreach (['api_key', 'api_secret', 'secret', 'password', 'token', 'authorization'] as $key) {
-            if (array_key_exists($key, $meta)) {
-                $meta[$key] = '[redacted]';
-            }
-        }
-
-        if (isset($meta['raw']) && is_array($meta['raw'])) {
-            $meta['raw'] = $this->redactProviderMeta($meta['raw']);
-        }
-
-        return $meta;
+        return $this->logger->sanitizeProviderMeta($meta);
     }
 
     private function driver(array $provider): VtuProviderInterface

@@ -274,6 +274,7 @@ class AlbaniProvider extends AbstractProviderAdapter
                 && $httpCode < 300
                 && is_array($decoded);
 
+            $responseBodySnippet = is_string($responseBody) ? substr($responseBody, 0, 4000) : null;
             $lastResult = [
                 'ok' => $ok,
                 'transient' => $transient,
@@ -282,10 +283,25 @@ class AlbaniProvider extends AbstractProviderAdapter
                 'curl_error' => $curlError !== '' ? $curlError : null,
                 'latency_ms' => $latencyMs,
                 'json' => $decoded,
-                'body' => is_string($responseBody) ? substr($responseBody, 0, 4000) : null,
+                'body' => $responseBodySnippet,
                 'message' => $ok
                     ? 'Provider request completed.'
                     : ($curlError !== '' ? 'Provider request failed at transport layer.' : 'Provider returned an invalid or unsuccessful response.'),
+                'request' => [
+                    'method' => $method,
+                    'path' => $path,
+                    'url' => $url,
+                    'payload' => $this->logger->sanitizeProviderMeta($payload),
+                ],
+                'response' => [
+                    'http_code' => $httpCode,
+                    'curl_errno' => $curlErrno,
+                    'curl_error' => $curlError !== '' ? $curlError : null,
+                    'latency_ms' => $latencyMs,
+                    'transient' => $transient,
+                    'json' => is_array($decoded) ? $this->logger->sanitizeProviderMeta($decoded) : null,
+                    'body' => $responseBodySnippet !== null ? $this->logger->sanitizeProviderMeta(['body' => $responseBodySnippet])['body'] : null,
+                ],
             ];
 
             $this->logProviderRequest($operation, $method, $path, $payload, $lastResult, $attempt);
@@ -326,13 +342,14 @@ class AlbaniProvider extends AbstractProviderAdapter
                 'attempt' => $attempt,
                 'method' => $method,
                 'path' => $path,
-                'request' => $payload,
+                'url' => (string) ($result['request']['url'] ?? ''),
+                'request' => $this->logger->sanitizeProviderMeta($payload),
                 'http_code' => $result['http_code'] ?? 0,
                 'latency_ms' => $result['latency_ms'] ?? 0,
                 'curl_errno' => $result['curl_errno'] ?? 0,
                 'curl_error' => $result['curl_error'] ?? null,
                 'status' => $result['ok'] ?? false ? 'successful' : (($result['transient'] ?? false) ? 'pending' : 'failed'),
-                'response' => $result['json'] ?? ['body' => $result['body'] ?? null],
+                'response' => $result['response'] ?? ($result['json'] ?? ['body' => $result['body'] ?? null]),
             ]
         );
     }
