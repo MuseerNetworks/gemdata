@@ -83,6 +83,50 @@ try {
 } catch (InvalidArgumentException $exception) {
     app(\GemData\Classes\Response::class)->json('error', 'Validation failed.', [], json_decode((string) $exception->getMessage(), true) ?: [], [], 422);
 } catch (Throwable $throwable) {
+    $logger = app(\GemData\Classes\AppLogger::class);
+    $redactDiagnosticString = static function (string $value): string {
+        $value = preg_replace('/\b(\d{3})\d{5,10}(\d{2})\b/', '$1[REDACTED]$2', $value) ?? $value;
+        $value = preg_replace('/(pin|password|secret|token|api[_-]?key|authorization)\s*[:=]\s*([^\s,"\']+)/i', '$1=[REDACTED]', $value) ?? $value;
+
+        return substr($value, 0, 500);
+    };
+
+    $projectRoot = dirname(__DIR__);
+    $safeTrace = [];
+    foreach (array_slice($throwable->getTrace(), 0, 3) as $frame) {
+        $frameFile = isset($frame['file']) ? str_replace('\\', '/', (string) $frame['file']) : '';
+        $root = str_replace('\\', '/', $projectRoot);
+        if ($frameFile !== '' && str_starts_with($frameFile, $root)) {
+            $frameFile = ltrim(substr($frameFile, strlen($root)), '/');
+        } elseif ($frameFile !== '') {
+            $frameFile = basename($frameFile);
+        }
+
+        $safeTrace[] = [
+            'file' => $frameFile,
+            'line' => isset($frame['line']) ? (int) $frame['line'] : null,
+            'class' => (string) ($frame['class'] ?? ''),
+            'function' => (string) ($frame['function'] ?? ''),
+        ];
+    }
+
+    $logger->writeToFile((string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'), 'error', 'Purchase submit failed before transaction queue.', [
+        'action' => 'purchase_submit',
+        'exception_class' => get_class($throwable),
+        'exception_message' => $redactDiagnosticString($throwable->getMessage()),
+        'user_id' => (int) ($user['id'] ?? 0),
+        'service_slug' => $serviceSlug,
+        'network_slug' => $redactDiagnosticString((string) ($payload['network'] ?? $payload['provider'] ?? $payload['disco'] ?? '')),
+        'amount' => isset($payload['amount']) ? $redactDiagnosticString((string) $payload['amount']) : null,
+        'plan_id' => isset($payload['plan_id']) || isset($payload['plan'])
+            ? $redactDiagnosticString((string) ($payload['plan_id'] ?? $payload['plan'] ?? ''))
+            : null,
+        'has_transaction_pin_hash' => isset($pinHash) && trim((string) $pinHash) !== '',
+        'security_pin_present' => trim((string) ($payload['security_pin'] ?? $payload['wallet_pin'] ?? '')) !== '',
+        'request_reference' => $redactDiagnosticString((string) ($payload['reference'] ?? $payload['request_id'] ?? $payload['idempotency_key'] ?? '')),
+        'trace' => $safeTrace,
+    ]);
+
     $rawMessage = strtolower($throwable->getMessage());
     $message = str_contains($rawMessage, 'insufficient')
         ? 'Insufficient wallet balance. Please fund your wallet and try again.'
