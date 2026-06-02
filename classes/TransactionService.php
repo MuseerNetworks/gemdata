@@ -399,7 +399,7 @@ class TransactionService
                 return ['processed' => false, 'status' => $transaction['status'] ?? 'unknown'];
             }
 
-            $service = $this->db->first('SELECT slug, name FROM services WHERE id = :id LIMIT 1', ['id' => $transaction['service_id']]);
+            $service = $this->db->first('SELECT id, slug, name, is_enabled FROM services WHERE id = :id LIMIT 1', ['id' => $transaction['service_id']]);
             if (!$service) {
                 throw new RuntimeException('Service record missing for transaction.');
             }
@@ -426,11 +426,33 @@ class TransactionService
                 'service_id' => (int) $transaction['service_id'],
             ]));
         } catch (Throwable $throwable) {
+            $diagnostic = $this->preAttemptFailureDiagnostic($transaction, $service, $payload, $throwable);
+            $this->event(
+                $transactionId,
+                'transaction_provider_selection_failed',
+                'system',
+                null,
+                (string) ($diagnostic['reason'] ?? 'Provider selection failed before any provider attempt.'),
+                $diagnostic
+            );
+            $this->providerLogger()->writeToFile(
+                (string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'),
+                'warning',
+                'Pending transaction failed before provider attempt.',
+                $diagnostic
+            );
+
             $providerResponse = [
                 'status' => 'failed',
                 'provider_reference' => null,
-                'raw' => ['message' => $throwable->getMessage()],
+                'raw' => [
+                    'message' => (string) ($diagnostic['reason'] ?? $throwable->getMessage()),
+                    'diagnostic' => $diagnostic,
+                ],
                 'attempts' => [],
+                'pre_attempt_failure' => true,
+                'failure_reason' => (string) ($diagnostic['reason'] ?? 'Provider selection failed before any provider attempt.'),
+                'failure_diagnostic' => $diagnostic,
             ];
         }
 
@@ -501,7 +523,7 @@ class TransactionService
                     'provider_code' => $providerAccount['code'] ?? null,
                     'status' => $status,
                     'commission_amount' => $commissionAmount,
-                    'response_json' => json_encode($providerResponse),
+                    'response_json' => json_encode($this->safeProviderMeta($providerResponse), JSON_UNESCAPED_SLASHES),
                     'processing_started_at' => $status === 'pending' ? date('Y-m-d H:i:s') : null,
                     'processed_at' => $status === 'pending' ? null : date('Y-m-d H:i:s'),
                     'failure_code' => match ($status) {
@@ -513,9 +535,14 @@ class TransactionService
                 ]
             );
 
-            $this->event($transactionId, 'transaction_' . $status, ($locked['channel'] ?? 'web') === 'api' ? 'api' : 'system', (int) $locked['user_id'], "{$service['name']} transaction {$status}.", [
-                'provider_reference' => $providerResponse['provider_reference'] ?? null,
-            ]);
+            $finalMeta = ['provider_reference' => $providerResponse['provider_reference'] ?? null];
+            if ($status === 'failed' && !empty($providerResponse['failure_diagnostic']) && is_array($providerResponse['failure_diagnostic'])) {
+                $finalMeta['diagnostic'] = $providerResponse['failure_diagnostic'];
+            }
+            $finalNote = $status === 'failed' && !empty($providerResponse['failure_reason'])
+                ? (string) $providerResponse['failure_reason']
+                : "{$service['name']} transaction {$status}.";
+            $this->event($transactionId, 'transaction_' . $status, ($locked['channel'] ?? 'web') === 'api' ? 'api' : 'system', (int) $locked['user_id'], $finalNote, $finalMeta);
             $this->db->commit();
 
             $this->logger->log(($locked['channel'] ?? 'web') === 'api' ? 'api' : 'user', (int) $locked['user_id'], 'transaction_' . $status, "{$service['name']} transaction {$status}", ['reference' => $locked['reference']]);
@@ -977,6 +1004,84 @@ class TransactionService
         }
     }
 
+    private function preAttemptFailureDiagnostic(array $transaction, array $service, array $payload, Throwable $throwable): array
+    {
+        $providerDiagnostic = $throwable instanceof ProviderSelectionException ? $throwable->diagnostic() : [];
+        $network = strtolower(trim((string) ($payload['network'] ?? $payload['provider'] ?? $payload['disco'] ?? '')));
+        $routing = $this->providers->routingSetting((string) ($service['slug'] ?? ''));
+        $networkState = null;
+        if ($network !== '' && !empty($service['id'])) {
+            $networkState = $this->db->first(
+                'SELECT network_code, network_name, is_enabled FROM service_networks WHERE service_id = :service_id AND network_code = :network_code LIMIT 1',
+                ['service_id' => (int) $service['id'], 'network_code' => $this->pricing->normalizeNetwork($network)]
+            );
+        }
+        $reason = trim((string) ($providerDiagnostic['reason'] ?? $throwable->getMessage()));
+        if ($reason === '') {
+            $reason = 'Provider selection failed before any provider attempt.';
+        }
+
+        return $this->safeProviderMeta([
+            'reason' => $reason,
+            'reason_code' => (string) ($providerDiagnostic['reason_code'] ?? 'provider_exception_before_attempt'),
+            'transaction_id' => (int) ($transaction['id'] ?? 0),
+            'reference' => (string) ($transaction['reference'] ?? ''),
+            'service_type' => (string) ($service['slug'] ?? ''),
+            'service_name' => (string) ($service['name'] ?? ''),
+            'service_enabled' => array_key_exists('is_enabled', $service) ? (int) $service['is_enabled'] === 1 : null,
+            'network' => $network,
+            'network_enabled' => is_array($networkState) ? (int) ($networkState['is_enabled'] ?? 0) === 1 : null,
+            'amount' => (float) ($transaction['amount'] ?? $payload['amount'] ?? 0),
+            'routing_mode' => (string) ($providerDiagnostic['routing_mode'] ?? $routing['routing_mode'] ?? 'priority'),
+            'manual_provider_account_id' => $providerDiagnostic['manual_provider_account_id'] ?? ($routing['manual_provider_account_id'] ?? null),
+            'selected_provider' => $providerDiagnostic['selected_provider'] ?? null,
+            'exception' => [
+                'class' => get_class($throwable),
+                'message' => $throwable->getMessage(),
+                'file' => $this->safeTraceFile($throwable->getFile()),
+                'line' => $throwable->getLine(),
+            ],
+            'trace' => $this->safeThrowableTrace($throwable),
+            'provider_selection' => $providerDiagnostic,
+        ]);
+    }
+
+    private function safeThrowableTrace(Throwable $throwable): array
+    {
+        $trace = [];
+        foreach (array_slice($throwable->getTrace(), 0, 5) as $frame) {
+            $trace[] = [
+                'file' => isset($frame['file']) ? $this->safeTraceFile((string) $frame['file']) : '',
+                'line' => isset($frame['line']) ? (int) $frame['line'] : null,
+                'class' => (string) ($frame['class'] ?? ''),
+                'function' => (string) ($frame['function'] ?? ''),
+            ];
+        }
+
+        return $trace;
+    }
+
+    private function safeTraceFile(string $file): string
+    {
+        $root = str_replace('\\', '/', dirname(__DIR__));
+        $normalized = str_replace('\\', '/', $file);
+        if (str_starts_with($normalized, $root)) {
+            return ltrim(substr($normalized, strlen($root)), '/');
+        }
+
+        return basename($normalized);
+    }
+
+    private function safeProviderMeta(array $meta): array
+    {
+        return $this->providerLogger()->sanitizeProviderMeta($meta);
+    }
+
+    private function providerLogger(): AppLogger
+    {
+        return app(AppLogger::class);
+    }
+
     private function event(int $transactionId, string $type, string $actorType, ?int $actorId, string $notes, array $meta = []): void
     {
         $this->db->execute(
@@ -988,7 +1093,7 @@ class TransactionService
                 'actor_type' => $actorType,
                 'actor_id' => $actorId,
                 'notes' => $notes,
-                'meta_json' => $meta === [] ? null : json_encode($meta),
+                'meta_json' => $meta === [] ? null : json_encode($this->safeProviderMeta($meta), JSON_UNESCAPED_SLASHES),
             ]
         );
     }

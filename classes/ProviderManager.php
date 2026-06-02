@@ -60,11 +60,13 @@ class ProviderManager
             throw new RuntimeException('Provider request reference is required for idempotent fulfillment.');
         }
 
-        $routing = $this->router->route($serviceSlug, $payload, $this->supportedProviders($serviceSlug));
+        $supportedProviders = $this->supportedProviders($serviceSlug);
+        $routing = $this->router->route($serviceSlug, $payload, $supportedProviders);
         $providers = $routing['providers'];
         $routingSetting = $routing['setting'];
         if ($providers === []) {
-            throw new RuntimeException('No enabled provider is mapped for this service.');
+            $diagnostic = $this->providerSelectionDiagnostic($serviceSlug, $payload, $routingSetting, $supportedProviders);
+            throw new ProviderSelectionException((string) ($diagnostic['reason'] ?? 'No enabled provider is mapped for this service.'), $diagnostic);
         }
 
         $attempts = [];
@@ -138,6 +140,140 @@ class ProviderManager
     public function routingSetting(string $serviceSlug): array
     {
         return $this->router->routingSetting($serviceSlug);
+    }
+
+    private function providerSelectionDiagnostic(string $serviceSlug, array $payload, array $routingSetting, array $supportedProviders): array
+    {
+        $network = strtolower(trim((string) ($payload['network'] ?? $payload['provider'] ?? $payload['disco'] ?? '')));
+        $amount = round((float) ($payload['amount'] ?? 0), 2);
+        $manualProviderId = (int) ($routingSetting['manual_provider_account_id'] ?? 0);
+        $fallbackEnabled = !empty($routingSetting['fallback_enabled']);
+        $minimumSuccessRate = (float) ($routingSetting['minimum_success_rate'] ?? 80);
+        $serviceId = (int) ($payload['service_id'] ?? 0);
+        $planCode = strtoupper(trim((string) ($payload['plan'] ?? $payload['package'] ?? $payload['exam_type'] ?? $payload['local_plan_code'] ?? '')));
+
+        $candidates = [];
+        foreach ($this->allProviders() as $provider) {
+            if ($this->recoverExpiredCircuit($provider)) {
+                $provider['circuit_breaker_status'] = 'half_open';
+            }
+
+            $config = $this->providerConfig($provider);
+            $supportedServices = json_decode_array($provider['supported_services_json'] ?? '[]');
+            $reasons = [];
+
+            if (($provider['status'] ?? 'inactive') !== 'active') {
+                $reasons[] = 'provider_status_' . (string) ($provider['status'] ?? 'inactive');
+            }
+            if (empty($config['enabled'])) {
+                $reasons[] = 'provider_config_disabled';
+            }
+            if (trim((string) ($config['api_key'] ?? '')) === '' || trim((string) ($config['base_url'] ?? '')) === '') {
+                $reasons[] = 'provider_credentials_missing';
+            }
+            if ($this->isCircuitOpen($provider)) {
+                $reasons[] = 'provider_circuit_open';
+            }
+            if ($supportedServices !== [] && !in_array($serviceSlug, $supportedServices, true)) {
+                $reasons[] = 'provider_service_unsupported';
+            }
+            if ($amount > 0 && array_key_exists('current_balance', $provider) && $provider['current_balance'] !== null && (float) $provider['current_balance'] < $amount) {
+                $reasons[] = 'provider_balance_too_low';
+            }
+
+            $minimum = max($minimumSuccessRate, (float) ($provider['minimum_success_rate'] ?? 0));
+            $successRate = $this->providerSuccessRate((int) ($provider['id'] ?? 0));
+            if ($successRate < $minimum) {
+                $reasons[] = 'provider_success_below_threshold';
+            }
+            if (($routingSetting['routing_mode'] ?? 'priority') === 'manual' && $manualProviderId > 0 && (int) ($provider['id'] ?? 0) !== $manualProviderId && !$fallbackEnabled) {
+                $reasons[] = 'routing_manual_provider_unavailable';
+            }
+            if ($serviceSlug === 'data' && $serviceId > 0 && $planCode !== '') {
+                $mapping = $this->planService->resolveForProvider((int) ($provider['id'] ?? 0), $serviceId, $network !== '' ? $network : null, $planCode);
+                if (!$mapping) {
+                    $reasons[] = 'provider_plan_mapping_missing';
+                }
+            }
+
+            $candidates[] = [
+                'id' => (int) ($provider['id'] ?? 0),
+                'code' => (string) ($provider['code'] ?? ''),
+                'driver' => (string) ($provider['driver'] ?? ''),
+                'status' => (string) ($provider['status'] ?? ''),
+                'routing_candidate' => in_array((int) ($provider['id'] ?? 0), array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $supportedProviders), true),
+                'current_balance' => $provider['current_balance'] ?? null,
+                'minimum_success_rate' => $minimum,
+                'success_rate' => $successRate,
+                'circuit_breaker_status' => (string) ($provider['circuit_breaker_status'] ?? 'closed'),
+                'reasons' => array_values(array_unique($reasons)),
+            ];
+        }
+
+        return $this->logger->sanitizeProviderMeta([
+            'reason' => $this->providerSelectionReason($serviceSlug, $network, $candidates),
+            'reason_code' => 'routing_no_provider',
+            'service_slug' => $serviceSlug,
+            'network' => $network,
+            'amount' => $amount,
+            'routing_mode' => (string) ($routingSetting['routing_mode'] ?? 'priority'),
+            'manual_provider_account_id' => $manualProviderId > 0 ? $manualProviderId : null,
+            'fallback_enabled' => $fallbackEnabled,
+            'candidate_count' => count($candidates),
+            'eligible_before_router_count' => count($supportedProviders),
+            'candidates' => $candidates,
+        ]);
+    }
+
+    private function providerSelectionReason(string $serviceSlug, string $network, array $candidates): string
+    {
+        $label = trim($serviceSlug . ($network !== '' ? ' ' . strtoupper($network) : ''));
+        if ($candidates === []) {
+            return 'No providers configured for ' . $label;
+        }
+
+        $single = count($candidates) === 1 ? $candidates[0] : null;
+        $reasons = array_merge(...array_map(static fn(array $candidate): array => $candidate['reasons'] ?? [], $candidates));
+        if ($single && in_array('provider_credentials_missing', $single['reasons'] ?? [], true)) {
+            return 'Provider credentials missing for ' . (string) ($single['code'] ?? 'provider');
+        }
+        if ($single && in_array('provider_config_disabled', $single['reasons'] ?? [], true)) {
+            return 'Provider config disabled for ' . (string) ($single['code'] ?? 'provider');
+        }
+        if ($single && in_array('provider_circuit_open', $single['reasons'] ?? [], true)) {
+            return 'Provider circuit open for ' . (string) ($single['code'] ?? 'provider');
+        }
+        if ($single && in_array('provider_balance_too_low', $single['reasons'] ?? [], true)) {
+            return 'Provider balance too low for ' . (string) ($single['code'] ?? 'provider');
+        }
+        if (in_array('routing_manual_provider_unavailable', $reasons, true)) {
+            return 'Manual provider unavailable for ' . $label;
+        }
+
+        return 'No eligible provider found for ' . $label;
+    }
+
+    private function providerSuccessRate(int $providerId): float
+    {
+        if ($providerId <= 0 || !$this->db->tableExists('provider_transaction_attempts')) {
+            return 100.0;
+        }
+
+        $row = $this->db->safeFirst(
+            'SELECT COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN status = "successful" THEN 1 ELSE 0 END), 0) AS successful
+             FROM provider_transaction_attempts
+             WHERE provider_account_id = :provider_id
+               AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
+            ['provider_id' => $providerId]
+        );
+
+        $total = (int) ($row['total'] ?? 0);
+        if ($total === 0) {
+            return 100.0;
+        }
+
+        return round((((int) ($row['successful'] ?? 0)) / $total) * 100, 2);
     }
 
     public function upsertRoutingSetting(array $payload, ?int $adminId = null): void
