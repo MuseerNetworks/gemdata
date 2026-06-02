@@ -21,6 +21,7 @@ if (is_post()) {
         'funding_provider_katpay_user_display_enabled' => 'funding',
         'funding_provider_paystack_user_display_enabled' => 'funding',
         'funding_provider_xixapay_user_display_enabled' => 'funding',
+        'show_inactive_provider_plans_for_testing' => 'testing',
     ];
     foreach ($map as $key => $group) {
         $isToggle = in_array($key, [
@@ -31,6 +32,7 @@ if (is_post()) {
             'funding_provider_katpay_user_display_enabled',
             'funding_provider_paystack_user_display_enabled',
             'funding_provider_xixapay_user_display_enabled',
+            'show_inactive_provider_plans_for_testing',
         ], true);
         $value = (string) ($_POST[$key] ?? ($isToggle ? '0' : ''));
         if ($key === 'active_funding_provider' && !in_array($value, ['katpay', 'paystack', 'xixapay'], true)) {
@@ -48,6 +50,7 @@ $multiProviderFunding = (string) ($all['multi_provider_funding'] ?? ((bool) conf
 $katpayDisplay = (string) ($all['funding_provider_katpay_user_display_enabled'] ?? '1');
 $paystackDisplay = (string) ($all['funding_provider_paystack_user_display_enabled'] ?? '0');
 $xixapayDisplay = (string) ($all['funding_provider_xixapay_user_display_enabled'] ?? '0');
+$showInactiveProviderPlansForTesting = (string) ($all['show_inactive_provider_plans_for_testing'] ?? ((bool) config('feature_flags.show_inactive_provider_plans_for_testing', false) ? '1' : '0'));
 render_header('Settings', 'admin');
 ?>
 <div class="surface-card p-6">
@@ -69,6 +72,13 @@ render_header('Settings', 'admin');
         <label>Show KatPay to users <select name="funding_provider_katpay_user_display_enabled"><option value="1"<?= $katpayDisplay === '1' ? ' selected' : ''; ?>>Yes</option><option value="0"<?= $katpayDisplay === '0' ? ' selected' : ''; ?>>No</option></select></label>
         <label>Show Paystack to users <select name="funding_provider_paystack_user_display_enabled"><option value="0"<?= $paystackDisplay === '0' ? ' selected' : ''; ?>>No</option><option value="1"<?= $paystackDisplay === '1' ? ' selected' : ''; ?>>Yes</option></select></label>
         <label>Show XixaPay to users <select name="funding_provider_xixapay_user_display_enabled"><option value="0"<?= $xixapayDisplay === '0' ? ' selected' : ''; ?>>No</option><option value="1"<?= $xixapayDisplay === '1' ? ' selected' : ''; ?>>Yes</option></select></label>
+        <label>Show inactive provider plans for testing
+            <select name="show_inactive_provider_plans_for_testing">
+                <option value="0"<?= $showInactiveProviderPlansForTesting === '0' ? ' selected' : ''; ?>>No - production safe</option>
+                <option value="1"<?= $showInactiveProviderPlansForTesting === '1' ? ' selected' : ''; ?>>Yes - local/testing only</option>
+            </select>
+            <span class="form-hint">Testing only: lets dropdowns show enabled plans from inactive providers. Purchase routing still requires an active provider.</span>
+        </label>
         <button class="primary-action" type="submit">Save Settings</button>
     </form>
 </div>

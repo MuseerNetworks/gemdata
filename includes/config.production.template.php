@@ -206,6 +206,7 @@ return [
         'withdrawal_enabled' => true,
         'api_enabled'        => true,
         'maintenance_mode'   => false,
+        'show_inactive_provider_plans_for_testing' => false, // local/testing only; keep false in production
     ],
 
     // ══════════════════════════════════════════════════════

@@ -67,6 +67,9 @@ return [
         'from_name' => 'GemData',
         'debug_display_reset_links' => false,
     ],
+    'feature_flags' => [
+        'show_inactive_provider_plans_for_testing' => false,
+    ],
     'mobile' => [
         'webview_origin' => 'https://gemdata.com.ng',
     ],

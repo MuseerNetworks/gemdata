@@ -110,6 +110,9 @@ $config = [
         'admin_2fa_enabled' => false,
         'email_verification_required_for_money_movement' => true,
     ],
+    'feature_flags' => [
+        'show_inactive_provider_plans_for_testing' => false,
+    ],
     'payments' => [
         'default_gateway' => 'paystack',
         'display_gateway_name' => 'Paystack',
