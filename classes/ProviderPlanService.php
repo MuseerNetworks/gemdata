@@ -11,15 +11,17 @@ class ProviderPlanService
     public function __construct(
         private Database $db,
         private PricingService $pricing,
-        private ?SimpleCache $cache = null
+        private ?SimpleCache $cache = null,
+        private ?SettingsService $settings = null
     ) {
     }
 
     public function catalogForServiceSlug(string $serviceSlug): array
     {
-        $cacheKey = 'provider-plan-catalog:' . strtolower($serviceSlug);
+        $showInactiveProviderPlans = $this->showInactiveProviderPlansForTesting();
+        $cacheKey = 'provider-plan-catalog:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict');
         $cached = $this->cache?->get($cacheKey);
-        if (is_array($cached)) {
+        if (is_array($cached) && $cached !== []) {
             return $cached;
         }
 
@@ -30,17 +32,28 @@ class ProviderPlanService
              INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
              WHERE s.slug = :slug
                AND psp.is_enabled = 1
-               AND pa.status = "active"
+               AND s.is_enabled = 1
+               AND (:show_inactive_provider_plans = 1 OR pa.status = "active")
              ORDER BY psp.network_code, psp.amount ASC, psp.local_plan_name ASC',
-            ['slug' => $serviceSlug]
+            [
+                'slug' => $serviceSlug,
+                'show_inactive_provider_plans' => $showInactiveProviderPlans ? 1 : 0,
+            ]
         );
 
+        $enabledNetworksByService = $this->enabledNetworksByService($rows);
         $catalog = [];
         $seen = [];
         foreach ($rows as $row) {
+            $serviceId = (int) $row['service_id'];
+            $normalizedNetwork = $this->pricing->normalizeNetwork((string) ($row['network_code'] ?? ''));
+            if (!$this->networkIsVisibleForCatalog($serviceId, $normalizedNetwork, $enabledNetworksByService)) {
+                continue;
+            }
+
             $key = implode(':', [
-                (string) $row['service_id'],
-                (string) ($row['network_code'] ?? ''),
+                (string) $serviceId,
+                (string) ($normalizedNetwork ?? ''),
                 strtolower((string) $row['local_plan_code']),
             ]);
             if (isset($seen[$key])) {
@@ -49,15 +62,17 @@ class ProviderPlanService
 
             $seen[$key] = true;
             $catalog[] = [
-                'service_id' => (int) $row['service_id'],
-                'network_code' => (string) ($row['network_code'] ?? ''),
+                'service_id' => $serviceId,
+                'network_code' => (string) ($normalizedNetwork ?? ''),
                 'local_plan_code' => (string) $row['local_plan_code'],
                 'local_plan_name' => (string) $row['local_plan_name'],
                 'amount' => (float) ($row['amount'] ?? 0),
             ];
         }
 
-        $this->cache?->put($cacheKey, $catalog, 120);
+        if ($catalog !== []) {
+            $this->cache?->put($cacheKey, $catalog, 120);
+        }
         return $catalog;
     }
 
@@ -69,6 +84,18 @@ class ProviderPlanService
              INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
              INNER JOIN services s ON s.id = psp.service_id
              ORDER BY pa.priority_order ASC, s.name ASC, psp.network_code ASC, psp.amount ASC, psp.local_plan_name ASC'
+        );
+    }
+
+    public function latestMappingsForAdmin(int $limit = 5): array
+    {
+        return $this->db->query(
+            'SELECT psp.*, pa.name AS provider_name, pa.code AS provider_code, s.name AS service_name, s.slug AS service_slug
+             FROM provider_service_plans psp
+             INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
+             INNER JOIN services s ON s.id = psp.service_id
+             ORDER BY psp.id DESC
+             LIMIT ' . max(1, min(25, $limit))
         );
     }
 
@@ -88,7 +115,7 @@ class ProviderPlanService
                AND psp.is_enabled = 1
                AND pa.status = "active"
                AND psp.local_plan_code = :local_plan_code
-               AND ((psp.network_code IS NULL AND :network_code IS NULL) OR psp.network_code = :network_code)
+               AND psp.network_code <=> :network_code
              LIMIT 1',
             [
                 'service_id' => $serviceId,
@@ -111,7 +138,7 @@ class ProviderPlanService
                AND service_id = :service_id
                AND is_enabled = 1
                AND local_plan_code = :local_plan_code
-               AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+               AND network_code <=> :network_code
              LIMIT 1',
             [
                 'provider_account_id' => $providerAccountId,
@@ -148,7 +175,7 @@ class ProviderPlanService
              WHERE provider_account_id = :provider_account_id
                AND service_id = :service_id
                AND local_plan_code = :local_plan_code
-               AND ((network_code IS NULL AND :network_code IS NULL) OR network_code = :network_code)
+               AND network_code <=> :network_code
              LIMIT 1',
             [
                 'provider_account_id' => $providerAccountId,
@@ -171,7 +198,14 @@ class ProviderPlanService
         ];
 
         if ($existing) {
-            $params['id'] = $existing['id'];
+            $updateParams = [
+                'local_plan_name' => $params['local_plan_name'],
+                'provider_plan_id' => $params['provider_plan_id'],
+                'provider_plan_name' => $params['provider_plan_name'],
+                'amount' => $params['amount'],
+                'is_enabled' => $params['is_enabled'],
+                'id' => $existing['id'],
+            ];
             $this->db->execute(
                 'UPDATE provider_service_plans
                  SET local_plan_name = :local_plan_name,
@@ -180,7 +214,7 @@ class ProviderPlanService
                      amount = :amount,
                      is_enabled = :is_enabled
                  WHERE id = :id',
-                $params
+                $updateParams
             );
         } else {
             $this->db->execute(
@@ -209,10 +243,82 @@ class ProviderPlanService
         return preg_replace('/[^A-Z0-9:_\.-]/', '', $planCode) ?? '';
     }
 
+    private function showInactiveProviderPlansForTesting(): bool
+    {
+        $default = filter_var(
+            \config('feature_flags.show_inactive_provider_plans_for_testing', false),
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        return $this->settings?->bool('show_inactive_provider_plans_for_testing', $default) ?? $default;
+    }
+
+    private function enabledNetworksByService(array $planRows): array
+    {
+        $serviceIds = array_values(array_unique(array_filter(array_map(
+            static fn(array $row): int => (int) ($row['service_id'] ?? 0),
+            $planRows
+        ))));
+
+        if ($serviceIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($serviceIds as $index => $serviceId) {
+            $key = 'service_id_' . $index;
+            $placeholders[] = ':' . $key;
+            $params[$key] = $serviceId;
+        }
+
+        $rows = $this->db->query(
+            'SELECT service_id, network_code, is_enabled
+             FROM service_networks
+             WHERE service_id IN (' . implode(',', $placeholders) . ')',
+            $params
+        );
+
+        $networks = [];
+        foreach ($rows as $row) {
+            $serviceId = (int) $row['service_id'];
+            $networkCode = $this->pricing->normalizeNetwork((string) ($row['network_code'] ?? ''));
+            if ($networkCode === null) {
+                continue;
+            }
+
+            $networks[$serviceId] ??= [
+                'has_rows' => true,
+                'enabled' => [],
+            ];
+
+            if (!empty($row['is_enabled'])) {
+                $networks[$serviceId]['enabled'][$networkCode] = true;
+            }
+        }
+
+        return $networks;
+    }
+
+    private function networkIsVisibleForCatalog(int $serviceId, ?string $networkCode, array $enabledNetworksByService): bool
+    {
+        if (empty($enabledNetworksByService[$serviceId]['has_rows'])) {
+            return true;
+        }
+
+        if ($networkCode === null || $networkCode === '') {
+            return false;
+        }
+
+        return !empty($enabledNetworksByService[$serviceId]['enabled'][$networkCode]);
+    }
+
     private function flushCaches(): void
     {
         foreach (['airtime', 'data', 'electricity', 'cable_tv', 'exam_pin', 'recharge_card', 'data_card', 'bulk_sms'] as $slug) {
             $this->cache?->forget('provider-plan-catalog:' . $slug);
+            $this->cache?->forget('provider-plan-catalog:' . $slug . ':strict');
+            $this->cache?->forget('provider-plan-catalog:' . $slug . ':testing');
         }
     }
 }

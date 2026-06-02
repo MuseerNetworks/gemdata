@@ -81,6 +81,7 @@ use GemData\Classes\PaymentGatewayService;
 use GemData\Classes\XixaPay;
 use GemData\Classes\PricingService;
 use GemData\Classes\ProviderPlanService;
+use GemData\Classes\ProviderPlanCatalogService;
 use GemData\Classes\ProviderManager;
 use GemData\Classes\ProviderRouter;
 use GemData\Classes\RateLimiter;
@@ -128,7 +129,8 @@ try {
     $roleMiddleware = new RoleMiddleware($userRoles);
     $mockProvider = new MockVtuProvider();
     $pricing = new PricingService($database, $cache);
-    $providerPlans = new ProviderPlanService($database, $pricing, $cache);
+    $providerPlans = new ProviderPlanService($database, $pricing, $cache, $settings);
+    $providerPlanCatalog = new ProviderPlanCatalogService($database, $pricing, $providerPlans, $appLogger);
     $fraud = new FraudService($database);
     $providerRouter = new ProviderRouter($database, $providerPlans, $pricing);
     $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache, $providerPlans, $providerRouter);
@@ -165,6 +167,7 @@ try {
     register_service(RoleMiddleware::class, $roleMiddleware);
     register_service(PricingService::class, $pricing);
     register_service(ProviderPlanService::class, $providerPlans);
+    register_service(ProviderPlanCatalogService::class, $providerPlanCatalog);
     register_service(ProviderRouter::class, $providerRouter);
     register_service(FraudService::class, $fraud);
     register_service(ProviderManager::class, $providerManager);
