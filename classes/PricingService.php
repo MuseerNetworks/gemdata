@@ -21,7 +21,7 @@ class PricingService
             'mtn' => 'mtn',
             'airtel' => 'airtel',
             'glo' => 'glo',
-            '9mobile', 'etisalat' => '9mobile',
+            '9mobile', '9mob', 'etisalat' => '9mobile',
             default => $network,
         };
     }

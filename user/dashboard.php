@@ -15,6 +15,7 @@ $services = $dashboard['services'];
 $serviceMeta = $dashboard['service_meta'];
 $serviceNetworks = $dashboard['service_networks'];
 $dataPlanCatalog = $dashboard['data_plan_catalog'];
+$providerPlanCatalogs = $dashboard['provider_plan_catalogs'] ?? [];
 $recentTransactions = $dashboard['recent_transactions'];
 $stats = $dashboard['stats'];
 $upgrade = $dashboard['upgrade'];
@@ -99,14 +100,62 @@ $dedicatedServiceUrls = [
     'recharge_card' => base_url('user/recharge-card.php'),
 ];
 
+$catalogPlanCards = static fn(array $catalog): array => array_map(static fn(array $plan): array => [
+    'network' => (string) ($plan['network_code'] ?? ''),
+    'value' => (string) ($plan['local_plan_code'] ?? ''),
+    'label' => (string) ($plan['local_plan_name'] ?? ''),
+    'amount' => (float) ($plan['amount'] ?? 0),
+    'displayAmount' => money((float) ($plan['amount'] ?? 0)),
+    'validity' => 'Available plan',
+], array_values($catalog));
+
+$catalogSelectOptions = static fn(array $catalog): array => array_map(static fn(array $plan): array => [
+    'value' => (string) ($plan['local_plan_code'] ?? ''),
+    'label' => trim((string) ($plan['local_plan_name'] ?? '') . ((float) ($plan['amount'] ?? 0) > 0 ? ' - ' . money((float) $plan['amount']) : '')),
+], array_values($catalog));
+
+$catalogAmountOptions = static function (array $catalog): array {
+    $amounts = [];
+    foreach ($catalog as $plan) {
+        $amount = (float) ($plan['amount'] ?? 0);
+        if ($amount <= 0) {
+            continue;
+        }
+        $key = number_format($amount, 2, '.', '');
+        $amounts[$key] = ['value' => $key, 'label' => money($amount)];
+    }
+
+    return array_values($amounts);
+};
+
+$catalogNetworkOptions = static function (array $networkOptions, array $catalog): array {
+    $options = [];
+    foreach ($networkOptions as $option) {
+        $code = strtolower(trim((string) ($option['value'] ?? '')));
+        if ($code !== '') {
+            $options[$code] = $option;
+        }
+    }
+    foreach ($catalog as $plan) {
+        $code = strtolower(trim((string) ($plan['network_code'] ?? '')));
+        if ($code !== '' && !isset($options[$code])) {
+            $options[$code] = ['value' => $code, 'label' => strtoupper($code === '9mobile' ? '9MOB' : $code)];
+        }
+    }
+
+    return array_values($options);
+};
+
 $purchaseSchemas = [];
 foreach ($services as $service) {
     $slug = (string) $service['slug'];
+    $serviceCatalog = $providerPlanCatalogs[$slug] ?? ($slug === 'data' ? $dataPlanCatalog : []);
     $card = $serviceCards[$slug] ?? ['label' => (string) $service['name'], 'copy' => (string) ($service['description'] ?? 'Complete service'), 'icon' => 'funding_account', 'color' => 'bg-blue-600'];
     $networkOptions = array_map(static fn(array $network): array => [
         'value' => (string) $network['network_code'],
         'label' => (string) $network['network_name'],
     ], $serviceNetworks[$slug] ?? []);
+    $networkOptions = $catalogNetworkOptions($networkOptions, $serviceCatalog);
 
     $purchaseSchemas[$slug] = [
         'slug' => $slug,
@@ -126,14 +175,7 @@ foreach ($services as $service) {
             default => 'Continue',
         },
         'networks' => $networkOptions,
-        'plans' => $slug === 'data' ? array_map(static fn(array $plan): array => [
-            'network' => (string) $plan['network_code'],
-            'value' => (string) $plan['local_plan_code'],
-            'label' => (string) $plan['local_plan_name'],
-            'amount' => (float) $plan['amount'],
-            'displayAmount' => money((float) $plan['amount']),
-            'validity' => 'Available plan',
-        ], $dataPlanCatalog) : [],
+        'plans' => in_array($slug, ['data', 'data_card'], true) ? $catalogPlanCards($serviceCatalog) : [],
         'fields' => match ($slug) {
             'airtime' => [
                 ['name' => 'network', 'label' => 'Select Network', 'type' => 'network_buttons', 'required' => true],
@@ -149,7 +191,7 @@ foreach ($services as $service) {
             'cable_tv' => [
                 ['name' => 'provider', 'label' => 'Select Provider', 'type' => 'option_buttons', 'required' => true, 'options' => $networkOptions !== [] ? $networkOptions : [['value' => 'dstv', 'label' => 'DStv'], ['value' => 'gotv', 'label' => 'GOtv'], ['value' => 'startimes', 'label' => 'Startimes']]],
                 ['name' => 'smartcard_number', 'label' => 'IUC / Smartcard Number', 'type' => 'text', 'placeholder' => '1234567890', 'required' => true],
-                ['name' => 'package', 'label' => 'Select Subscription Package', 'type' => 'select', 'required' => true, 'options' => []],
+                ['name' => 'package', 'label' => 'Select Subscription Package', 'type' => 'select', 'required' => true, 'options' => $catalogSelectOptions($serviceCatalog)],
                 ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '8500', 'required' => true],
             ],
             'electricity' => [
@@ -159,7 +201,7 @@ foreach ($services as $service) {
                 ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '5000', 'required' => true],
             ],
             'exam_pin' => [
-                ['name' => 'exam_type', 'label' => 'Select Provider', 'type' => 'select', 'required' => true, 'options' => [['value' => 'waec', 'label' => 'WAEC'], ['value' => 'neco', 'label' => 'NECO'], ['value' => 'nabteb', 'label' => 'NABTEB'], ['value' => 'jamb', 'label' => 'JAMB']]],
+                ['name' => 'exam_type', 'label' => 'Select Package / Exam Type', 'type' => 'select', 'required' => true, 'options' => $catalogSelectOptions($serviceCatalog) ?: [['value' => 'waec', 'label' => 'WAEC'], ['value' => 'neco', 'label' => 'NECO'], ['value' => 'nabteb', 'label' => 'NABTEB'], ['value' => 'jamb', 'label' => 'JAMB']]],
                 ['name' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'placeholder' => '1', 'required' => true],
                 ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '4500', 'required' => true],
             ],
@@ -171,14 +213,14 @@ foreach ($services as $service) {
             ],
             'data_card' => [
                 ['name' => 'network', 'label' => 'Select Network', 'type' => 'network_buttons', 'required' => true],
-                ['name' => 'plan', 'label' => 'Plan', 'type' => 'text', 'placeholder' => 'Package or denomination', 'required' => true],
+                ['name' => 'plan', 'label' => 'Plan', 'type' => $serviceCatalog !== [] ? 'data_plan' : 'text', 'placeholder' => 'Package or denomination', 'required' => true],
                 ['name' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'placeholder' => '5', 'required' => true],
-                ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '3000', 'required' => true],
+                ['name' => 'amount', 'label' => 'Amount', 'type' => $serviceCatalog !== [] ? 'readonly_amount' : 'amount', 'placeholder' => '3000', 'required' => true],
             ],
             'recharge_card' => [
                 ['name' => 'network', 'label' => 'Select Network', 'type' => 'network_buttons', 'required' => true],
                 ['name' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'placeholder' => '10', 'required' => true],
-                ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '3000', 'required' => true],
+                ['name' => 'amount', 'label' => 'Amount', 'type' => $serviceCatalog !== [] ? 'select' : 'amount', 'placeholder' => '3000', 'required' => true, 'options' => $catalogAmountOptions($serviceCatalog)],
             ],
             default => [
                 ['name' => 'amount', 'label' => 'Amount', 'type' => 'amount', 'placeholder' => '1000', 'required' => true],

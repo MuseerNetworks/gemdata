@@ -38,6 +38,7 @@ class DashboardController
             'service_meta' => $this->serviceMeta(),
             'service_networks' => $this->serviceNetworks(),
             'data_plan_catalog' => $this->providerPlans->catalogForServiceSlug('data'),
+            'provider_plan_catalogs' => $this->providerPlanCatalogs(),
             'recent_transactions' => $recentTransactions,
             'stats' => $this->stats($userId, $role),
             'upgrade' => $this->upgradeState($userId, $role),
@@ -82,6 +83,16 @@ class DashboardController
         }
 
         return $networks;
+    }
+
+    private function providerPlanCatalogs(): array
+    {
+        $catalogs = [];
+        foreach (['data', 'cable_tv', 'exam_pin', 'recharge_card', 'data_card', 'bulk_sms', 'electricity'] as $slug) {
+            $catalogs[$slug] = $this->providerPlans->catalogForServiceSlug($slug);
+        }
+
+        return $catalogs;
     }
 
     private function stats(int $userId, string $role): array

@@ -87,6 +87,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
     $examPlanCatalog = purchase_plan_catalog('exam_pin');
     $bulkSmsCatalog = purchase_plan_catalog('bulk_sms');
     $rechargeCardCatalog = purchase_plan_catalog('recharge_card');
+    $dataCardCatalog = purchase_plan_catalog('data_card');
     $bulkSmsRate = purchase_first_positive_amount($bulkSmsCatalog);
     $bulkSmsPricingAvailable = $bulkSmsRate > 0;
     $submitDisabled = false;
@@ -312,10 +313,35 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
             <input type="hidden" name="amount" value="" data-recharge-amount>
             <?php render_security_pin_field($pinConfigured); ?>
         <?php elseif ($slug === 'data_card'): ?>
-            <?php render_purchase_provider_control('network', 'Network', $serviceNetworks['data_card'] ?? [], 'data-card-network', false); ?>
-            <label>Plan <input name="plan" placeholder="Package or denomination" required></label>
+            <?php
+            $dataCardNetworks = purchase_provider_options(
+                $serviceNetworks['data_card'] ?? [],
+                $dataCardCatalog,
+                purchase_default_mobile_networks()
+            );
+            render_purchase_provider_control('network', 'Network', $dataCardNetworks, 'data-card-network', true);
+            ?>
+            <?php if ($dataCardCatalog !== []): ?>
+                <label>Plan
+                    <select name="plan" data-provider-plan-select data-require-network="true" required>
+                        <option value="">Select data card plan</option>
+                        <?php foreach ($dataCardCatalog as $plan): ?>
+                            <?php $amount = (float) ($plan['amount'] ?? 0); ?>
+                            <option value="<?= e((string) $plan['local_plan_code']); ?>" data-network="<?= e((string) ($plan['network_code'] ?? '')); ?>" data-amount="<?= e((string) $amount); ?>" data-display-amount="<?= e($amount > 0 ? money($amount) : ''); ?>">
+                                <?= e((string) $plan['local_plan_name'] . ($amount > 0 ? ' - ' . money($amount) : '')); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <div class="purchase-empty-state" data-package-empty-state hidden>No data card plans available for this network right now.</div>
+                <div class="purchase-summary-row"><span>Plan Price</span><strong data-plan-price-display>Choose a plan</strong></div>
+                <input type="hidden" name="amount" value="" data-plan-amount>
+            <?php else: ?>
+                <label>Plan <input name="plan" placeholder="Package or denomination" required></label>
+                <label>Amount <input name="amount" inputmode="decimal" placeholder="3000" required></label>
+                <div class="purchase-empty-state">No data card plans available right now.</div>
+            <?php endif; ?>
             <label>Quantity <input name="quantity" inputmode="numeric" placeholder="5" required></label>
-            <label>Amount <input name="amount" inputmode="decimal" placeholder="3000" required></label>
             <?php render_security_pin_field($pinConfigured); ?>
         <?php endif; ?>
 
