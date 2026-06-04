@@ -141,6 +141,8 @@ class ProviderRouter
 
         if ($existing) {
             $params['id'] = (int) $existing['id'];
+            $updateParams = $params;
+            unset($updateParams['service_slug']);
             $this->db->execute(
                 'UPDATE routing_settings
                  SET routing_mode = :routing_mode,
@@ -151,7 +153,7 @@ class ProviderRouter
                      cost_weight = :cost_weight,
                      updated_by_admin_id = :updated_by_admin_id
                  WHERE id = :id',
-                $params
+                $updateParams
             );
             return $this->savedRoutingSetting($params['service_slug']);
         }
