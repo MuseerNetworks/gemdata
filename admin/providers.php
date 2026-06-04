@@ -22,62 +22,90 @@ function mask_provider_secret_ref(?string $value): string
 }
 
 if (is_post()) {
-    verify_csrf();
-    $action = $_POST['action'] ?? '';
+    $redirectQuery = [];
+    try {
+        verify_csrf();
+        $action = $_POST['action'] ?? '';
 
-    if ($action === 'save') {
-        $providers->upsertProvider($_POST);
-        $logger->log('admin', (int) $admin['id'], 'provider_saved', 'Admin saved provider safeguards.', [
-            'code' => $_POST['code'] ?? '',
-            'status' => $_POST['status'] ?? 'active',
-            'driver' => $_POST['driver'] ?? 'mock',
-            'sandbox_mode' => !empty($_POST['sandbox_mode']),
-            'cheapest_routing_enabled' => !empty($_POST['cheapest_routing_enabled']),
-        ]);
-        flash('success', 'Provider saved successfully.');
-    } elseif ($action === 'test') {
-        $result = $providers->testConnection((int) $_POST['provider_id']);
-        $logger->log('admin', (int) $admin['id'], 'provider_tested', 'Admin tested provider connection.', [
-            'provider_id' => (int) $_POST['provider_id'],
-            'status' => $result['status'] ?? 'unknown',
-        ]);
-        flash('success', $result['message'] . ' (' . $result['provider'] . ') health=' . ($result['health']['status'] ?? 'unknown'));
-    } elseif ($action === 'status') {
-        $providerId = (int) ($_POST['provider_id'] ?? 0);
-        $status = (string) ($_POST['status'] ?? 'inactive');
-        $providers->updateProviderStatus($providerId, $status);
-        $logger->log('admin', (int) $admin['id'], 'provider_status_changed', 'Admin changed provider status.', [
-            'provider_id' => $providerId,
-            'status' => $status,
-        ]);
-        flash('success', 'Provider status updated.');
-    } elseif ($action === 'reset_circuit') {
-        $providerId = (int) ($_POST['provider_id'] ?? 0);
-        $providers->resetCircuitBreaker($providerId);
-        $logger->log('admin', (int) $admin['id'], 'provider_circuit_reset', 'Admin reset provider circuit breaker.', [
-            'provider_id' => $providerId,
-        ]);
-        flash('success', 'Provider circuit breaker reset.');
-    } elseif ($action === 'routing_setting') {
-        $providers->upsertRoutingSetting($_POST, (int) $admin['id']);
-        $logger->log('admin', (int) $admin['id'], 'provider_routing_setting_saved', 'Admin saved provider routing setting.', [
-            'service_slug' => $_POST['service_slug'] ?? '__global__',
-            'routing_mode' => $_POST['routing_mode'] ?? 'priority',
-            'manual_provider_account_id' => $_POST['manual_provider_account_id'] ?? null,
-        ]);
-        flash('success', 'Routing controls saved.');
+        if ($action === 'save') {
+            $providers->upsertProvider($_POST);
+            $logger->log('admin', (int) $admin['id'], 'provider_saved', 'Admin saved provider safeguards.', [
+                'code' => $_POST['code'] ?? '',
+                'status' => $_POST['status'] ?? 'active',
+                'driver' => $_POST['driver'] ?? 'mock',
+                'sandbox_mode' => !empty($_POST['sandbox_mode']),
+                'cheapest_routing_enabled' => !empty($_POST['cheapest_routing_enabled']),
+            ]);
+            flash('success', 'Provider saved successfully.');
+        } elseif ($action === 'test') {
+            $result = $providers->testConnection((int) $_POST['provider_id']);
+            $logger->log('admin', (int) $admin['id'], 'provider_tested', 'Admin tested provider connection.', [
+                'provider_id' => (int) $_POST['provider_id'],
+                'status' => $result['status'] ?? 'unknown',
+            ]);
+            flash('success', $result['message'] . ' (' . $result['provider'] . ') health=' . ($result['health']['status'] ?? 'unknown'));
+        } elseif ($action === 'status') {
+            $providerId = (int) ($_POST['provider_id'] ?? 0);
+            $status = (string) ($_POST['status'] ?? 'inactive');
+            $providers->updateProviderStatus($providerId, $status);
+            $logger->log('admin', (int) $admin['id'], 'provider_status_changed', 'Admin changed provider status.', [
+                'provider_id' => $providerId,
+                'status' => $status,
+            ]);
+            flash('success', 'Provider status updated.');
+        } elseif ($action === 'reset_circuit') {
+            $providerId = (int) ($_POST['provider_id'] ?? 0);
+            $providers->resetCircuitBreaker($providerId);
+            $logger->log('admin', (int) $admin['id'], 'provider_circuit_reset', 'Admin reset provider circuit breaker.', [
+                'provider_id' => $providerId,
+            ]);
+            flash('success', 'Provider circuit breaker reset.');
+        } elseif ($action === 'routing_setting') {
+            $scope = trim((string) ($_POST['service_slug'] ?? '__global__'));
+            $scope = $scope === '' ? '__global__' : $scope;
+            $redirectQuery['routing_service'] = $scope;
+            $saved = $providers->upsertRoutingSetting($_POST, (int) $admin['id']);
+            $logger->log('admin', (int) $admin['id'], 'provider_routing_setting_saved', 'Admin saved provider routing setting.', [
+                'service_slug' => $scope,
+                'routing_mode' => $_POST['routing_mode'] ?? 'priority',
+                'manual_provider_account_id' => $_POST['manual_provider_account_id'] ?? null,
+            ]);
+            $savedScope = (string) ($saved['service_slug'] ?? '');
+            $savedScope = $savedScope === '' ? 'Global default' : $savedScope;
+            $savedProvider = (string) ($saved['provider_name'] ?? 'Automatic');
+            flash('success', sprintf(
+                'Routing controls saved for %s: %s via %s, minimum success %s%%.',
+                $savedScope,
+                (string) ($saved['routing_mode'] ?? 'priority'),
+                $savedProvider !== '' ? $savedProvider : 'Automatic',
+                (string) ($saved['minimum_success_rate'] ?? '80.00')
+            ));
+        }
+    } catch (Throwable $throwable) {
+        flash('error', $throwable->getMessage());
     }
 
-    redirect(base_url('admin/providers.php'));
+    $path = 'admin/providers.php';
+    if ($redirectQuery !== []) {
+        $path .= '?' . http_build_query($redirectQuery);
+    }
+    redirect(base_url($path));
 }
 
 $rows = $providers->allProviders();
 $services = db()->query('SELECT slug, name FROM services ORDER BY name ASC');
 $routingSettings = $providers->routingSettings();
+$serviceSlugs = array_map(static fn(array $service): string => (string) $service['slug'], $services);
+$selectedRoutingService = trim((string) ($_GET['routing_service'] ?? '__global__'));
+if ($selectedRoutingService === '' || ($selectedRoutingService !== '__global__' && !in_array($selectedRoutingService, $serviceSlugs, true))) {
+    $selectedRoutingService = '__global__';
+}
+$routingFormSetting = $providers->routingSetting($selectedRoutingService === '__global__' ? '' : $selectedRoutingService);
 render_header('Providers', 'admin');
 ?>
 <div class="space-y-6">
     <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($message = flash('error')): ?><div class="notice notice-error"><?= e($message); ?></div><?php endif; ?>
 
     <section class="rounded-2xl border border-gem-border bg-white p-5 shadow-card">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -137,49 +165,56 @@ render_header('Providers', 'admin');
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
             <input type="hidden" name="action" value="routing_setting">
             <select class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="service_slug">
-                <option value="__global__">Global default</option>
+                <option value="__global__"<?= $selectedRoutingService === '__global__' ? ' selected' : ''; ?>>Global default</option>
                 <?php foreach ($services as $service): ?>
-                    <option value="<?= e($service['slug']); ?>"><?= e($service['name']); ?></option>
+                    <option value="<?= e($service['slug']); ?>"<?= $selectedRoutingService === (string) $service['slug'] ? ' selected' : ''; ?>><?= e($service['name']); ?></option>
                 <?php endforeach; ?>
             </select>
             <select class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="routing_mode">
-                <option value="priority">Priority routing</option>
-                <option value="manual">Manual provider</option>
-                <option value="cheapest">Cheapest provider</option>
-                <option value="cheapest_health">Cheapest + health weighting</option>
+                <?php $selectedRoutingMode = (string) ($routingFormSetting['routing_mode'] ?? 'priority'); ?>
+                <option value="priority"<?= $selectedRoutingMode === 'priority' ? ' selected' : ''; ?>>Priority routing</option>
+                <option value="manual"<?= $selectedRoutingMode === 'manual' ? ' selected' : ''; ?>>Manual provider</option>
+                <option value="cheapest"<?= $selectedRoutingMode === 'cheapest' ? ' selected' : ''; ?>>Cheapest provider</option>
+                <option value="cheapest_health"<?= $selectedRoutingMode === 'cheapest_health' ? ' selected' : ''; ?>>Cheapest + health weighting</option>
             </select>
             <select class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="manual_provider_account_id">
+                <?php $selectedManualProviderId = (int) ($routingFormSetting['manual_provider_account_id'] ?? 0); ?>
                 <option value="">Manual provider (optional)</option>
                 <?php foreach ($rows as $row): ?>
                     <?php if (($row['status'] ?? '') !== 'archived'): ?>
-                        <option value="<?= (int) $row['id']; ?>"><?= e($row['name']); ?></option>
+                        <option value="<?= (int) $row['id']; ?>"<?= $selectedManualProviderId === (int) $row['id'] ? ' selected' : ''; ?>><?= e($row['name']); ?></option>
                     <?php endif; ?>
                 <?php endforeach; ?>
             </select>
-            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="minimum_success_rate" value="80" placeholder="Minimum success %">
-            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="health_weight" value="30" placeholder="Health weight">
-            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="cost_weight" value="70" placeholder="Cost weight">
-            <label class="flex items-center gap-2 rounded-xl border border-gem-border bg-white px-4 py-3 text-[13px] font-semibold text-gem-muted"><input type="checkbox" name="fallback_enabled" value="1" checked> Enable fallback</label>
+            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="minimum_success_rate" value="<?= e((string) ($routingFormSetting['minimum_success_rate'] ?? '80')); ?>" placeholder="Minimum success %">
+            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="health_weight" value="<?= e((string) ($routingFormSetting['health_weight'] ?? '30')); ?>" placeholder="Health weight">
+            <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="cost_weight" value="<?= e((string) ($routingFormSetting['cost_weight'] ?? '70')); ?>" placeholder="Cost weight">
+            <label class="flex items-center gap-2 rounded-xl border border-gem-border bg-white px-4 py-3 text-[13px] font-semibold text-gem-muted"><input type="checkbox" name="fallback_enabled" value="1"<?= !empty($routingFormSetting['fallback_enabled']) ? ' checked' : ''; ?>> Enable fallback</label>
             <button class="rounded-xl bg-gem-blue px-5 py-3 text-[13px] font-bold text-white shadow-panel hover:bg-gem-blueDk" type="submit">Save Routing</button>
         </form>
+        <p class="mt-3 text-[12px] text-gem-muted">
+            Editing saved controls for <?= e($selectedRoutingService === '__global__' ? 'Global default' : $selectedRoutingService); ?>. Use the Edit link in the table below to load another saved routing row.
+        </p>
 
         <div class="mt-5 overflow-hidden rounded-2xl border border-gem-border">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gem-border text-left text-[13px]">
                     <thead class="bg-gem-gray text-[11px] uppercase tracking-widest text-gem-muted">
-                        <tr><th class="px-4 py-3">Scope</th><th class="px-4 py-3">Mode</th><th class="px-4 py-3">Manual Provider</th><th class="px-4 py-3">Fallback</th><th class="px-4 py-3">Thresholds</th></tr>
+                        <tr><th class="px-4 py-3">Scope</th><th class="px-4 py-3">Mode</th><th class="px-4 py-3">Manual Provider</th><th class="px-4 py-3">Fallback</th><th class="px-4 py-3">Thresholds</th><th class="px-4 py-3">Actions</th></tr>
                     </thead>
                     <tbody class="divide-y divide-gem-border bg-white">
                     <?php if ($routingSettings === []): ?>
-                        <tr><td class="px-4 py-4 text-gem-muted" colspan="5">No custom routing settings yet. Priority routing with fallback is active by default.</td></tr>
+                        <tr><td class="px-4 py-4 text-gem-muted" colspan="6">No custom routing settings yet. Priority routing with fallback is active by default.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($routingSettings as $setting): ?>
+                        <?php $settingScope = (string) ($setting['service_slug'] ?: '__global__'); ?>
                         <tr>
                             <td class="px-4 py-4 font-bold text-gem-text"><?= e($setting['service_slug'] ?: 'Global default'); ?></td>
                             <td class="px-4 py-4"><span class="rounded-full bg-gem-blueLt px-2.5 py-1 text-[11px] font-bold text-gem-blue"><?= e($setting['routing_mode']); ?></span></td>
                             <td class="px-4 py-4 text-gem-muted"><?= e($setting['provider_name'] ?? 'Automatic'); ?></td>
                             <td class="px-4 py-4 text-gem-muted"><?= !empty($setting['fallback_enabled']) ? 'Enabled' : 'Disabled'; ?></td>
                             <td class="px-4 py-4 text-gem-muted">Min <?= e((string) $setting['minimum_success_rate']); ?>%, health <?= e((string) $setting['health_weight']); ?>, cost <?= e((string) $setting['cost_weight']); ?></td>
+                            <td class="px-4 py-4"><a class="text-[12px] font-bold text-gem-blue" href="<?= e(base_url('admin/providers.php?' . http_build_query(['routing_service' => $settingScope]))); ?>">Edit</a></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>

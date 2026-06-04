@@ -64,7 +64,7 @@ class ProviderManager
         $providers = $routing['providers'];
         $routingSetting = $routing['setting'];
         if ($providers === []) {
-            throw new RuntimeException('No enabled provider is mapped for this service.');
+            throw new RuntimeException($this->providerSelectionFailureMessage($serviceSlug, $routing['diagnostics'] ?? []));
         }
 
         $attempts = [];
@@ -140,9 +140,34 @@ class ProviderManager
         return $this->router->routingSetting($serviceSlug);
     }
 
-    public function upsertRoutingSetting(array $payload, ?int $adminId = null): void
+    public function upsertRoutingSetting(array $payload, ?int $adminId = null): array
     {
-        $this->router->upsertRoutingSetting($payload, $adminId);
+        return $this->router->upsertRoutingSetting($payload, $adminId);
+    }
+
+    private function providerSelectionFailureMessage(string $serviceSlug, array $diagnostics): string
+    {
+        $excluded = $diagnostics['excluded'] ?? [];
+        foreach ($excluded as $item) {
+            if (($item['reason'] ?? '') === 'provider_success_below_threshold') {
+                $code = (string) ($item['provider_code'] ?? 'provider');
+                $minimum = (float) ($item['minimum_success_rate'] ?? 0);
+                $rate = (float) ($item['success_rate'] ?? 0);
+                return sprintf(
+                    'No eligible provider found for %s; %s excluded by success threshold %.2f > current rate %.2f.',
+                    $serviceSlug,
+                    $code,
+                    $minimum,
+                    $rate
+                );
+            }
+        }
+
+        if ((int) ($diagnostics['candidate_count'] ?? 0) === 0) {
+            return 'No enabled provider is mapped for ' . $serviceSlug . '.';
+        }
+
+        return 'No eligible provider found for ' . $serviceSlug . '.';
     }
 
     public function testConnection(int $providerId): array

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace GemData\Classes;
 
+use RuntimeException;
+
 class ProviderRouter
 {
     public function __construct(
@@ -16,13 +18,29 @@ class ProviderRouter
     public function route(string $serviceSlug, array $payload, array $providers): array
     {
         $setting = $this->routingSetting($serviceSlug);
+        $diagnostics = [
+            'service_slug' => $serviceSlug,
+            'routing_mode' => $setting['routing_mode'] ?? 'priority',
+            'minimum_success_rate' => (float) ($setting['minimum_success_rate'] ?? 80),
+            'manual_provider_account_id' => $setting['manual_provider_account_id'] ?? null,
+            'fallback_enabled' => !empty($setting['fallback_enabled']),
+            'candidate_count' => count($providers),
+            'excluded' => [],
+        ];
+
         $providers = $this->filterPlanAwareProviders($providers, $payload);
+        $diagnostics['after_plan_filter_count'] = count($providers);
         $providers = $this->filterBalanceAwareProviders($providers, (float) ($payload['amount'] ?? 0));
-        $providers = $this->filterSuccessThresholdProviders($providers, (float) $setting['minimum_success_rate']);
+        $diagnostics['after_balance_filter_count'] = count($providers);
+        $beforeSuccessThreshold = $providers;
+        $providers = $this->filterSuccessThresholdProviders($providers, (float) $setting['minimum_success_rate'], $diagnostics);
+        $diagnostics['after_success_threshold_count'] = count($providers);
+        $diagnostics['eligible_before_success_threshold_count'] = count($beforeSuccessThreshold);
 
         $mode = (string) $setting['routing_mode'];
         if ($mode === 'manual') {
             $providers = $this->manualOrder($providers, (int) ($setting['manual_provider_account_id'] ?? 0), !empty($setting['fallback_enabled']));
+            $diagnostics['after_manual_order_count'] = count($providers);
         } elseif ($mode === 'cheapest') {
             $providers = $this->cheapestOrder($providers, $payload);
         } elseif ($mode === 'cheapest_health') {
@@ -34,6 +52,7 @@ class ProviderRouter
         return [
             'providers' => array_values($providers),
             'setting' => $setting,
+            'diagnostics' => $diagnostics,
         ];
     }
 
@@ -71,23 +90,44 @@ class ProviderRouter
         return $this->db->query('SELECT rs.*, pa.name AS provider_name FROM routing_settings rs LEFT JOIN provider_accounts pa ON pa.id = rs.manual_provider_account_id ORDER BY COALESCE(rs.service_slug, "__global__") ASC');
     }
 
-    public function upsertRoutingSetting(array $payload, ?int $adminId = null): void
+    public function upsertRoutingSetting(array $payload, ?int $adminId = null): array
     {
         if (!$this->db->tableExists('routing_settings')) {
-            return;
+            throw new RuntimeException('Routing settings table is missing. Run the provider safeguards migration before saving routing controls.');
         }
 
         $serviceSlug = trim((string) ($payload['service_slug'] ?? ''));
         $serviceSlug = $serviceSlug === '__global__' ? '' : $serviceSlug;
+        if ($serviceSlug !== '') {
+            $service = $this->db->first('SELECT slug FROM services WHERE slug = :slug LIMIT 1', ['slug' => $serviceSlug]);
+            if (!$service) {
+                throw new RuntimeException('Selected service is not available for routing.');
+            }
+        }
+
         $routingMode = strtolower(trim((string) ($payload['routing_mode'] ?? 'priority')));
         if (!in_array($routingMode, ['manual', 'priority', 'cheapest', 'cheapest_health'], true)) {
             $routingMode = 'priority';
         }
 
+        $manualProviderId = !empty($payload['manual_provider_account_id']) ? (int) $payload['manual_provider_account_id'] : null;
+        if ($routingMode === 'manual') {
+            if ($manualProviderId === null || $manualProviderId <= 0) {
+                throw new RuntimeException('Select a manual provider before saving manual routing.');
+            }
+            $provider = $this->db->first(
+                'SELECT id FROM provider_accounts WHERE id = :id AND status <> "archived" LIMIT 1',
+                ['id' => $manualProviderId]
+            );
+            if (!$provider) {
+                throw new RuntimeException('Selected manual provider is not available.');
+            }
+        }
+
         $params = [
             'service_slug' => $serviceSlug === '' ? null : $serviceSlug,
             'routing_mode' => $routingMode,
-            'manual_provider_account_id' => !empty($payload['manual_provider_account_id']) ? (int) $payload['manual_provider_account_id'] : null,
+            'manual_provider_account_id' => $manualProviderId,
             'fallback_enabled' => !empty($payload['fallback_enabled']) ? 1 : 0,
             'minimum_success_rate' => max(0, min(100, (float) ($payload['minimum_success_rate'] ?? 80))),
             'health_weight' => max(0, min(100, (float) ($payload['health_weight'] ?? 30))),
@@ -113,7 +153,7 @@ class ProviderRouter
                  WHERE id = :id',
                 $params
             );
-            return;
+            return $this->savedRoutingSetting($params['service_slug']);
         }
 
         $this->db->execute(
@@ -126,6 +166,8 @@ class ProviderRouter
              )',
             $params
         );
+
+        return $this->savedRoutingSetting($params['service_slug']);
     }
 
     private function manualOrder(array $providers, int $manualProviderId, bool $fallbackEnabled): array
@@ -222,7 +264,7 @@ class ProviderRouter
         }));
     }
 
-    private function filterSuccessThresholdProviders(array $providers, float $settingMinimum): array
+    private function filterSuccessThresholdProviders(array $providers, float $settingMinimum, array &$diagnostics = []): array
     {
         $eligible = [];
         foreach ($providers as $provider) {
@@ -230,10 +272,40 @@ class ProviderRouter
             $rate = $this->successRate((int) $provider['id']);
             if ($rate >= $minimum) {
                 $eligible[] = $provider;
+            } else {
+                $diagnostics['excluded'][] = [
+                    'provider_id' => (int) $provider['id'],
+                    'provider_code' => (string) ($provider['code'] ?? ''),
+                    'reason' => 'provider_success_below_threshold',
+                    'success_rate' => $rate,
+                    'minimum_success_rate' => $minimum,
+                ];
             }
         }
 
         return $eligible;
+    }
+
+    private function savedRoutingSetting(?string $serviceSlug): array
+    {
+        if ($serviceSlug === null) {
+            return $this->db->first(
+                'SELECT rs.*, pa.name AS provider_name
+                 FROM routing_settings rs
+                 LEFT JOIN provider_accounts pa ON pa.id = rs.manual_provider_account_id
+                 WHERE rs.service_slug IS NULL
+                 LIMIT 1'
+            ) ?? [];
+        }
+
+        return $this->db->first(
+            'SELECT rs.*, pa.name AS provider_name
+             FROM routing_settings rs
+             LEFT JOIN provider_accounts pa ON pa.id = rs.manual_provider_account_id
+             WHERE rs.service_slug = :service_slug
+             LIMIT 1',
+            ['service_slug' => $serviceSlug]
+        ) ?? [];
     }
 
     private function providerCost(array $provider, array $payload): float

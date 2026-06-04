@@ -513,8 +513,15 @@ class TransactionService
                 ]
             );
 
-            $this->event($transactionId, 'transaction_' . $status, ($locked['channel'] ?? 'web') === 'api' ? 'api' : 'system', (int) $locked['user_id'], "{$service['name']} transaction {$status}.", [
+            $providerMessage = (string) ($providerResponse['raw']['message'] ?? '');
+            $eventNote = "{$service['name']} transaction {$status}.";
+            if ($status === 'failed' && $providerMessage !== '') {
+                $eventNote = "{$service['name']} transaction failed: " . substr($providerMessage, 0, 180);
+            }
+
+            $this->event($transactionId, 'transaction_' . $status, ($locked['channel'] ?? 'web') === 'api' ? 'api' : 'system', (int) $locked['user_id'], $eventNote, [
                 'provider_reference' => $providerResponse['provider_reference'] ?? null,
+                'message' => $providerMessage !== '' ? $providerMessage : null,
             ]);
             $this->db->commit();
 
