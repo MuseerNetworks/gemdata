@@ -108,7 +108,6 @@ class TransactionService
 
         if ($serviceSlug === 'data') {
             $payload['plan'] = strtoupper(trim((string) ($payload['plan'] ?? '')));
-            $this->providerPlans->assertDataPlanAvailable((int) $service['id'], $networkCode, (string) $payload['plan']);
         }
 
         $amount = round((float) $payload['amount'], 2);
@@ -137,15 +136,28 @@ class TransactionService
             }
         }
 
+        $providerSelection = $this->providers->selectProviderForPurchase($serviceSlug, array_merge($payload, [
+            'recipient' => $recipient,
+            'amount' => $amount,
+            'reference' => $reference,
+            'service_id' => (int) $service['id'],
+        ]));
+        $selectedProvider = is_array($providerSelection['provider'] ?? null) ? $providerSelection['provider'] : null;
+        if ($selectedProvider === null) {
+            return $this->recordProviderSelectionFailure($service, $serviceSlug, $userId, $payload, $channel, $amount, $pricing, $reference, $idempotencyKey, $recipient, $providerSelection);
+        }
+
         $this->db->beginTransaction();
         try {
             $this->db->execute(
                 'INSERT INTO transactions (
                     user_id, service_id, reference, idempotency_key, channel, status, amount, selling_price, cost_price, profit_amount,
-                    pricing_source, is_retryable, recipient, customer_name, payload_json, processing_started_at, processed_at, failure_code
+                    pricing_source, is_retryable, recipient, customer_name, payload_json, provider_account_id, provider_code,
+                    processing_started_at, processed_at, failure_code
                  ) VALUES (
                     :user_id, :service_id, :reference, :idempotency_key, :channel, :status, :amount, :selling_price, :cost_price, :profit_amount,
-                    :pricing_source, :is_retryable, :recipient, :customer_name, :payload_json, NULL, NULL, NULL
+                    :pricing_source, :is_retryable, :recipient, :customer_name, :payload_json, :provider_account_id, :provider_code,
+                    NULL, NULL, NULL
                  )',
                 [
                     'user_id' => $userId,
@@ -163,6 +175,8 @@ class TransactionService
                     'recipient' => $recipient,
                     'customer_name' => $payload['customer_name'] ?? null,
                     'payload_json' => json_encode($payload),
+                    'provider_account_id' => (int) $selectedProvider['id'],
+                    'provider_code' => (string) $selectedProvider['code'],
                 ]
             );
             $transactionId = $this->db->lastInsertId();
@@ -182,6 +196,12 @@ class TransactionService
                 'reference' => $reference,
                 'pricing_source' => $pricing['pricing_source'],
                 'idempotency_key' => $idempotencyKey,
+            ]);
+            $this->event($transactionId, 'transaction_provider_selected', 'system', null, 'Provider selected before transaction fulfillment.', [
+                'provider_account_id' => (int) $selectedProvider['id'],
+                'provider_code' => (string) $selectedProvider['code'],
+                'routing_mode' => (string) ($providerSelection['setting']['routing_mode'] ?? 'priority'),
+                'routing' => $providerSelection['diagnostics'] ?? [],
             ]);
             $this->event($transactionId, 'transaction_funds_reserved', 'system', null, 'Wallet funds reserved for pending transaction.', ['amount' => $amount]);
 
@@ -424,6 +444,7 @@ class TransactionService
                 'idempotency_key' => (string) ($transaction['idempotency_key'] ?? ''),
                 'transaction_id' => $transactionId,
                 'service_id' => (int) $transaction['service_id'],
+                '_assigned_provider_account_id' => (int) ($transaction['provider_account_id'] ?? 0),
             ]));
         } catch (Throwable $throwable) {
             $providerResponse = [
@@ -432,6 +453,12 @@ class TransactionService
                 'raw' => ['message' => $throwable->getMessage()],
                 'attempts' => [],
             ];
+            if (!empty($transaction['provider_account_id'])) {
+                $providerResponse['provider_account'] = [
+                    'id' => (int) $transaction['provider_account_id'],
+                    'code' => (string) ($transaction['provider_code'] ?? ''),
+                ];
+            }
         }
 
         $status = $this->normalizeProviderStatus((string) ($providerResponse['status'] ?? 'failed'));
@@ -497,8 +524,8 @@ class TransactionService
                  WHERE id = :id',
                 [
                     'provider_reference' => $providerResponse['provider_reference'] ?? null,
-                    'provider_account_id' => $providerAccount['id'] ?? null,
-                    'provider_code' => $providerAccount['code'] ?? null,
+                    'provider_account_id' => $providerAccount['id'] ?? ($locked['provider_account_id'] ?? null),
+                    'provider_code' => $providerAccount['code'] ?? ($locked['provider_code'] ?? null),
                     'status' => $status,
                     'commission_amount' => $commissionAmount,
                     'response_json' => json_encode($providerResponse),
@@ -853,6 +880,90 @@ class TransactionService
             'profit_amount' => (float) ($transaction['profit_amount'] ?? 0),
             'queued' => ($transaction['status'] ?? '') === 'pending',
         ];
+    }
+
+    private function recordProviderSelectionFailure(
+        array $service,
+        string $serviceSlug,
+        int $userId,
+        array $payload,
+        string $channel,
+        float $amount,
+        array $pricing,
+        string $reference,
+        string $idempotencyKey,
+        string $recipient,
+        array $providerSelection
+    ): array {
+        $response = [
+            'status' => 'failed',
+            'provider_reference' => null,
+            'raw' => [
+                'message' => (string) ($providerSelection['message'] ?? 'No eligible provider found for ' . $serviceSlug . '.'),
+                'routing' => $providerSelection['diagnostics'] ?? [],
+            ],
+            'attempts' => [],
+        ];
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->execute(
+                'INSERT INTO transactions (
+                    user_id, service_id, reference, idempotency_key, channel, status, amount, selling_price, cost_price, profit_amount,
+                    pricing_source, is_retryable, recipient, customer_name, payload_json, response_json,
+                    processing_started_at, processed_at, failure_code
+                 ) VALUES (
+                    :user_id, :service_id, :reference, :idempotency_key, :channel, :status, :amount, :selling_price, :cost_price, :profit_amount,
+                    :pricing_source, :is_retryable, :recipient, :customer_name, :payload_json, :response_json,
+                    NULL, NOW(), :failure_code
+                 )',
+                [
+                    'user_id' => $userId,
+                    'service_id' => (int) $service['id'],
+                    'reference' => $reference,
+                    'idempotency_key' => $idempotencyKey,
+                    'channel' => $channel,
+                    'status' => 'failed',
+                    'amount' => $amount,
+                    'selling_price' => $pricing['selling_price'],
+                    'cost_price' => $pricing['cost_price'],
+                    'profit_amount' => $pricing['profit_amount'],
+                    'pricing_source' => $pricing['pricing_source'],
+                    'is_retryable' => 0,
+                    'recipient' => $recipient,
+                    'customer_name' => $payload['customer_name'] ?? null,
+                    'payload_json' => json_encode($payload),
+                    'response_json' => json_encode($response),
+                    'failure_code' => 'provider_selection_failed',
+                ]
+            );
+            $transactionId = $this->db->lastInsertId();
+            $this->event($transactionId, 'transaction_provider_selection_failed', 'system', null, 'No eligible provider was available before wallet debit.', [
+                'message' => $response['raw']['message'],
+                'routing' => $providerSelection['diagnostics'] ?? [],
+                'wallet_mutation' => false,
+            ]);
+            $this->db->commit();
+        } catch (Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+
+        $row = $this->db->first(
+            'SELECT t.*, s.name AS service_name
+             FROM transactions t
+             INNER JOIN services s ON s.id = t.service_id
+             WHERE t.id = :id
+             LIMIT 1',
+            ['id' => $transactionId]
+        );
+        if (!$row) {
+            throw new RuntimeException('Transaction could not be recorded.');
+        }
+
+        $this->logger->log($channel === 'api' ? 'api' : 'user', $userId, 'transaction_provider_selection_failed', "{$service['name']} transaction could not be routed.", ['reference' => $reference]);
+
+        return $this->responsePayload($row);
     }
 
     private function findByIdempotency(int $userId, string $channel, string $idempotencyKey): ?array

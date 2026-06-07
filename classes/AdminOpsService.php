@@ -213,7 +213,38 @@ class AdminOpsService
             'pending_queue' => $pendingQueue,
             'recent_failures' => $recentFailures,
             'provider_health' => $providerHealth,
+            'provider_wallet_balances' => $this->providerWalletBalances(),
         ];
+    }
+
+    private function providerWalletBalances(): array
+    {
+        $rows = $this->db->query(
+            'SELECT id, name, code, status, current_balance, balance_refreshed_at,
+                    low_balance_threshold, circuit_breaker_status
+             FROM provider_accounts
+             WHERE status <> "archived"
+             ORDER BY priority_order ASC, id ASC'
+        );
+
+        return array_map(static function (array $row): array {
+            $balanceKnown = array_key_exists('current_balance', $row) && $row['current_balance'] !== null;
+            $balance = $balanceKnown ? (float) $row['current_balance'] : null;
+            $threshold = (float) ($row['low_balance_threshold'] ?? 0);
+
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['name'] ?? ''),
+                'code' => (string) ($row['code'] ?? ''),
+                'status' => (string) ($row['status'] ?? 'unknown'),
+                'balance_known' => $balanceKnown,
+                'balance' => $balance,
+                'balance_refreshed_at' => $row['balance_refreshed_at'] ?? null,
+                'threshold' => $threshold,
+                'is_low' => $balanceKnown && $balance !== null && $balance <= $threshold,
+                'circuit_breaker_status' => (string) ($row['circuit_breaker_status'] ?? 'closed'),
+            ];
+        }, $rows);
     }
 
     private function normalizeIds(array $ids): array

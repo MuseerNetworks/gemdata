@@ -25,7 +25,7 @@ class ProviderManager
                 $provider['circuit_breaker_status'] = 'half_open';
             }
             $config = $this->providerConfig($provider);
-            return !empty($config['enabled']) && !$this->isCircuitOpen($provider);
+            return !empty($config['enabled']) && $this->providerConfigReady($config) && !$this->isCircuitOpen($provider);
         }));
     }
 
@@ -52,6 +52,25 @@ class ProviderManager
         return $providers;
     }
 
+    public function selectProviderForPurchase(string $serviceSlug, array $payload): array
+    {
+        $providers = $this->supportedProviders($serviceSlug);
+        $routing = $this->router->route($serviceSlug, $payload, $providers);
+        $diagnostics = $routing['diagnostics'] ?? [];
+        $diagnostics['provider_eligibility'] = $this->providerEligibilityDiagnostics($serviceSlug);
+
+        $provider = ($routing['providers'] ?? [])[0] ?? null;
+        $diagnostics['selected_provider_id'] = is_array($provider) ? (int) ($provider['id'] ?? 0) : null;
+        $diagnostics['selected_provider_code'] = is_array($provider) ? (string) ($provider['code'] ?? '') : null;
+
+        return [
+            'provider' => $provider,
+            'setting' => $routing['setting'] ?? [],
+            'diagnostics' => $this->redactProviderMeta($diagnostics),
+            'message' => is_array($provider) ? 'Provider selected.' : $this->providerSelectionFailureMessage($serviceSlug, $diagnostics),
+        ];
+    }
+
     public function purchase(string $serviceSlug, array $payload): array
     {
         $requestReference = trim((string) ($payload['reference'] ?? ''));
@@ -62,13 +81,19 @@ class ProviderManager
         $routing = $this->router->route($serviceSlug, $payload, $this->supportedProviders($serviceSlug));
         $providers = $routing['providers'];
         $routingSetting = $routing['setting'];
+        $assignedProviderId = (int) ($payload['_assigned_provider_account_id'] ?? 0);
+        if ($assignedProviderId > 0) {
+            $providers = $this->assignedProviderFirst($providers, $assignedProviderId);
+        }
         if ($providers === []) {
             throw new RuntimeException($this->providerSelectionFailureMessage($serviceSlug, $routing['diagnostics'] ?? []));
         }
 
         $attempts = [];
         $attemptNumber = 0;
+        $lastProvider = null;
         foreach ($providers as $provider) {
+            $lastProvider = $provider;
             $attemptNumber++;
             $startedAt = microtime(true);
             try {
@@ -131,6 +156,7 @@ class ProviderManager
             'recipient' => (string) ($payload['recipient'] ?? ''),
             'raw' => ['message' => 'All providers failed'],
             'attempts' => $attempts,
+            'provider_account' => $lastProvider,
         ];
     }
 
@@ -153,6 +179,31 @@ class ProviderManager
     {
         $excluded = $diagnostics['excluded'] ?? [];
         foreach ($excluded as $item) {
+            if (($item['reason'] ?? '') === 'provider_balance_below_amount') {
+                return sprintf(
+                    'No eligible provider found for %s; %s balance %.2f is below transaction amount %.2f.',
+                    $serviceSlug,
+                    (string) ($item['provider_code'] ?? 'provider'),
+                    (float) ($item['current_balance'] ?? 0),
+                    (float) ($item['amount'] ?? 0)
+                );
+            }
+
+            if (($item['reason'] ?? '') === 'provider_plan_mapping_missing') {
+                return sprintf(
+                    'No eligible provider found for %s; provider plan mapping is missing for %s.',
+                    $serviceSlug,
+                    (string) ($item['local_plan_code'] ?? 'selected plan')
+                );
+            }
+
+            if (($item['reason'] ?? '') === 'manual_provider_not_eligible') {
+                return sprintf(
+                    'No eligible provider found for %s; selected manual provider is not currently eligible.',
+                    $serviceSlug
+                );
+            }
+
             if (($item['reason'] ?? '') === 'provider_success_below_threshold') {
                 $code = (string) ($item['provider_code'] ?? 'provider');
                 $minimum = (float) ($item['minimum_success_rate'] ?? 0);
@@ -168,10 +219,76 @@ class ProviderManager
         }
 
         if ((int) ($diagnostics['candidate_count'] ?? 0) === 0) {
+            foreach (($diagnostics['provider_eligibility'] ?? []) as $provider) {
+                $reasons = (array) ($provider['reasons'] ?? []);
+                if (in_array('provider_config_disabled', $reasons, true) || in_array('provider_credential_missing', $reasons, true)) {
+                    return 'No enabled and fully configured provider is mapped for ' . $serviceSlug . '.';
+                }
+            }
+
             return 'No enabled provider is mapped for ' . $serviceSlug . '.';
         }
 
         return 'No eligible provider found for ' . $serviceSlug . '.';
+    }
+
+    private function assignedProviderFirst(array $providers, int $assignedProviderId): array
+    {
+        $assigned = [];
+        $fallbacks = [];
+        foreach ($providers as $provider) {
+            if ((int) ($provider['id'] ?? 0) === $assignedProviderId) {
+                $assigned[] = $provider;
+            } else {
+                $fallbacks[] = $provider;
+            }
+        }
+
+        return array_merge($assigned, $fallbacks);
+    }
+
+    private function providerEligibilityDiagnostics(string $serviceSlug): array
+    {
+        return array_map(function (array $provider) use ($serviceSlug): array {
+            $config = $this->providerConfig($provider);
+            $supported = json_decode_array($provider['supported_services_json'] ?? '[]');
+            $status = (string) ($provider['status'] ?? 'inactive');
+            $reasons = [];
+
+            if ($status !== 'active') {
+                $reasons[] = 'provider_not_active';
+            }
+            if (!empty($supported) && !in_array($serviceSlug, $supported, true)) {
+                $reasons[] = 'service_not_supported';
+            }
+            if (empty($config['enabled'])) {
+                $reasons[] = 'provider_config_disabled';
+            }
+            if (trim((string) ($config['base_url'] ?? '')) === '') {
+                $reasons[] = 'provider_base_url_missing';
+            }
+            if (trim((string) ($config['api_key'] ?? $config['token'] ?? '')) === '') {
+                $reasons[] = 'provider_credential_missing';
+            }
+            if ($this->isCircuitOpen($provider)) {
+                $reasons[] = 'provider_circuit_open';
+            }
+
+            return [
+                'provider_id' => (int) ($provider['id'] ?? 0),
+                'provider_code' => (string) ($provider['code'] ?? ''),
+                'driver' => (string) ($provider['driver'] ?? ''),
+                'status' => $status,
+                'eligible' => $reasons === [],
+                'reasons' => $reasons,
+            ];
+        }, $this->allProviders());
+    }
+
+    private function providerConfigReady(array $config): bool
+    {
+        return trim((string) ($config['base_url'] ?? '')) !== ''
+            && trim((string) ($config['api_key'] ?? $config['token'] ?? '')) !== '';
     }
 
     public function testConnection(int $providerId): array
@@ -189,6 +306,48 @@ class ProviderManager
             'driver' => $provider['driver'],
             'timestamp' => date('c'),
             'health' => $health,
+        ];
+    }
+
+    public function refreshProviderBalance(int $providerId): array
+    {
+        $provider = $this->getById($providerId);
+        if (!$provider) {
+            return ['status' => 'failed', 'message' => 'Provider not found.'];
+        }
+
+        try {
+            $balance = $this->driver($provider)->checkBalance();
+        } catch (\Throwable $throwable) {
+            $this->logger->warning('Provider balance refresh failed.', [
+                'provider_code' => (string) ($provider['code'] ?? 'unknown'),
+                'error' => $throwable->getMessage(),
+            ]);
+
+            return [
+                'status' => 'failed',
+                'message' => $throwable->getMessage(),
+                'provider' => (string) ($provider['name'] ?? $provider['code'] ?? 'provider'),
+            ];
+        }
+
+        if (($balance['status'] ?? '') !== 'successful' || !isset($balance['balance'])) {
+            return [
+                'status' => 'failed',
+                'message' => (string) ($balance['raw']['message'] ?? 'Provider balance refresh did not return a usable balance.'),
+                'provider' => (string) ($provider['name'] ?? $provider['code'] ?? 'provider'),
+            ];
+        }
+
+        $amount = (float) $balance['balance'];
+        $this->logBalance($providerId, $amount, 'provider_api', 'Refreshed from admin dashboard.');
+
+        return [
+            'status' => 'successful',
+            'message' => 'Provider balance refreshed.',
+            'provider' => (string) ($provider['name'] ?? $provider['code'] ?? 'provider'),
+            'balance' => $amount,
+            'currency' => (string) ($balance['currency'] ?? config('app.currency', 'NGN')),
         ];
     }
 

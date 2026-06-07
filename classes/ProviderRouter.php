@@ -20,26 +20,29 @@ class ProviderRouter
         $setting = $this->routingSetting($serviceSlug);
         $diagnostics = [
             'service_slug' => $serviceSlug,
+            'network_code' => $this->pricing->normalizeNetwork((string) ($payload['network'] ?? $payload['provider'] ?? '')),
+            'local_plan_code' => $this->payloadPlanCode($payload),
             'routing_mode' => $setting['routing_mode'] ?? 'priority',
             'minimum_success_rate' => (float) ($setting['minimum_success_rate'] ?? 80),
             'manual_provider_account_id' => $setting['manual_provider_account_id'] ?? null,
             'fallback_enabled' => !empty($setting['fallback_enabled']),
             'candidate_count' => count($providers),
+            'candidates' => array_map([$this, 'diagnosticProvider'], $providers),
             'excluded' => [],
         ];
 
-        $providers = $this->filterPlanAwareProviders($providers, $payload);
+        $providers = $this->filterPlanAwareProviders($providers, $payload, $diagnostics);
         $diagnostics['after_plan_filter_count'] = count($providers);
-        $providers = $this->filterBalanceAwareProviders($providers, (float) ($payload['amount'] ?? 0));
+        $providers = $this->filterBalanceAwareProviders($providers, (float) ($payload['amount'] ?? 0), $diagnostics);
         $diagnostics['after_balance_filter_count'] = count($providers);
         $beforeSuccessThreshold = $providers;
-        $providers = $this->filterSuccessThresholdProviders($providers, (float) $setting['minimum_success_rate'], $diagnostics);
+        $providers = $this->filterSuccessThresholdProviders($providers, (float) $setting['minimum_success_rate'], $diagnostics, $setting);
         $diagnostics['after_success_threshold_count'] = count($providers);
         $diagnostics['eligible_before_success_threshold_count'] = count($beforeSuccessThreshold);
 
         $mode = (string) $setting['routing_mode'];
         if ($mode === 'manual') {
-            $providers = $this->manualOrder($providers, (int) ($setting['manual_provider_account_id'] ?? 0), !empty($setting['fallback_enabled']));
+            $providers = $this->manualOrder($providers, (int) ($setting['manual_provider_account_id'] ?? 0), !empty($setting['fallback_enabled']), $diagnostics);
             $diagnostics['after_manual_order_count'] = count($providers);
         } elseif ($mode === 'cheapest') {
             $providers = $this->cheapestOrder($providers, $payload);
@@ -52,7 +55,11 @@ class ProviderRouter
         return [
             'providers' => array_values($providers),
             'setting' => $setting,
-            'diagnostics' => $diagnostics,
+            'diagnostics' => $diagnostics + [
+                'final_candidates' => array_map([$this, 'diagnosticProvider'], $providers),
+                'selected_provider_id' => isset($providers[0]) ? (int) $providers[0]['id'] : null,
+                'selected_provider_code' => isset($providers[0]) ? (string) $providers[0]['code'] : null,
+            ],
         ];
     }
 
@@ -172,7 +179,7 @@ class ProviderRouter
         return $this->savedRoutingSetting($params['service_slug']);
     }
 
-    private function manualOrder(array $providers, int $manualProviderId, bool $fallbackEnabled): array
+    private function manualOrder(array $providers, int $manualProviderId, bool $fallbackEnabled, array &$diagnostics = []): array
     {
         if ($manualProviderId <= 0) {
             return $providers;
@@ -185,7 +192,23 @@ class ProviderRouter
                 $manual[] = $provider;
             } elseif ($fallbackEnabled) {
                 $fallbacks[] = $provider;
+            } else {
+                $diagnostics['excluded'][] = [
+                    'provider_id' => (int) $provider['id'],
+                    'provider_code' => (string) ($provider['code'] ?? ''),
+                    'reason' => 'manual_routing_fallback_disabled',
+                    'manual_provider_account_id' => $manualProviderId,
+                ];
             }
+        }
+
+        if ($manual === []) {
+            $diagnostics['excluded'][] = [
+                'provider_id' => $manualProviderId,
+                'provider_code' => '',
+                'reason' => 'manual_provider_not_eligible',
+                'manual_provider_account_id' => $manualProviderId,
+            ];
         }
 
         usort($fallbacks, static fn(array $a, array $b): int => [(int) $a['priority_order'], (int) $a['id']] <=> [(int) $b['priority_order'], (int) $b['id']]);
@@ -231,7 +254,7 @@ class ProviderRouter
         return (($costScore * $costWeight) + (((($healthScore + $successRate) / 2) - $responsePenalty) * $healthWeight)) / max(1, $costWeight + $healthWeight);
     }
 
-    private function filterPlanAwareProviders(array $providers, array $payload): array
+    private function filterPlanAwareProviders(array $providers, array $payload, array &$diagnostics = []): array
     {
         $serviceId = (int) ($payload['service_id'] ?? 0);
         $planCode = $this->payloadPlanCode($payload);
@@ -246,31 +269,100 @@ class ProviderRouter
             if ($mapping) {
                 $provider['_route_plan_mapping'] = $mapping;
                 $mapped[] = $provider;
+            } else {
+                $diagnostics['excluded'][] = [
+                    'provider_id' => (int) $provider['id'],
+                    'provider_code' => (string) ($provider['code'] ?? ''),
+                    'reason' => 'provider_plan_mapping_missing',
+                    'service_id' => $serviceId,
+                    'network_code' => $networkCode,
+                    'local_plan_code' => $planCode,
+                ];
             }
         }
 
-        return $mapped === [] ? $providers : $mapped;
+        return $mapped;
     }
 
-    private function filterBalanceAwareProviders(array $providers, float $amount): array
+    private function filterBalanceAwareProviders(array $providers, float $amount, array &$diagnostics = []): array
     {
         if ($amount <= 0) {
             return $providers;
         }
 
-        return array_values(array_filter($providers, static function (array $provider) use ($amount): bool {
+        return array_values(array_filter($providers, function (array $provider) use ($amount, &$diagnostics): bool {
             if (!array_key_exists('current_balance', $provider) || $provider['current_balance'] === null) {
                 return true;
             }
-            return (float) $provider['current_balance'] >= $amount;
+            if (!$this->providerBalanceIsApiRefreshed((int) ($provider['id'] ?? 0))) {
+                $diagnostics['excluded'][] = [
+                    'provider_id' => (int) $provider['id'],
+                    'provider_code' => (string) ($provider['code'] ?? ''),
+                    'reason' => 'provider_balance_not_api_refreshed',
+                    'current_balance' => (float) $provider['current_balance'],
+                    'amount' => $amount,
+                    'blocking' => false,
+                ];
+                return true;
+            }
+            $eligible = (float) $provider['current_balance'] >= $amount;
+            if (!$eligible) {
+                $diagnostics['excluded'][] = [
+                    'provider_id' => (int) $provider['id'],
+                    'provider_code' => (string) ($provider['code'] ?? ''),
+                    'reason' => 'provider_balance_below_amount',
+                    'current_balance' => (float) $provider['current_balance'],
+                    'amount' => $amount,
+                ];
+            }
+            return $eligible;
         }));
     }
 
-    private function filterSuccessThresholdProviders(array $providers, float $settingMinimum, array &$diagnostics = []): array
+    private function providerBalanceIsApiRefreshed(int $providerId): bool
+    {
+        if ($providerId <= 0 || !$this->db->tableExists('provider_balance_logs')) {
+            return false;
+        }
+
+        $row = $this->db->safeFirst(
+            'SELECT source
+             FROM provider_balance_logs
+             WHERE provider_account_id = :provider_id
+             ORDER BY id DESC
+             LIMIT 1',
+            ['provider_id' => $providerId]
+        );
+
+        return (string) ($row['source'] ?? '') === 'provider_api';
+    }
+
+    private function diagnosticProvider(array $provider): array
+    {
+        $balanceKnown = array_key_exists('current_balance', $provider) && $provider['current_balance'] !== null;
+
+        return [
+            'provider_id' => (int) ($provider['id'] ?? 0),
+            'provider_code' => (string) ($provider['code'] ?? ''),
+            'driver' => (string) ($provider['driver'] ?? ''),
+            'status' => (string) ($provider['status'] ?? ''),
+            'priority_order' => (int) ($provider['priority_order'] ?? 0),
+            'current_balance_known' => $balanceKnown,
+            'current_balance' => $balanceKnown ? (float) $provider['current_balance'] : null,
+            'circuit_breaker_status' => (string) ($provider['circuit_breaker_status'] ?? 'closed'),
+        ];
+    }
+
+    private function filterSuccessThresholdProviders(array $providers, float $settingMinimum, array &$diagnostics = [], array $setting = []): array
     {
         $eligible = [];
+        $manualProviderId = (string) ($setting['routing_mode'] ?? '') === 'manual'
+            ? (int) ($setting['manual_provider_account_id'] ?? 0)
+            : 0;
         foreach ($providers as $provider) {
-            $minimum = max($settingMinimum, (float) ($provider['minimum_success_rate'] ?? 0));
+            $minimum = $manualProviderId > 0 && (int) ($provider['id'] ?? 0) === $manualProviderId
+                ? $settingMinimum
+                : max($settingMinimum, (float) ($provider['minimum_success_rate'] ?? 0));
             $rate = $this->successRate((int) $provider['id']);
             if ($rate >= $minimum) {
                 $eligible[] = $provider;

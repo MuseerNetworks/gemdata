@@ -6,6 +6,25 @@ $admin = require_permission('dashboard.view');
 $reportService = app(\GemData\Classes\ReportService::class);
 $settings = app(\GemData\Classes\SettingsService::class);
 $ops = app(\GemData\Classes\AdminOpsService::class);
+$providerManager = app(\GemData\Classes\ProviderManager::class);
+
+if (is_post()) {
+    try {
+        verify_csrf();
+        if (($_POST['action'] ?? '') === 'refresh_provider_balance') {
+            $result = $providerManager->refreshProviderBalance((int) ($_POST['provider_id'] ?? 0));
+            if (($result['status'] ?? '') === 'successful') {
+                flash('success', sprintf('%s balance refreshed: %s.', (string) ($result['provider'] ?? 'Provider'), money((float) ($result['balance'] ?? 0))));
+            } else {
+                flash('error', sprintf('%s balance refresh failed: %s', (string) ($result['provider'] ?? 'Provider'), (string) ($result['message'] ?? 'Unknown error.')));
+            }
+        }
+    } catch (Throwable $throwable) {
+        flash('error', $throwable->getMessage());
+    }
+
+    redirect(base_url('admin/dashboard.php'));
+}
 
 $overview = $reportService->overview();
 $dailySeries = $reportService->dailySeries(7);
@@ -14,7 +33,8 @@ $opsSummary = $ops->dashboardOpsSummary();
 $pendingQueue = $opsSummary['pending_queue'];
 $recentFailures = $opsSummary['recent_failures'];
 $providerHealth = $opsSummary['provider_health'];
-$providerAlerts = array_values(array_filter($providerHealth, static fn(array $provider): bool => $provider['is_low']));
+$providerWalletBalances = $opsSummary['provider_wallet_balances'] ?? [];
+$providerAlerts = array_values(array_filter($providerWalletBalances, static fn(array $provider): bool => !empty($provider['is_low'])));
 
 $completedTransactions = max(1, (int) $overview['success_transactions'] + (int) $overview['failed_transactions']);
 $successRate = round(((int) $overview['success_transactions'] / $completedTransactions) * 100, 1);
@@ -58,6 +78,9 @@ render_header('Admin Dashboard', 'admin');
 ?>
 <script nonce="<?= e(csp_nonce()); ?>" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <div class="space-y-6">
+    <?php if ($message = flash('success')): ?><div class="notice notice-success"><?= e($message); ?></div><?php endif; ?>
+    <?php if ($message = flash('error')): ?><div class="notice notice-error"><?= e($message); ?></div><?php endif; ?>
+
     <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
             <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue">Operations Center</p>
@@ -161,30 +184,53 @@ render_header('Admin Dashboard', 'admin');
         <section class="rounded-2xl border border-gem-border bg-white p-5 shadow-card">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue">Provider Health</p>
-                    <h2 class="mt-1 text-[18px] font-extrabold text-gem-text">Balances And Alerts</h2>
-                    <p class="mt-1 text-[13px] text-gem-muted">Provider state and low-balance signals before they become failures.</p>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue">Provider Wallets</p>
+                    <h2 class="mt-1 text-[18px] font-extrabold text-gem-text">Provider Wallet Balances</h2>
+                    <p class="mt-1 text-[13px] text-gem-muted">Current balance, refresh time, threshold, and circuit state for configured providers.</p>
                 </div>
                 <a class="inline-flex items-center justify-center rounded-xl border border-gem-border px-3 py-2 text-[12px] font-bold text-gem-blue hover:bg-gem-blueLt" href="<?= e(base_url('admin/providers.php')); ?>">Manage</a>
             </div>
-            <div class="mt-4 space-y-3">
-                <?php if ($providerHealth === []): ?>
-                    <div class="rounded-2xl border border-gem-border bg-gem-gray p-4 text-[13px] text-gem-muted">No providers configured yet.</div>
+            <div class="mt-4 overflow-hidden rounded-2xl border border-gem-border">
+                <?php if ($providerWalletBalances === []): ?>
+                    <div class="bg-gem-gray p-4 text-[13px] text-gem-muted">No providers configured yet.</div>
                 <?php else: ?>
-                    <?php foreach ($providerHealth as $provider): ?>
-                        <div class="rounded-2xl border border-gem-border bg-gem-gray p-4">
-                            <div class="flex items-center justify-between gap-4">
-                                <div class="min-w-0">
-                                    <p class="font-bold text-gem-text"><?= e($provider['name']); ?></p>
-                                    <p class="mt-1 text-[11px] text-gem-muted"><?= e($provider['code']); ?> | <span class="rounded-full bg-white px-2 py-0.5 font-bold uppercase"><?= e($provider['status']); ?></span></p>
-                                </div>
-                                <div class="text-right">
-                                    <p class="font-mono font-bold <?= $provider['is_low'] ? 'text-gem-orange' : 'text-gem-text'; ?>"><?= e(money($provider['balance'])); ?></p>
-                                    <p class="text-[11px] text-gem-muted">Threshold <?= e(money($provider['threshold'])); ?></p>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gem-border text-left text-[13px]">
+                            <thead class="bg-gem-gray text-[11px] uppercase tracking-widest text-gem-muted">
+                                <tr><th class="px-4 py-3">Provider</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Balance</th><th class="px-4 py-3">Last Refreshed</th><th class="px-4 py-3">Circuit</th><th class="px-4 py-3">Action</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gem-border bg-white text-gem-text">
+                                <?php foreach ($providerWalletBalances as $provider): ?>
+                                    <?php
+                                    $balanceLabel = !empty($provider['balance_known']) ? money((float) $provider['balance']) : 'Unknown';
+                                    $balanceClass = !empty($provider['is_low']) ? 'text-gem-orange' : (!empty($provider['balance_known']) ? 'text-gem-text' : 'text-gem-muted');
+                                    ?>
+                                    <tr>
+                                        <td class="px-4 py-3">
+                                            <div class="font-bold"><?= e($provider['name']); ?></div>
+                                            <div class="mt-1 font-mono text-[11px] text-gem-muted"><?= e($provider['code']); ?></div>
+                                        </td>
+                                        <td class="px-4 py-3"><span class="rounded-full bg-gem-gray px-2 py-1 text-[11px] font-bold uppercase"><?= e($provider['status']); ?></span></td>
+                                        <td class="px-4 py-3">
+                                            <div class="font-mono font-bold <?= e($balanceClass); ?>"><?= e($balanceLabel); ?></div>
+                                            <div class="mt-1 text-[11px] text-gem-muted">Threshold <?= e(money((float) $provider['threshold'])); ?></div>
+                                            <?php if (!empty($provider['is_low'])): ?><div class="mt-1 text-[11px] font-bold text-gem-orange">Low balance</div><?php endif; ?>
+                                        </td>
+                                        <td class="px-4 py-3 text-gem-muted"><?= e((string) ($provider['balance_refreshed_at'] ?? 'Never')); ?></td>
+                                        <td class="px-4 py-3"><span class="rounded-full bg-gem-gray px-2 py-1 text-[11px] font-bold uppercase"><?= e($provider['circuit_breaker_status']); ?></span></td>
+                                        <td class="px-4 py-3">
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="refresh_provider_balance">
+                                                <input type="hidden" name="provider_id" value="<?= (int) $provider['id']; ?>">
+                                                <button class="inline-flex items-center justify-center rounded-xl border border-gem-border px-3 py-2 text-[12px] font-bold text-gem-blue hover:bg-gem-blueLt" type="submit">Refresh</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 <?php endif; ?>
             </div>
         </section>
@@ -206,7 +252,7 @@ render_header('Admin Dashboard', 'admin');
                     <?php else: ?>
                         <?php foreach ($providerAlerts as $alert): ?>
                             <div class="rounded-2xl border border-orange-100 bg-orange-50 p-4 text-[13px] font-semibold text-gem-orange">
-                                <?= e($alert['name']); ?> balance is <?= e(money($alert['balance'])); ?>, below threshold <?= e(money($alert['threshold'])); ?>.
+                                <?= e($alert['name']); ?> balance is <?= e(money((float) $alert['balance'])); ?>, below threshold <?= e(money((float) $alert['threshold'])); ?>.
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
