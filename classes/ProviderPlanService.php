@@ -19,15 +19,21 @@ class ProviderPlanService
     public function catalogForServiceSlug(string $serviceSlug): array
     {
         $showInactiveProviderPlans = $this->showInactiveProviderPlansForTesting();
-        $cacheKey = 'provider-plan-catalog:v2-real-providers:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict');
+        $manualProviderId = $this->manualCatalogProviderId($serviceSlug);
+        $cacheKey = 'provider-plan-catalog:v3-real-providers:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict') . ':' . ($manualProviderId ?? 'auto');
         $cached = $this->cache?->get($cacheKey);
         if (is_array($cached) && $cached !== []) {
             return $cached;
         }
 
         $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
+        if ($manualProviderId === 0) {
+            return [];
+        }
+
         $rows = $this->db->query(
-            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount
+            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount,
+                    pa.id AS provider_account_id, pa.code AS provider_code, pa.credentials_key, pa.circuit_breaker_status
              FROM provider_service_plans psp
              INNER JOIN services s ON s.id = psp.service_id
              INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
@@ -37,12 +43,16 @@ class ProviderPlanService
                AND pa.driver IN (' . $allowedDrivers . ')
                AND pa.status <> "archived"
                AND (:show_inactive_provider_plans = 1 OR pa.status = "active")
+               AND (:manual_provider_account_id IS NULL OR pa.id = :manual_provider_account_id_filter)
              ORDER BY psp.network_code, psp.amount ASC, psp.local_plan_name ASC',
             [
                 'slug' => $serviceSlug,
                 'show_inactive_provider_plans' => $showInactiveProviderPlans ? 1 : 0,
+                'manual_provider_account_id' => $manualProviderId,
+                'manual_provider_account_id_filter' => $manualProviderId,
             ]
         );
+        $rows = array_values(array_filter($rows, fn(array $row): bool => $this->catalogProviderIsReady($row)));
 
         $enabledNetworksByService = $this->enabledNetworksByService($rows);
         $catalog = [];
@@ -77,6 +87,63 @@ class ProviderPlanService
             $this->cache?->put($cacheKey, $catalog, 120);
         }
         return $catalog;
+    }
+
+    private function manualCatalogProviderId(string $serviceSlug): ?int
+    {
+        if (!$this->db->tableExists('routing_settings')) {
+            return null;
+        }
+
+        $setting = $this->db->first('SELECT * FROM routing_settings WHERE service_slug = :service_slug LIMIT 1', ['service_slug' => $serviceSlug]);
+        if (!$setting) {
+            $setting = $this->db->first('SELECT * FROM routing_settings WHERE service_slug IS NULL LIMIT 1');
+        }
+
+        if (!$setting || (string) ($setting['routing_mode'] ?? '') !== 'manual') {
+            return null;
+        }
+
+        $providerId = (int) ($setting['manual_provider_account_id'] ?? 0);
+        if ($providerId <= 0) {
+            return 0;
+        }
+
+        $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
+        $provider = $this->db->first(
+            'SELECT *
+             FROM provider_accounts
+             WHERE id = :id
+               AND status = "active"
+               AND driver IN (' . $allowedDrivers . ')
+             LIMIT 1',
+            ['id' => $providerId]
+        );
+
+        if (!$provider || !$this->catalogProviderIsReady($provider)) {
+            return 0;
+        }
+
+        return $providerId;
+    }
+
+    private function catalogProviderIsReady(array $provider): bool
+    {
+        if ((string) ($provider['circuit_breaker_status'] ?? 'closed') === 'open') {
+            return false;
+        }
+
+        $key = trim((string) ($provider['credentials_key'] ?? ''));
+        if ($key === '') {
+            $key = trim((string) ($provider['code'] ?? $provider['provider_code'] ?? ''));
+        }
+        $config = config('providers.' . $key, []);
+        if (!is_array($config) || empty($config['enabled'])) {
+            return false;
+        }
+
+        return trim((string) ($config['base_url'] ?? '')) !== ''
+            && trim((string) ($config['api_key'] ?? $config['token'] ?? '')) !== '';
     }
 
     public function mappingsForAdmin(): array

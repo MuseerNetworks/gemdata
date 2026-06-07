@@ -18,6 +18,7 @@ class ProviderRouter
     public function route(string $serviceSlug, array $payload, array $providers): array
     {
         $setting = $this->routingSetting($serviceSlug);
+        $intendedProvider = $this->intendedProvider($setting);
         $diagnostics = [
             'service_slug' => $serviceSlug,
             'network_code' => $this->pricing->normalizeNetwork((string) ($payload['network'] ?? $payload['provider'] ?? '')),
@@ -25,6 +26,8 @@ class ProviderRouter
             'routing_mode' => $setting['routing_mode'] ?? 'priority',
             'minimum_success_rate' => (float) ($setting['minimum_success_rate'] ?? 80),
             'manual_provider_account_id' => $setting['manual_provider_account_id'] ?? null,
+            'intended_provider_id' => $intendedProvider ? (int) $intendedProvider['id'] : null,
+            'intended_provider_code' => $intendedProvider ? (string) $intendedProvider['code'] : null,
             'fallback_enabled' => !empty($setting['fallback_enabled']),
             'candidate_count' => count($providers),
             'candidates' => array_map([$this, 'diagnosticProvider'], $providers),
@@ -59,6 +62,7 @@ class ProviderRouter
                 'final_candidates' => array_map([$this, 'diagnosticProvider'], $providers),
                 'selected_provider_id' => isset($providers[0]) ? (int) $providers[0]['id'] : null,
                 'selected_provider_code' => isset($providers[0]) ? (string) $providers[0]['code'] : null,
+                'intended_provider_rejection_reason' => $this->intendedProviderRejectionReason($diagnostics),
             ],
         ];
     }
@@ -213,6 +217,46 @@ class ProviderRouter
 
         usort($fallbacks, static fn(array $a, array $b): int => [(int) $a['priority_order'], (int) $a['id']] <=> [(int) $b['priority_order'], (int) $b['id']]);
         return array_merge($manual, $fallbacks);
+    }
+
+    private function intendedProvider(array $setting): ?array
+    {
+        if ((string) ($setting['routing_mode'] ?? '') !== 'manual') {
+            return null;
+        }
+
+        $providerId = (int) ($setting['manual_provider_account_id'] ?? 0);
+        if ($providerId <= 0) {
+            return null;
+        }
+
+        return $this->db->safeFirst(
+            'SELECT id, code, driver, status, priority_order, current_balance, circuit_breaker_status
+             FROM provider_accounts
+             WHERE id = :id AND status <> "archived"
+             LIMIT 1',
+            ['id' => $providerId]
+        );
+    }
+
+    private function intendedProviderRejectionReason(array $diagnostics): ?string
+    {
+        $providerId = (int) ($diagnostics['intended_provider_id'] ?? 0);
+        if ($providerId <= 0) {
+            return null;
+        }
+
+        if ((int) ($diagnostics['selected_provider_id'] ?? 0) === $providerId) {
+            return null;
+        }
+
+        foreach ($diagnostics['excluded'] ?? [] as $item) {
+            if ((int) ($item['provider_id'] ?? 0) === $providerId && !empty($item['reason'])) {
+                return (string) $item['reason'];
+            }
+        }
+
+        return 'provider_not_eligible';
     }
 
     private function cheapestOrder(array $providers, array $payload): array

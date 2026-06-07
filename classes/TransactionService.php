@@ -895,12 +895,19 @@ class TransactionService
         string $recipient,
         array $providerSelection
     ): array {
+        $intendedProvider = $this->intendedProviderFromSelection($providerSelection);
+        $diagnostics = $providerSelection['diagnostics'] ?? [];
+        if (is_array($intendedProvider)) {
+            $diagnostics['intended_provider_id'] = (int) $intendedProvider['id'];
+            $diagnostics['intended_provider_code'] = (string) $intendedProvider['code'];
+        }
+        $diagnostics['wallet_mutation'] = false;
         $response = [
             'status' => 'failed',
             'provider_reference' => null,
             'raw' => [
                 'message' => (string) ($providerSelection['message'] ?? 'No eligible provider found for ' . $serviceSlug . '.'),
-                'routing' => $providerSelection['diagnostics'] ?? [],
+                'routing' => $diagnostics,
             ],
             'attempts' => [],
         ];
@@ -910,11 +917,11 @@ class TransactionService
             $this->db->execute(
                 'INSERT INTO transactions (
                     user_id, service_id, reference, idempotency_key, channel, status, amount, selling_price, cost_price, profit_amount,
-                    pricing_source, is_retryable, recipient, customer_name, payload_json, response_json,
+                    pricing_source, is_retryable, recipient, customer_name, payload_json, response_json, provider_account_id, provider_code,
                     processing_started_at, processed_at, failure_code
                  ) VALUES (
                     :user_id, :service_id, :reference, :idempotency_key, :channel, :status, :amount, :selling_price, :cost_price, :profit_amount,
-                    :pricing_source, :is_retryable, :recipient, :customer_name, :payload_json, :response_json,
+                    :pricing_source, :is_retryable, :recipient, :customer_name, :payload_json, :response_json, :provider_account_id, :provider_code,
                     NULL, NOW(), :failure_code
                  )',
                 [
@@ -934,13 +941,17 @@ class TransactionService
                     'customer_name' => $payload['customer_name'] ?? null,
                     'payload_json' => json_encode($payload),
                     'response_json' => json_encode($response),
+                    'provider_account_id' => is_array($intendedProvider) ? (int) $intendedProvider['id'] : null,
+                    'provider_code' => is_array($intendedProvider) ? (string) $intendedProvider['code'] : null,
                     'failure_code' => 'provider_selection_failed',
                 ]
             );
             $transactionId = $this->db->lastInsertId();
             $this->event($transactionId, 'transaction_provider_selection_failed', 'system', null, 'No eligible provider was available before wallet debit.', [
                 'message' => $response['raw']['message'],
-                'routing' => $providerSelection['diagnostics'] ?? [],
+                'provider_account_id' => is_array($intendedProvider) ? (int) $intendedProvider['id'] : null,
+                'provider_code' => is_array($intendedProvider) ? (string) $intendedProvider['code'] : null,
+                'routing' => $diagnostics,
                 'wallet_mutation' => false,
             ]);
             $this->db->commit();
@@ -964,6 +975,25 @@ class TransactionService
         $this->logger->log($channel === 'api' ? 'api' : 'user', $userId, 'transaction_provider_selection_failed', "{$service['name']} transaction could not be routed.", ['reference' => $reference]);
 
         return $this->responsePayload($row);
+    }
+
+    private function intendedProviderFromSelection(array $providerSelection): ?array
+    {
+        $diagnostics = $providerSelection['diagnostics'] ?? [];
+        $providerId = (int) ($diagnostics['intended_provider_id'] ?? 0);
+        if ($providerId <= 0) {
+            $providerId = (int) ($providerSelection['setting']['manual_provider_account_id'] ?? 0);
+        }
+        if ($providerId <= 0) {
+            return null;
+        }
+
+        $provider = $this->providers->getById($providerId);
+        if (!$provider || (string) ($provider['status'] ?? '') === 'archived') {
+            return null;
+        }
+
+        return $provider;
     }
 
     private function findByIdempotency(int $userId, string $channel, string $idempotencyKey): ?array
