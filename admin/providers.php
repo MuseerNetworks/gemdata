@@ -32,7 +32,7 @@ if (is_post()) {
             $logger->log('admin', (int) $admin['id'], 'provider_saved', 'Admin saved provider safeguards.', [
                 'code' => $_POST['code'] ?? '',
                 'status' => $_POST['status'] ?? 'active',
-                'driver' => $_POST['driver'] ?? 'mock',
+                'driver' => $_POST['driver'] ?? 'albani',
                 'sandbox_mode' => !empty($_POST['sandbox_mode']),
                 'cheapest_routing_enabled' => !empty($_POST['cheapest_routing_enabled']),
             ]);
@@ -124,12 +124,9 @@ render_header('Providers', 'admin');
             <input class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text focus:border-gem-blue focus:outline-none focus:ring-2 focus:ring-gem-blue/10" name="name" placeholder="provider name" required>
             <select class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="driver">
                 <option value="albani">AlbaniAPI</option>
-                <option value="smeplug">SMEPlug</option>
-                <option value="vtpass">VTpass</option>
-                <option value="clubkonnect">ClubKonnect</option>
                 <option value="alrahuzdata">AlrahuzData</option>
-                <option value="easyaccessapi">EasyAccessAPI</option>
-                <option value="mock">Mock</option>
+                <option value="abbpantami">AbbPantami</option>
+                <option value="cheapdatahub">CheapDataHub</option>
             </select>
             <select class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3 text-[13px] text-gem-text" name="status">
                 <option value="active">Active</option>

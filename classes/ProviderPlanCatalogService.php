@@ -283,6 +283,9 @@ class ProviderPlanCatalogService
         if (in_array($driver, ['vtung', 'nigerianvtu'], true)) {
             return new VtuNgPlanCatalogAdapter($this->logger);
         }
+        if ($driver === 'cheapdatahub') {
+            return new CheapDataHubPlanCatalogAdapter($this->logger);
+        }
 
         return new UnsupportedProviderPlanCatalogAdapter();
     }
@@ -292,6 +295,9 @@ class ProviderPlanCatalogService
         $provider = $this->db->first('SELECT * FROM provider_accounts WHERE id = :id LIMIT 1', ['id' => $providerId]);
         if (!$provider) {
             throw new RuntimeException('Provider not found.');
+        }
+        if (!RealProviderRegistry::isAllowedDriver((string) ($provider['driver'] ?? '')) || (string) ($provider['status'] ?? '') === 'archived') {
+            throw new RuntimeException('This provider is archived or is not registered as a real production provider.');
         }
 
         return $provider;

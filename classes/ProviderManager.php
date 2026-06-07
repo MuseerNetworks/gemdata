@@ -10,7 +10,6 @@ class ProviderManager
 {
     public function __construct(
         private Database $db,
-        private MockVtuProvider $mockProvider,
         private AppLogger $logger,
         private SimpleCache $cache,
         private ProviderPlanService $planService,
@@ -73,7 +72,12 @@ class ProviderManager
             $attemptNumber++;
             $startedAt = microtime(true);
             try {
-                $response = $this->driver($provider)->purchase($serviceSlug, $payload);
+                $providerPayload = $payload;
+                $providerPayload['_provider_account'] = $provider;
+                if (isset($provider['_route_plan_mapping'])) {
+                    $providerPayload['_route_plan_mapping'] = $provider['_route_plan_mapping'];
+                }
+                $response = $this->driver($provider)->purchase($serviceSlug, $providerPayload);
                 $response = $this->normalizePurchaseResponse($response, $provider, $payload);
                 $responseTimeMs = (int) round((microtime(true) - $startedAt) * 1000);
                 $attempts[] = [
@@ -231,10 +235,15 @@ class ProviderManager
             ? $this->getById((int) $payload['id'])
             : $this->db->first('SELECT * FROM provider_accounts WHERE code = :code LIMIT 1', ['code' => $payload['code']]);
 
+        $driver = strtolower(trim((string) ($payload['driver'] ?? 'albani')));
+        if (!RealProviderRegistry::isAllowedDriver($driver)) {
+            throw new RuntimeException(sprintf('Provider driver "%s" is not available for production use.', $driver !== '' ? $driver : 'unknown'));
+        }
+
         $params = [
             'code' => strtolower(trim((string) $payload['code'])),
             'name' => trim((string) $payload['name']),
-            'driver' => trim((string) ($payload['driver'] ?? 'mock')),
+            'driver' => $driver,
             'status' => $this->normalizeProviderStatus((string) ($payload['status'] ?? 'active')),
             'priority_order' => max(1, (int) ($payload['priority_order'] ?? 1)),
             'supports_fallback' => !empty($payload['supports_fallback']) ? 1 : 0,
@@ -578,17 +587,15 @@ class ProviderManager
 
     private function driver(array $provider): VtuProviderInterface
     {
-        $driver = strtolower((string) ($provider['driver'] ?? 'mock'));
+        $driver = strtolower((string) ($provider['driver'] ?? ''));
         $config = $this->providerConfig($provider);
 
         return match ($driver) {
             'albani' => new AlbaniProvider($config, $this->logger, $this->planService),
-            'smeplug' => new SmeplugProvider($config, $this->logger),
-            'vtpass' => new VTpassProvider($config, $this->logger),
-            'clubkonnect' => new ClubKonnectProvider($config, $this->logger),
-            'alrahuzdata' => new AlrahuzDataProvider($config, $this->logger),
-            'easyaccessapi' => new EasyAccessApiProvider($config, $this->logger),
-            default => $this->mockProvider,
+            'alrahuzdata' => new AlrahuzDataProvider($config, $this->logger, $this->planService),
+            'abbpantami' => new AbbPantamiProvider($config, $this->logger, $this->planService),
+            'cheapdatahub' => new CheapDataHubProvider($config, $this->logger, $this->planService),
+            default => throw new RuntimeException(sprintf('Provider driver "%s" is not registered as a real production driver.', $driver !== '' ? $driver : 'unknown')),
         };
     }
 
@@ -601,7 +608,7 @@ class ProviderManager
                 $config['base_url'] = (string) $provider['base_url'];
             }
             $config['label'] = $config['label'] ?? (string) ($provider['name'] ?? $configKey);
-            $config['driver'] = $config['driver'] ?? (string) ($provider['driver'] ?? 'mock');
+            $config['driver'] = $config['driver'] ?? (string) ($provider['driver'] ?? '');
             $config['sandbox'] = !empty($provider['sandbox_mode']) || !empty($config['sandbox']);
 
             return $config;

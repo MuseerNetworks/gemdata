@@ -1,11 +1,10 @@
 # Provider Onboarding
 
 ## Supported adapters
-- SMEPlug
-- VTpass
-- ClubKonnect
+- Albani
 - AlrahuzData
-- EasyAccessAPI
+- AbbPantami
+- CheapDataHub
 
 ## Steps
 1. Add credentials only in `/home/<cpanel_user>/gemdata-config.php`

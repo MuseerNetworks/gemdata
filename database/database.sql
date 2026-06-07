@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS provider_accounts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(60) NOT NULL UNIQUE,
     name VARCHAR(120) NOT NULL,
-    driver VARCHAR(60) NOT NULL DEFAULT 'mock',
+    driver VARCHAR(60) NOT NULL DEFAULT 'albani',
     status ENUM('active','inactive','maintenance','archived') NOT NULL DEFAULT 'inactive',
     priority_order INT NOT NULL DEFAULT 1,
     supports_fallback TINYINT(1) NOT NULL DEFAULT 1,
@@ -893,12 +893,9 @@ SELECT 2, id FROM admin_permissions WHERE permission_key IN ('security.manage','
 
 INSERT IGNORE INTO provider_accounts (code, name, driver, status, priority_order, supports_fallback, low_balance_threshold, credentials_key, base_url, supported_services_json, notes) VALUES
     ('albani', 'AlbaniAPI', 'albani', 'inactive', 1, 1, 5000.00, 'albani', 'https://albanidata.com/api/v1', '["airtime","data"]', 'Disabled by default until Albani credentials and plan mappings are configured.'),
-    ('smeplug', 'SMEPlug', 'smeplug', 'inactive', 1, 1, 5000.00, 'smeplug', '', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials are configured.'),
-    ('vtpass', 'VTpass', 'vtpass', 'inactive', 2, 1, 5000.00, 'vtpass', '', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials are configured.'),
-    ('clubkonnect', 'ClubKonnect', 'clubkonnect', 'inactive', 3, 1, 5000.00, 'clubkonnect', '', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials are configured.'),
-    ('alrahuzdata', 'AlrahuzData', 'alrahuzdata', 'inactive', 4, 1, 5000.00, 'alrahuzdata', '', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials are configured.'),
-    ('easyaccessapi', 'EasyAccessAPI', 'easyaccessapi', 'inactive', 5, 1, 5000.00, 'easyaccessapi', '', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials are configured.'),
-    ('mock_main', 'Mock VTU Provider', 'mock', 'inactive', 99, 0, 0.00, 'mock_main', 'local', '["airtime","data","electricity","cable_tv","exam_pin","recharge_card","data_card","bulk_sms"]', 'Local-only mock provider.');
+    ('alrahuzdata', 'AlrahuzData', 'alrahuzdata', 'inactive', 2, 1, 5000.00, 'alrahuzdata', 'https://alrahuzdata.com.ng/api', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials and plan mappings are configured.'),
+    ('abbpantami', 'AbbPantami', 'abbpantami', 'inactive', 3, 1, 5000.00, 'abbpantami', 'https://abbapantamiapi.com/api', '["airtime","data","cable_tv","electricity"]', 'Disabled by default until credentials and plan mappings are configured.'),
+    ('cheapdatahub', 'CheapDataHub', 'cheapdatahub', 'inactive', 4, 1, 5000.00, 'cheapdatahub', 'https://www.cheapdatahub.ng/api/v1/resellers', '["airtime","data","cable_tv","electricity","exam_pin"]', 'Disabled by default until credentials and plan mappings are configured.');
 
 INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_group) VALUES
     ('site_name', 'GemData API Platform', 'general'),

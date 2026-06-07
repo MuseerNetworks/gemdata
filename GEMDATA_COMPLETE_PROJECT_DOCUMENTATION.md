@@ -1108,8 +1108,8 @@ Status:
 | `ProviderRouter` | Selects provider based on routing mode, health, cost, balance, and fallback. |
 | `ProviderPlanService` | Service plan/provider catalog. |
 | `ProviderInterface` | Common adapter contract. |
-| `MockVtuProvider` | Mock/test provider. |
-| `Providers/Adapters/*` | Provider-specific adapters such as Albani. |
+| `ProductionProviderAdapter` | Shared HTTP, auth, diagnostics, and normalization behavior for real VTU providers. |
+| Provider adapters | Real provider-specific adapters such as Albani, AlrahuzData, AbbPantami, and CheapDataHub. |
 
 ### Provider Tables
 

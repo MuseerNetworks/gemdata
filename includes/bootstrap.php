@@ -74,7 +74,6 @@ use GemData\Classes\FundingAccountProviderService;
 use GemData\Classes\KatPayVirtualAccountService;
 use GemData\Classes\MailService;
 use GemData\Classes\MaintenanceService;
-use GemData\Classes\MockVtuProvider;
 use GemData\Classes\NotificationService;
 use GemData\Classes\PaystackDedicatedAccountService;
 use GemData\Classes\PaymentGatewayService;
@@ -127,13 +126,12 @@ try {
     $xixaPay = new XixaPay($database, $activityLogger, $notifications);
     $userRoles = new UserRoleManager();
     $roleMiddleware = new RoleMiddleware($userRoles);
-    $mockProvider = new MockVtuProvider();
     $pricing = new PricingService($database, $cache);
     $providerPlans = new ProviderPlanService($database, $pricing, $cache, $settings);
     $providerPlanCatalog = new ProviderPlanCatalogService($database, $pricing, $providerPlans, $appLogger);
     $fraud = new FraudService($database);
     $providerRouter = new ProviderRouter($database, $providerPlans, $pricing);
-    $providerManager = new ProviderManager($database, $mockProvider, $appLogger, $cache, $providerPlans, $providerRouter);
+    $providerManager = new ProviderManager($database, $appLogger, $cache, $providerPlans, $providerRouter);
     $fundingProviders = new FundingAccountProviderService($database, $settings, $katPay, $paystackDva);
     $reportService = new ReportService($database);
     $adminOps = new AdminOpsService($database, $activityLogger, $providerManager);
@@ -317,7 +315,11 @@ function bootstrap_runtime_preflight(): void
             continue;
         }
 
-        if (!empty($providerConfig['enabled']) && strtolower((string) ($providerConfig['driver'] ?? '')) === 'albani' && !in_array('curl', $required, true)) {
+        if (
+            !empty($providerConfig['enabled'])
+            && in_array(strtolower((string) ($providerConfig['driver'] ?? '')), ['albani', 'alrahuzdata', 'abbpantami', 'cheapdatahub'], true)
+            && !in_array('curl', $required, true)
+        ) {
             $required[] = 'curl';
         }
     }

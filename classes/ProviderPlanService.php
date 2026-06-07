@@ -19,12 +19,13 @@ class ProviderPlanService
     public function catalogForServiceSlug(string $serviceSlug): array
     {
         $showInactiveProviderPlans = $this->showInactiveProviderPlansForTesting();
-        $cacheKey = 'provider-plan-catalog:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict');
+        $cacheKey = 'provider-plan-catalog:v2-real-providers:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict');
         $cached = $this->cache?->get($cacheKey);
         if (is_array($cached) && $cached !== []) {
             return $cached;
         }
 
+        $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
         $rows = $this->db->query(
             'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount
              FROM provider_service_plans psp
@@ -33,6 +34,8 @@ class ProviderPlanService
              WHERE s.slug = :slug
                AND psp.is_enabled = 1
                AND s.is_enabled = 1
+               AND pa.driver IN (' . $allowedDrivers . ')
+               AND pa.status <> "archived"
                AND (:show_inactive_provider_plans = 1 OR pa.status = "active")
              ORDER BY psp.network_code, psp.amount ASC, psp.local_plan_name ASC',
             [
@@ -78,22 +81,30 @@ class ProviderPlanService
 
     public function mappingsForAdmin(): array
     {
+        $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
+
         return $this->db->query(
             'SELECT psp.*, pa.name AS provider_name, pa.code AS provider_code, s.name AS service_name, s.slug AS service_slug
              FROM provider_service_plans psp
              INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
              INNER JOIN services s ON s.id = psp.service_id
+             WHERE pa.driver IN (' . $allowedDrivers . ')
+               AND pa.status <> "archived"
              ORDER BY pa.priority_order ASC, s.name ASC, psp.network_code ASC, psp.amount ASC, psp.local_plan_name ASC'
         );
     }
 
     public function latestMappingsForAdmin(int $limit = 5): array
     {
+        $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
+
         return $this->db->query(
             'SELECT psp.*, pa.name AS provider_name, pa.code AS provider_code, s.name AS service_name, s.slug AS service_slug
              FROM provider_service_plans psp
              INNER JOIN provider_accounts pa ON pa.id = psp.provider_account_id
              INNER JOIN services s ON s.id = psp.service_id
+             WHERE pa.driver IN (' . $allowedDrivers . ')
+               AND pa.status <> "archived"
              ORDER BY psp.id DESC
              LIMIT ' . max(1, min(25, $limit))
         );
@@ -107,6 +118,7 @@ class ProviderPlanService
             throw new RuntimeException('Select a valid data plan.');
         }
 
+        $allowedDrivers = RealProviderRegistry::sqlInList(RealProviderRegistry::DRIVERS);
         $row = $this->db->first(
             'SELECT psp.id
              FROM provider_service_plans psp
@@ -114,6 +126,7 @@ class ProviderPlanService
              WHERE psp.service_id = :service_id
                AND psp.is_enabled = 1
                AND pa.status = "active"
+               AND pa.driver IN (' . $allowedDrivers . ')
                AND psp.local_plan_code = :local_plan_code
                AND psp.network_code <=> :network_code
              LIMIT 1',
@@ -163,6 +176,11 @@ class ProviderPlanService
 
         if ($providerAccountId <= 0 || $serviceId <= 0) {
             throw new RuntimeException('Provider and service are required for plan mapping.');
+        }
+
+        $provider = $this->db->first('SELECT id, driver, status FROM provider_accounts WHERE id = :id LIMIT 1', ['id' => $providerAccountId]);
+        if (!$provider || !RealProviderRegistry::isAllowedDriver((string) ($provider['driver'] ?? '')) || (string) ($provider['status'] ?? '') === 'archived') {
+            throw new RuntimeException('Provider plan mappings can only be saved for real, non-archived production providers.');
         }
 
         if ($localPlanCode === '' || $localPlanName === '' || $providerPlanId === '') {
@@ -319,6 +337,8 @@ class ProviderPlanService
             $this->cache?->forget('provider-plan-catalog:' . $slug);
             $this->cache?->forget('provider-plan-catalog:' . $slug . ':strict');
             $this->cache?->forget('provider-plan-catalog:' . $slug . ':testing');
+            $this->cache?->forget('provider-plan-catalog:v2-real-providers:' . $slug . ':strict');
+            $this->cache?->forget('provider-plan-catalog:v2-real-providers:' . $slug . ':testing');
         }
     }
 }

@@ -146,7 +146,7 @@ render_header('Admin Dashboard', 'admin');
                                 <div class="min-w-0">
                                     <p class="font-bold text-gem-text"><?= e($row['service_name']); ?> <span class="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase text-gem-red">Failed</span></p>
                                     <p class="mt-1 truncate text-[12px] text-gem-muted"><?= e($row['full_name']); ?> | <?= e($row['reference']); ?></p>
-                                    <p class="mt-1 text-[11px] text-gem-muted"><?= e($row['provider_code'] ?? 'mock_main'); ?> | <?= e($row['created_at']); ?></p>
+                                    <p class="mt-1 text-[11px] text-gem-muted"><?= e($row['provider_code'] ?? 'unassigned'); ?> | <?= e($row['created_at']); ?></p>
                                 </div>
                                 <p class="shrink-0 font-mono font-bold text-gem-text"><?= e(money($row['amount'])); ?></p>
                             </div>

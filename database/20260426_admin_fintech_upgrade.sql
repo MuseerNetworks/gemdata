@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS provider_accounts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(60) NOT NULL UNIQUE,
     name VARCHAR(120) NOT NULL,
-    driver VARCHAR(60) NOT NULL DEFAULT 'mock',
+    driver VARCHAR(60) NOT NULL DEFAULT 'albani',
     status ENUM('active','inactive') NOT NULL DEFAULT 'active',
     priority_order INT NOT NULL DEFAULT 1,
     supports_fallback TINYINT(1) NOT NULL DEFAULT 1,
@@ -274,7 +274,7 @@ SELECT 3, id FROM admin_permissions WHERE permission_key IN (
 );
 
 INSERT IGNORE INTO provider_accounts (code, name, driver, status, priority_order, supports_fallback, low_balance_threshold, credentials_key, base_url, supported_services_json, notes)
-VALUES ('mock_main', 'Mock VTU Provider', 'mock', 'active', 1, 1, 1000.00, 'mock_main', 'local', '["airtime","data","electricity","cable_tv","exam_pin","recharge_card","data_card","bulk_sms"]', 'Default safe mock provider');
+VALUES ('albani', 'AlbaniAPI', 'albani', 'inactive', 1, 1, 5000.00, 'albani', 'https://albanidata.com/api/v1', '["airtime","data"]', 'Disabled by default until Albani credentials and plan mappings are configured.');
 
 INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_group) VALUES
     ('site_name', 'GemData API Platform', 'general'),

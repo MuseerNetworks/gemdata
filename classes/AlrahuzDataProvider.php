@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace GemData\Classes;
 
-class AlrahuzDataProvider extends AbstractProviderAdapter
+class AlrahuzDataProvider extends DjangoStyleVtuProvider
 {
     public function code(): string
     {
         return 'alrahuzdata';
     }
 
-    public function purchase(string $serviceSlug, array $payload): array
+    protected function supportsExamPin(): bool
     {
-        return $this->unsupportedPurchase($serviceSlug, $payload);
+        return true;
     }
 }

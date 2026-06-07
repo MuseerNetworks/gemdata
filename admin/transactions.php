@@ -410,7 +410,7 @@ render_header('Transactions', 'admin');
                                     <div class="font-semibold text-white"><?= e($row['service_name']); ?></div>
                                     <div class="text-xs text-slate-400"><?= e(strtoupper((string) $row['channel'])); ?> | <?= e($row['recipient'] ?? '-'); ?></div>
                                 </td>
-                                <td><?= e($row['provider_code'] ?? 'mock_main'); ?></td>
+                                <td><?= e($row['provider_code'] ?? 'unassigned'); ?></td>
                                 <td><span class="status-chip status-<?= e($row['status']); ?>"><?= e(ucfirst($row['status'])); ?></span></td>
                                 <td><?= e(money($row['selling_price'] > 0 ? $row['selling_price'] : $row['amount'])); ?></td>
                                 <td><?= e(money($row['profit_amount'])); ?></td>

@@ -70,58 +70,49 @@ return [
     // 3. VTU PROVIDERS
     // ══════════════════════════════════════════════════════
     'providers' => [
-
-        // ── Albani (LIVE) ──────────────────────────────────
         'albani' => [
-            'label'      => 'Albani',
-            'driver'     => 'albani',
-            'enabled'    => true,                   // ← set false to disable without code change
-            'base_url'   => 'https://api.albanidata.com',
-            'api_key'    => '',                     // ← FILL IN
-            'api_secret' => '',                     // ← FILL IN
-            'sandbox'    => false,
+            'label' => 'AlbaniAPI',
+            'driver' => 'albani',
+            'enabled' => false,
+            'base_url' => 'https://albanidata.com/api/v1',
+            'api_key' => '',
+            'sandbox' => false,
         ],
-
-        // ── SMEPlug ────────────────────────────────────────
-        'smeplug' => [
-            'label'      => 'SMEPlug',
-            'driver'     => 'smeplug',
-            'enabled'    => false,                  // ← enable when contracted
-            'base_url'   => 'https://smeplug.ng/api/v2',
-            'api_key'    => '',                     // ← FILL IN
-            'api_secret' => '',                     // ← FILL IN
-            'sandbox'    => false,
+        'alrahuzdata' => [
+            'label' => 'AlrahuzData',
+            'driver' => 'alrahuzdata',
+            'enabled' => false,
+            'base_url' => 'https://alrahuzdata.com.ng/api',
+            'token' => '',
+            'sandbox' => false,
+            'network_map' => ['mtn' => '', 'airtel' => '', 'glo' => '', '9mobile' => ''],
+            'disco_map' => [],
+            'meter_type_map' => ['prepaid' => '1', 'postpaid' => '2'],
+            'cable_map' => [],
         ],
-
-        // ── ClubKonnect ────────────────────────────────────
-        'clubkonnect' => [
-            'label'      => 'ClubKonnect',
-            'driver'     => 'clubkonnect',
-            'enabled'    => false,
-            'base_url'   => 'https://www.clubkonnect.com/api',
-            'api_key'    => '',                     // ← FILL IN
-            'api_secret' => '',                     // ← FILL IN
-            'sandbox'    => false,
+        'abbpantami' => [
+            'label' => 'AbbPantami',
+            'driver' => 'abbpantami',
+            'enabled' => false,
+            'base_url' => 'https://abbapantamiapi.com/api',
+            'token' => '',
+            'sandbox' => false,
+            'network_map' => ['mtn' => '', 'airtel' => '', 'glo' => '', '9mobile' => ''],
+            'disco_map' => [],
+            'meter_type_map' => ['prepaid' => '1', 'postpaid' => '2'],
+            'cable_map' => [],
         ],
-
-        // ── VTpass ────────────────────────────────────────
-        'vtpass' => [
-            'label'      => 'VTpass',
-            'driver'     => 'vtpass',
-            'enabled'    => false,
-            'base_url'   => 'https://api-service.vtpass.com/api',
-            'api_key'    => '',                     // ← FILL IN
-            'api_secret' => '',                     // ← FILL IN
-            'sandbox'    => false,
+        'cheapdatahub' => [
+            'label' => 'CheapDataHub',
+            'driver' => 'cheapdatahub',
+            'enabled' => false,
+            'base_url' => 'https://www.cheapdatahub.ng/api/v1/resellers',
+            'api_key' => '',
+            'sandbox' => false,
+            'network_map' => ['mtn' => '', 'airtel' => '', 'glo' => '', '9mobile' => ''],
+            'disco_map' => [],
+            'meter_type_map' => ['prepaid' => 'prepaid', 'postpaid' => 'postpaid'],
         ],
-
-        // ── Mock (DISABLE IN PRODUCTION) ─────────────────
-        // 'mock_main' => [
-        //     'label'   => 'Mock VTU Provider',
-        //     'driver'  => 'mock',
-        //     'enabled' => false,
-        //     'sandbox' => true,
-        // ],
     ],
 
     // ══════════════════════════════════════════════════════

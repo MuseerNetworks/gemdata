@@ -86,7 +86,14 @@ $services = db()->query(
 );
 $apiUsers = db()->query('SELECT id, full_name FROM users WHERE is_api_user = 1 ORDER BY full_name');
 $networks = db()->query('SELECT sn.*, s.name AS service_name FROM service_networks sn INNER JOIN services s ON s.id = sn.service_id ORDER BY s.name, sn.network_name');
-$providerRows = db()->query('SELECT id, name, code, driver, status FROM provider_accounts ORDER BY priority_order, name');
+$allowedProviderDrivers = \GemData\Classes\RealProviderRegistry::sqlInList(\GemData\Classes\RealProviderRegistry::DRIVERS);
+$providerRows = db()->query(
+    'SELECT id, name, code, driver, status
+     FROM provider_accounts
+     WHERE driver IN (' . $allowedProviderDrivers . ')
+       AND status <> "archived"
+     ORDER BY priority_order, name'
+);
 $providerPlanMappings = $providerPlans->mappingsForAdmin();
 $latestProviderPlanMappings = $providerPlans->latestMappingsForAdmin(5);
 
