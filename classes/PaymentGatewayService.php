@@ -12,7 +12,8 @@ class PaymentGatewayService
         private Database $db,
         private Wallet $wallet,
         private NotificationService $notifications,
-        private ActivityLogger $logger
+        private ActivityLogger $logger,
+        private ?FinanceLedgerService $financeLedger = null
     ) {
     }
 
@@ -169,6 +170,7 @@ class PaymentGatewayService
                     (int) $request['id'],
                     'wallet-funding:' . ((string) ($request['idempotency_key'] ?? $request['reference']))
                 );
+                $this->financeLedger?->recordUserFunding($request);
 
                 $this->notifications->create(
                     (int) $request['user_id'],
@@ -327,6 +329,7 @@ class PaymentGatewayService
                 'wallet-funding:' . ($providerReference !== '' ? $providerReference : (string) $request['reference']),
                 (string) ($request['provider'] ?? 'bank_transfer')
             );
+            $this->financeLedger?->recordUserFunding($request);
 
             $this->notifications->create(
                 (int) $request['user_id'],
@@ -395,6 +398,7 @@ class PaymentGatewayService
                     'wallet-funding-repair:' . ($row['provider_reference'] ?: $row['reference']),
                     'funding_repair'
                 );
+                $this->financeLedger?->recordUserFunding($row);
                 $repaired++;
             } catch (\Throwable $throwable) {
                 $this->logger->log('system', 0, 'wallet_funding_repair_failed', 'Funding credit repair failed.', [

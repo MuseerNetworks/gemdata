@@ -34,6 +34,7 @@ $pendingQueue = $opsSummary['pending_queue'];
 $recentFailures = $opsSummary['recent_failures'];
 $providerHealth = $opsSummary['provider_health'];
 $providerWalletBalances = $opsSummary['provider_wallet_balances'] ?? [];
+$financeSummary = $opsSummary['finance_summary'] ?? [];
 $providerAlerts = array_values(array_filter($providerWalletBalances, static fn(array $provider): bool => !empty($provider['is_low'])));
 
 $completedTransactions = max(1, (int) $overview['success_transactions'] + (int) $overview['failed_transactions']);
@@ -113,6 +114,39 @@ render_header('Admin Dashboard', 'admin');
             </a>
         <?php endforeach; ?>
     </div>
+
+    <?php if ($financeSummary !== []): ?>
+        <?php
+        $financeCards = [
+            ['label' => 'Business Cash', 'value' => money((float) ($financeSummary['business_cash'] ?? 0)), 'note' => 'Cash movement balance'],
+            ['label' => 'User Liability', 'value' => money((float) ($financeSummary['user_liability'] ?? 0)), 'note' => 'Wallets, commissions, unpaid withdrawals'],
+            ['label' => 'Safe Available Cash', 'value' => money((float) ($financeSummary['safe_available_cash'] ?? 0)), 'note' => 'Business cash after protected obligations'],
+            ['label' => 'Provider Prepaid', 'value' => money((float) ($financeSummary['provider_prepaid_balance'] ?? 0)), 'note' => 'Provider wallet ledger balance'],
+            ['label' => 'Confirmed Profit', 'value' => money((float) ($financeSummary['confirmed_profit'] ?? 0)), 'note' => 'Gross revenue less provider costs'],
+            ['label' => 'Profit Withdrawable', 'value' => money((float) ($financeSummary['profit_withdrawable'] ?? 0)), 'note' => 'Profit available, capped by safe cash'],
+            ['label' => 'Capital Returnable', 'value' => money((float) ($financeSummary['capital_return_withdrawable'] ?? 0)), 'note' => 'Capital return available'],
+        ];
+        ?>
+        <section class="rounded-2xl border border-gem-border bg-white p-5 shadow-card">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue">Finance Ledger</p>
+                    <h2 class="mt-1 text-[18px] font-extrabold text-gem-text">Business cash and withdrawable profit</h2>
+                    <p class="mt-1 text-[13px] text-gem-muted">Ledger-backed view that keeps user liabilities separate from business-owned cash.</p>
+                </div>
+                <a class="inline-flex items-center justify-center rounded-xl border border-gem-border px-3 py-2 text-[12px] font-bold text-gem-blue hover:bg-gem-blueLt" href="<?= e(base_url('admin/finance.php')); ?>">Open Finance</a>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                <?php foreach ($financeCards as $card): ?>
+                    <div class="rounded-2xl border border-gem-border bg-gem-gray p-4">
+                        <p class="text-[11px] font-bold uppercase tracking-widest text-gem-muted"><?= e($card['label']); ?></p>
+                        <p class="mt-2 font-mono text-[20px] font-black text-gem-text"><?= e($card['value']); ?></p>
+                        <p class="mt-1 text-[12px] text-gem-muted"><?= e($card['note']); ?></p>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <div class="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
         <section class="rounded-2xl border border-gem-border bg-white p-5 shadow-card">

@@ -448,6 +448,9 @@ class ProviderRouter
 
     private function providerCost(array $provider, array $payload): float
     {
+        if (array_key_exists('provider_cost_price', $provider['_route_plan_mapping'] ?? []) && $provider['_route_plan_mapping']['provider_cost_price'] !== null) {
+            return (float) $provider['_route_plan_mapping']['provider_cost_price'];
+        }
         if (isset($provider['_route_plan_mapping']['amount'])) {
             return (float) $provider['_route_plan_mapping']['amount'];
         }
@@ -458,6 +461,9 @@ class ProviderRouter
             $networkCode = $this->pricing->normalizeNetwork((string) ($payload['network'] ?? $payload['provider'] ?? ''));
             $mapping = $this->planService->resolveForProvider((int) $provider['id'], $serviceId, $networkCode, $planCode);
             if ($mapping) {
+                if (array_key_exists('provider_cost_price', $mapping) && $mapping['provider_cost_price'] !== null) {
+                    return (float) $mapping['provider_cost_price'];
+                }
                 return (float) ($mapping['amount'] ?? 0);
             }
         }

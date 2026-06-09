@@ -10,8 +10,7 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Redirect legacy /gemdata/* URLs to production root (fixes old PWA installs)
-    RewriteRule ^gemdata/(.*)$ /$1 [R=301,L,NE]
+    # Do not strip /gemdata from URLs. Local/XAMPP installs use that subdirectory as base_url.
 
     # Force HTTPS — redirects all plain HTTP to HTTPS permanently
     RewriteCond %{HTTPS} off

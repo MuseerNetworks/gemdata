@@ -208,7 +208,8 @@ render_header('Services', 'admin');
                 <p class="mt-2 text-sm text-slate-400">Sync, import, paste, or manually add provider plans. Plans only appear to users after they are published/enabled.</p>
             </div>
             <div class="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs text-slate-300">
-                CSV columns: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,is_enabled</span>
+                CSV columns: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,is_enabled</span><br>
+                Optional cost format: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled</span>
             </div>
         </div>
 
@@ -272,7 +273,7 @@ render_header('Services', 'admin');
                             <option value="<?= (int) $service['id']; ?>"><?= e($service['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <textarea class="min-h-40 rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="bulk_plans" placeholder="service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,is_enabled" required></textarea>
+                    <textarea class="min-h-40 rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="bulk_plans" placeholder="service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled" required></textarea>
                 </div>
                 <button class="mt-4 w-full rounded-lg border border-white/10 px-5 py-3 font-semibold text-white" type="submit">Preview Bulk Paste</button>
             </form>
@@ -299,6 +300,7 @@ render_header('Services', 'admin');
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_id" placeholder="provider plan ID" required>
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_name" placeholder="provider plan name">
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="amount" placeholder="selling amount" required>
+                    <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_cost_price" placeholder="provider/API cost optional">
                     <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" name="is_enabled" value="1"> Publish now</label>
                 </div>
                 <button class="mt-4 w-full rounded-lg bg-emerald-400 px-5 py-3 font-semibold text-slate-950" type="submit">Save Manual Plan</button>
@@ -325,7 +327,7 @@ render_header('Services', 'admin');
                         <input type="hidden" name="action" value="publish_provider_plan_preview">
                         <div class="table-shell">
                             <table>
-                                <thead><tr class="text-slate-400"><th>Publish</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan ID</th><th>Amount</th><th>Status</th></tr></thead>
+                                <thead><tr class="text-slate-400"><th>Publish</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan ID</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
                                 <tbody>
                                 <?php $lastGroup = ''; ?>
                                 <?php foreach ($catalogPreview['rows'] as $index => $row): ?>
@@ -334,7 +336,7 @@ render_header('Services', 'admin');
                                     if ($group !== $lastGroup):
                                         $lastGroup = $group;
                                     ?>
-                                        <tr><td colspan="8" class="bg-slate-900/80 px-4 py-2 text-xs font-bold uppercase tracking-widest text-cyan-200"><?= e($group); ?></td></tr>
+                                        <tr><td colspan="9" class="bg-slate-900/80 px-4 py-2 text-xs font-bold uppercase tracking-widest text-cyan-200"><?= e($group); ?></td></tr>
                                     <?php endif; ?>
                                     <tr>
                                         <td>
@@ -356,6 +358,7 @@ render_header('Services', 'admin');
                                             <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][provider_plan_name]" value="<?= e($row['provider_plan_name']); ?>" placeholder="provider name">
                                         </td>
                                         <td><input class="w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][amount]" value="<?= e((string) $row['amount']); ?>"></td>
+                                        <td><input class="w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][provider_cost_price]" value="<?= e($row['provider_cost_price'] !== null ? (string) $row['provider_cost_price'] : ''); ?>" placeholder="optional"></td>
                                         <td>
                                             <input type="hidden" name="plans[<?= (int) $index; ?>][is_enabled]" value="0">
                                             <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" name="plans[<?= (int) $index; ?>][is_enabled]" value="1"<?= !empty($row['is_enabled']) ? ' checked' : ''; ?>> Enabled</label>
@@ -383,10 +386,10 @@ render_header('Services', 'admin');
             </div>
             <div class="table-shell mt-4">
                 <table>
-                    <thead><tr class="text-slate-400"><th>ID</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Amount</th><th>Status</th></tr></thead>
+                    <thead><tr class="text-slate-400"><th>ID</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
                     <tbody>
                     <?php if ($latestProviderPlanMappings === []): ?>
-                        <tr><td colspan="8" class="text-slate-400">No saved provider plan rows yet.</td></tr>
+                        <tr><td colspan="9" class="text-slate-400">No saved provider plan rows yet.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($latestProviderPlanMappings as $mapping): ?>
                         <tr>
@@ -397,6 +400,7 @@ render_header('Services', 'admin');
                             <td><?= e($mapping['local_plan_code'] . ' - ' . $mapping['local_plan_name']); ?></td>
                             <td><?= e($mapping['provider_plan_id'] . ((string) ($mapping['provider_plan_name'] ?? '') !== '' ? ' - ' . $mapping['provider_plan_name'] : '')); ?></td>
                             <td><?= e(money($mapping['amount'])); ?></td>
+                            <td><?= $mapping['provider_cost_price'] !== null ? e(money($mapping['provider_cost_price'])) : '—'; ?></td>
                             <td><?= (int) $mapping['is_enabled'] === 1 ? 'Enabled' : 'Disabled'; ?></td>
                         </tr>
                     <?php endforeach; ?>
@@ -407,7 +411,7 @@ render_header('Services', 'admin');
 
         <div class="table-shell mt-6">
             <table>
-                <thead><tr class="text-slate-400"><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr class="text-slate-400"><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Prices</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                 <?php if ($providerPlanMappings === []): ?>
                     <tr><td colspan="8" class="text-slate-400">No provider plans are mapped yet. Use Sync, CSV, Bulk Paste, or Manual Add above.</td></tr>
@@ -417,7 +421,7 @@ render_header('Services', 'admin');
                         <td><?= e($mapping['provider_name']); ?></td>
                         <td><?= e($mapping['service_name']); ?></td>
                         <td colspan="5">
-                            <form method="post" class="grid gap-2 xl:grid-cols-7">
+                            <form method="post" class="grid gap-2 xl:grid-cols-8">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                 <input type="hidden" name="action" value="save_provider_plan">
                                 <input type="hidden" name="provider_account_id" value="<?= (int) $mapping['provider_account_id']; ?>">
@@ -427,7 +431,8 @@ render_header('Services', 'admin');
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="local_plan_name" value="<?= e($mapping['local_plan_name']); ?>" placeholder="local name">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 font-mono" name="provider_plan_id" value="<?= e($mapping['provider_plan_id']); ?>" placeholder="provider ID">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="provider_plan_name" value="<?= e((string) ($mapping['provider_plan_name'] ?? '')); ?>" placeholder="provider name">
-                                <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="amount" value="<?= e((string) $mapping['amount']); ?>" placeholder="amount">
+                                <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="amount" value="<?= e((string) $mapping['amount']); ?>" placeholder="selling amount">
+                                <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="provider_cost_price" value="<?= e($mapping['provider_cost_price'] !== null ? (string) $mapping['provider_cost_price'] : ''); ?>" placeholder="provider cost">
                                 <label class="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300"><input type="checkbox" name="is_enabled" value="1"<?= (int) $mapping['is_enabled'] === 1 ? ' checked' : ''; ?>> Enabled</label>
                                 <button class="rounded-lg border border-cyan-300/40 px-3 py-2 text-sm font-semibold text-cyan-200 xl:col-span-3" type="submit">Save Edit</button>
                             </form>

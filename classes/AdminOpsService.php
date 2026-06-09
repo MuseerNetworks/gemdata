@@ -11,7 +11,8 @@ class AdminOpsService
     public function __construct(
         private Database $db,
         private ActivityLogger $logger,
-        private ProviderManager $providerManager
+        private ProviderManager $providerManager,
+        private ?FinanceLedgerService $financeLedger = null
     ) {
     }
 
@@ -214,6 +215,7 @@ class AdminOpsService
             'recent_failures' => $recentFailures,
             'provider_health' => $providerHealth,
             'provider_wallet_balances' => $this->providerWalletBalances(),
+            'finance_summary' => $this->financeLedger?->overview() ?? [],
         ];
     }
 

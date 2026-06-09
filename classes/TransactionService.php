@@ -19,7 +19,8 @@ class TransactionService
         private PricingService $pricing,
         private ProviderPlanService $providerPlans,
         private FraudService $fraud,
-        private ActivityLogger $logger
+        private ActivityLogger $logger,
+        private ?FinanceLedgerService $financeLedger = null
     ) {
     }
 
@@ -146,6 +147,7 @@ class TransactionService
         if ($selectedProvider === null) {
             return $this->recordProviderSelectionFailure($service, $serviceSlug, $userId, $payload, $channel, $amount, $pricing, $reference, $idempotencyKey, $recipient, $providerSelection);
         }
+        $pricing = $this->applyProviderPlanCostPricing($pricing, $selectedProvider['_route_plan_mapping'] ?? null);
 
         $this->db->beginTransaction();
         try {
@@ -539,6 +541,14 @@ class TransactionService
                     'id' => $transactionId,
                 ]
             );
+            if ($status === 'successful') {
+                $this->financeLedger?->recordTransactionCost(array_merge($locked, [
+                    'id' => $transactionId,
+                    'status' => 'successful',
+                    'provider_account_id' => $providerAccount['id'] ?? ($locked['provider_account_id'] ?? null),
+                    'provider_code' => $providerAccount['code'] ?? ($locked['provider_code'] ?? null),
+                ]));
+            }
 
             $providerMessage = (string) ($providerResponse['raw']['message'] ?? '');
             $eventNote = "{$service['name']} transaction {$status}.";
@@ -896,6 +906,10 @@ class TransactionService
         array $providerSelection
     ): array {
         $intendedProvider = $this->intendedProviderFromSelection($providerSelection);
+        $intendedMapping = is_array($intendedProvider)
+            ? $this->resolveProviderPlanMapping((int) $intendedProvider['id'], (int) $service['id'], $payload)
+            : null;
+        $pricing = $this->applyProviderPlanCostPricing($pricing, $intendedMapping);
         $diagnostics = $providerSelection['diagnostics'] ?? [];
         if (is_array($intendedProvider)) {
             $diagnostics['intended_provider_id'] = (int) $intendedProvider['id'];
@@ -994,6 +1008,36 @@ class TransactionService
         }
 
         return $provider;
+    }
+
+    private function applyProviderPlanCostPricing(array $pricing, ?array $mapping): array
+    {
+        if (!is_array($mapping) || !array_key_exists('provider_cost_price', $mapping) || $mapping['provider_cost_price'] === null) {
+            return $pricing;
+        }
+
+        $costPrice = round((float) $mapping['provider_cost_price'], 2);
+        if ($costPrice < 0) {
+            return $pricing;
+        }
+
+        $sellingPrice = round((float) ($pricing['selling_price'] ?? 0), 2);
+        $pricing['cost_price'] = $costPrice;
+        $pricing['profit_amount'] = max(0, round($sellingPrice - $costPrice, 2));
+        $pricing['pricing_source'] = 'provider_plan_cost';
+
+        return $pricing;
+    }
+
+    private function resolveProviderPlanMapping(int $providerId, int $serviceId, array $payload): ?array
+    {
+        $planCode = strtoupper(trim((string) ($payload['plan'] ?? $payload['package'] ?? $payload['exam_type'] ?? $payload['local_plan_code'] ?? '')));
+        if ($providerId <= 0 || $serviceId <= 0 || $planCode === '') {
+            return null;
+        }
+
+        $networkCode = $this->pricing->normalizeNetwork((string) ($payload['network'] ?? $payload['provider'] ?? ''));
+        return $this->providerPlans->resolveForProvider($providerId, $serviceId, $networkCode, $planCode);
     }
 
     private function findByIdempotency(int $userId, string $channel, string $idempotencyKey): ?array

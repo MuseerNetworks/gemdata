@@ -32,7 +32,7 @@ class ProviderPlanService
         }
 
         $rows = $this->db->query(
-            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount,
+            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount, psp.provider_cost_price,
                     pa.id AS provider_account_id, pa.code AS provider_code, pa.credentials_key, pa.circuit_breaker_status
              FROM provider_service_plans psp
              INNER JOIN services s ON s.id = psp.service_id
@@ -80,6 +80,7 @@ class ProviderPlanService
                 'local_plan_code' => (string) $row['local_plan_code'],
                 'local_plan_name' => (string) $row['local_plan_name'],
                 'amount' => (float) ($row['amount'] ?? 0),
+                'provider_cost_price' => $row['provider_cost_price'] !== null ? (float) $row['provider_cost_price'] : null,
             ];
         }
 
@@ -239,6 +240,7 @@ class ProviderPlanService
         $providerPlanId = trim((string) ($payload['provider_plan_id'] ?? ''));
         $providerPlanName = trim((string) ($payload['provider_plan_name'] ?? ''));
         $amount = round((float) ($payload['amount'] ?? 0), 2);
+        $providerCostPrice = $this->normalizeOptionalAmount($payload['provider_cost_price'] ?? null);
         $isEnabled = !empty($payload['is_enabled']) ? 1 : 0;
 
         if ($providerAccountId <= 0 || $serviceId <= 0) {
@@ -252,6 +254,9 @@ class ProviderPlanService
 
         if ($localPlanCode === '' || $localPlanName === '' || $providerPlanId === '') {
             throw new RuntimeException('Local plan code, local plan name, and provider plan ID are required.');
+        }
+        if ($providerCostPrice !== null && $providerCostPrice < 0) {
+            throw new RuntimeException('Provider/API cost cannot be negative.');
         }
 
         $existing = $this->db->first(
@@ -279,6 +284,7 @@ class ProviderPlanService
             'provider_plan_id' => $providerPlanId,
             'provider_plan_name' => $providerPlanName,
             'amount' => $amount,
+            'provider_cost_price' => $providerCostPrice,
             'is_enabled' => $isEnabled,
         ];
 
@@ -288,6 +294,7 @@ class ProviderPlanService
                 'provider_plan_id' => $params['provider_plan_id'],
                 'provider_plan_name' => $params['provider_plan_name'],
                 'amount' => $params['amount'],
+                'provider_cost_price' => $params['provider_cost_price'],
                 'is_enabled' => $params['is_enabled'],
                 'id' => $existing['id'],
             ];
@@ -297,6 +304,7 @@ class ProviderPlanService
                      provider_plan_id = :provider_plan_id,
                      provider_plan_name = :provider_plan_name,
                      amount = :amount,
+                     provider_cost_price = :provider_cost_price,
                      is_enabled = :is_enabled
                  WHERE id = :id',
                 $updateParams
@@ -305,10 +313,10 @@ class ProviderPlanService
             $this->db->execute(
                 'INSERT INTO provider_service_plans (
                     provider_account_id, service_id, network_code, local_plan_code, local_plan_name,
-                    provider_plan_id, provider_plan_name, amount, is_enabled
+                    provider_plan_id, provider_plan_name, amount, provider_cost_price, is_enabled
                  ) VALUES (
                     :provider_account_id, :service_id, :network_code, :local_plan_code, :local_plan_name,
-                    :provider_plan_id, :provider_plan_name, :amount, :is_enabled
+                    :provider_plan_id, :provider_plan_name, :amount, :provider_cost_price, :is_enabled
                  )',
                 $params
             );
@@ -326,6 +334,20 @@ class ProviderPlanService
     {
         $planCode = strtoupper(trim($planCode));
         return preg_replace('/[^A-Z0-9:_\.-]/', '', $planCode) ?? '';
+    }
+
+    private function normalizeOptionalAmount(mixed $amount): ?float
+    {
+        $value = str_replace([',', 'NGN', '₦', 'â‚¦', ' '], '', (string) $amount);
+        if ($value === '') {
+            return null;
+        }
+
+        if (!is_numeric($value)) {
+            throw new RuntimeException('Provider/API cost must be a valid number or left blank.');
+        }
+
+        return round((float) $value, 2);
     }
 
     private function showInactiveProviderPlansForTesting(): bool

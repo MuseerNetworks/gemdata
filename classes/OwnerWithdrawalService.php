@@ -1,0 +1,249 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GemData\Classes;
+
+use RuntimeException;
+
+class OwnerWithdrawalService
+{
+    public function __construct(
+        private Database $db,
+        private FinanceLedgerService $financeLedger
+    ) {
+    }
+
+    public function request(
+        int $adminId,
+        float $amount,
+        string $notes,
+        string $withdrawalType = 'profit',
+        array $transferDetails = []
+    ): array {
+        $this->assertReady();
+        $amount = $this->validAmount($amount);
+        $notes = $this->requireNotes($notes);
+        $withdrawalType = $this->normalizeWithdrawalType($withdrawalType);
+        $transferDetails = $this->normalizeTransferDetails($transferDetails, true);
+        $overview = $this->financeLedger->overview();
+        $limit = $withdrawalType === 'capital_return'
+            ? (float) ($overview['capital_return_withdrawable'] ?? 0)
+            : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
+        if ($amount > $limit) {
+            throw new RuntimeException($withdrawalType === 'capital_return'
+                ? 'Owner capital return exceeds capital return withdrawable amount.'
+                : 'Owner profit withdrawal exceeds profit withdrawable amount.');
+        }
+
+        $open = $this->db->first('SELECT id FROM owner_withdrawals WHERE status IN ("pending","approved") LIMIT 1');
+        if ($open) {
+            throw new RuntimeException('An owner transfer is already pending or approved.');
+        }
+
+        $reference = strtoupper('OWD' . bin2hex(random_bytes(6)));
+        $this->db->execute(
+            'INSERT INTO owner_withdrawals (
+                reference, withdrawal_type, amount, status, bank_name, account_number,
+                account_name, transfer_reference, requested_by_admin_id, notes
+             ) VALUES (
+                :reference, :withdrawal_type, :amount, "pending", :bank_name, :account_number,
+                :account_name, :transfer_reference, :admin_id, :notes
+             )',
+            [
+                'reference' => $reference,
+                'withdrawal_type' => $withdrawalType,
+                'amount' => $amount,
+                'bank_name' => $transferDetails['bank_name'],
+                'account_number' => $transferDetails['account_number'],
+                'account_name' => $transferDetails['account_name'],
+                'transfer_reference' => $transferDetails['transfer_reference'],
+                'admin_id' => $adminId,
+                'notes' => $notes,
+            ]
+        );
+
+        return $this->get((int) $this->db->lastInsertId());
+    }
+
+    public function approve(int $withdrawalId, int $adminId, string $notes = ''): void
+    {
+        $this->assertReady();
+        $this->db->execute(
+            'UPDATE owner_withdrawals
+             SET status = "approved", reviewed_by_admin_id = :admin_id, reviewed_at = NOW(),
+                 notes = CASE WHEN :notes <> "" THEN :notes ELSE notes END
+             WHERE id = :id AND status = "pending"',
+            ['admin_id' => $adminId, 'notes' => substr(trim($notes), 0, 255), 'id' => $withdrawalId]
+        );
+        if ($this->db->first('SELECT id FROM owner_withdrawals WHERE id = :id AND status = "approved"', ['id' => $withdrawalId]) === null) {
+            throw new RuntimeException('Only pending owner transfers can be approved.');
+        }
+    }
+
+    public function reject(int $withdrawalId, int $adminId, string $reason): void
+    {
+        $this->assertReady();
+        $reason = $this->requireNotes($reason);
+        $this->db->execute(
+            'UPDATE owner_withdrawals
+             SET status = "rejected", reviewed_by_admin_id = :admin_id, reviewed_at = NOW(), rejection_reason = :reason
+             WHERE id = :id AND status IN ("pending","approved")',
+            ['admin_id' => $adminId, 'reason' => $reason, 'id' => $withdrawalId]
+        );
+        if ($this->db->first('SELECT id FROM owner_withdrawals WHERE id = :id AND status = "rejected"', ['id' => $withdrawalId]) === null) {
+            throw new RuntimeException('Owner transfer could not be rejected.');
+        }
+    }
+
+    public function markPaid(int $withdrawalId, int $adminId, ?string $transferReference = null): void
+    {
+        $this->assertReady();
+        $this->db->beginTransaction();
+        try {
+            $withdrawal = $this->db->first('SELECT * FROM owner_withdrawals WHERE id = :id FOR UPDATE', ['id' => $withdrawalId]);
+            if (!$withdrawal || ($withdrawal['status'] ?? '') !== 'approved') {
+                throw new RuntimeException('Only approved owner transfers can be marked paid.');
+            }
+
+            $overview = $this->financeLedger->overview();
+            $withdrawalType = $this->normalizeWithdrawalType((string) ($withdrawal['withdrawal_type'] ?? 'profit'));
+            $limit = $withdrawalType === 'capital_return'
+                ? (float) ($overview['capital_return_withdrawable'] ?? 0)
+                : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
+            if ((float) $withdrawal['amount'] > $limit) {
+                throw new RuntimeException($withdrawalType === 'capital_return'
+                    ? 'Owner capital return is no longer covered by available capital and safe cash.'
+                    : 'Owner profit withdrawal is no longer covered by withdrawable profit.');
+            }
+
+            $this->db->execute(
+                'UPDATE owner_withdrawals
+                 SET status = "paid", paid_by_admin_id = :admin_id, paid_at = NOW(),
+                     transfer_reference = CASE
+                         WHEN :transfer_reference_value IS NOT NULL AND :transfer_reference_check <> "" THEN :transfer_reference_assign
+                         ELSE transfer_reference
+                     END
+                 WHERE id = :id AND status = "approved"',
+                [
+                    'admin_id' => $adminId,
+                    'transfer_reference_value' => $this->normalizeOptionalTransferReference($transferReference),
+                    'transfer_reference_check' => $this->normalizeOptionalTransferReference($transferReference) ?? '',
+                    'transfer_reference_assign' => $this->normalizeOptionalTransferReference($transferReference),
+                    'id' => $withdrawalId,
+                ]
+            );
+            $withdrawal['status'] = 'paid';
+            if ($transferReference !== null && trim($transferReference) !== '') {
+                $withdrawal['transfer_reference'] = $this->normalizeOptionalTransferReference($transferReference);
+            }
+            $this->financeLedger->recordOwnerWithdrawalPaid($withdrawal, $adminId);
+            $this->db->commit();
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
+    public function recent(int $limit = 20): array
+    {
+        if (!$this->db->tableExists('owner_withdrawals')) {
+            return [];
+        }
+
+        return $this->db->query(
+            'SELECT ow.*, req.full_name AS requested_by_name, rev.full_name AS reviewed_by_name, paid.full_name AS paid_by_name
+             FROM owner_withdrawals ow
+             INNER JOIN admins req ON req.id = ow.requested_by_admin_id
+             LEFT JOIN admins rev ON rev.id = ow.reviewed_by_admin_id
+             LEFT JOIN admins paid ON paid.id = ow.paid_by_admin_id
+             ORDER BY ow.id DESC
+             LIMIT ' . max(1, $limit)
+        );
+    }
+
+    private function get(int $id): array
+    {
+        return $this->db->first('SELECT * FROM owner_withdrawals WHERE id = :id LIMIT 1', ['id' => $id]) ?? [];
+    }
+
+    private function assertReady(): void
+    {
+        if (!$this->financeLedger->tablesReady()) {
+            throw new RuntimeException('Finance ledger tables are not installed yet. Run the finance ledger migration first.');
+        }
+    }
+
+    private function validAmount(float $amount): float
+    {
+        $amount = round($amount, 2);
+        if ($amount <= 0) {
+            throw new RuntimeException('Amount must be greater than zero.');
+        }
+
+        return $amount;
+    }
+
+    private function requireNotes(string $notes): string
+    {
+        $notes = trim($notes);
+        if ($notes === '') {
+            throw new RuntimeException('A note is required.');
+        }
+
+        return substr($notes, 0, 255);
+    }
+
+    private function normalizeWithdrawalType(string $type): string
+    {
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['profit', 'capital_return'], true)) {
+            throw new RuntimeException('Unsupported owner transfer type.');
+        }
+
+        return $type;
+    }
+
+    private function normalizeTransferDetails(array $details, bool $requireDestination): array
+    {
+        $bankName = $this->safeText((string) ($details['bank_name'] ?? ''), 120);
+        $accountNumber = $this->normalizeAccountNumber((string) ($details['account_number'] ?? ''));
+        $accountName = $this->safeText((string) ($details['account_name'] ?? ''), 160);
+        if ($requireDestination && ($bankName === '' || $accountNumber === '' || $accountName === '')) {
+            throw new RuntimeException('Bank name, account number, and account name are required for owner transfer.');
+        }
+
+        return [
+            'bank_name' => $bankName,
+            'account_number' => $accountNumber,
+            'account_name' => $accountName,
+            'transfer_reference' => $this->normalizeOptionalTransferReference($details['transfer_reference'] ?? null),
+        ];
+    }
+
+    private function normalizeAccountNumber(string $accountNumber): string
+    {
+        $accountNumber = preg_replace('/\s+/', ' ', trim($accountNumber)) ?? '';
+        if ($accountNumber === '') {
+            return '';
+        }
+        if (!preg_match('/^[0-9 \-]+$/', $accountNumber)) {
+            throw new RuntimeException('Account number may contain only digits, spaces, and hyphens.');
+        }
+
+        return substr($accountNumber, 0, 40);
+    }
+
+    private function normalizeOptionalTransferReference(?string $reference): ?string
+    {
+        $reference = $this->safeText((string) ($reference ?? ''), 120);
+        return $reference !== '' ? $reference : null;
+    }
+
+    private function safeText(string $value, int $maxLength): string
+    {
+        $value = preg_replace('/\s+/', ' ', trim($value)) ?? '';
+        $value = preg_replace('/[^\pL\pN .,_@#\/:\-]/u', '', $value) ?? '';
+        return substr($value, 0, $maxLength);
+    }
+}

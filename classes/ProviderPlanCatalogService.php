@@ -16,6 +16,18 @@ class ProviderPlanCatalogService
         'provider_plan_id',
         'provider_plan_name',
         'amount',
+        'provider_cost_price',
+        'is_enabled',
+    ];
+
+    private const LEGACY_COLUMNS = [
+        'service_slug',
+        'network_code',
+        'local_plan_code',
+        'local_plan_name',
+        'provider_plan_id',
+        'provider_plan_name',
+        'amount',
         'is_enabled',
     ];
 
@@ -106,6 +118,7 @@ class ProviderPlanCatalogService
             'provider_plan_id' => (string) ($payload['provider_plan_id'] ?? ''),
             'provider_plan_name' => (string) ($payload['provider_plan_name'] ?? ''),
             'amount' => (string) ($payload['amount'] ?? ''),
+            'provider_cost_price' => (string) ($payload['provider_cost_price'] ?? ''),
             'is_enabled' => !empty($payload['is_enabled']) ? 1 : 0,
         ]]);
     }
@@ -150,6 +163,7 @@ class ProviderPlanCatalogService
             $providerPlanName = trim((string) ($row['provider_plan_name'] ?? ''));
             $localPlanName = trim((string) ($row['local_plan_name'] ?? $providerPlanName));
             $amount = $this->normalizeAmount($row['amount'] ?? null);
+            $providerCostPrice = $this->normalizeOptionalAmount($row['provider_cost_price'] ?? null);
             $networkCode = $this->normalizeNetworkCode((string) ($row['network_code'] ?? ''));
             $localPlanCode = trim((string) ($row['local_plan_code'] ?? ''));
             if ($localPlanCode === '') {
@@ -168,6 +182,9 @@ class ProviderPlanCatalogService
             if ($amount === null) {
                 $rowErrors[] = 'amount must be a valid number.';
             }
+            if ($providerCostPrice === false) {
+                $rowErrors[] = 'provider_cost_price must be a valid number or blank.';
+            }
 
             $preview[] = [
                 'source' => $source,
@@ -183,6 +200,7 @@ class ProviderPlanCatalogService
                 'provider_plan_id' => $providerPlanId,
                 'provider_plan_name' => $providerPlanName,
                 'amount' => $amount ?? 0.0,
+                'provider_cost_price' => $providerCostPrice === false ? null : $providerCostPrice,
                 'is_enabled' => $this->truthy($row['is_enabled'] ?? 0) ? 1 : 0,
                 'selected' => $rowErrors === [],
                 'errors' => $rowErrors,
@@ -273,6 +291,7 @@ class ProviderPlanCatalogService
             'provider_plan_id' => (string) ($plan['provider_plan_id'] ?? ''),
             'provider_plan_name' => (string) ($plan['provider_plan_name'] ?? ''),
             'amount' => (float) ($plan['amount'] ?? 0),
+            'provider_cost_price' => $plan['provider_cost_price'] ?? null,
             'is_enabled' => !empty($plan['is_enabled']) ? 1 : 0,
         ]);
     }
@@ -376,7 +395,7 @@ class ProviderPlanCatalogService
                 }
             }
 
-            $columns = $header ?: self::COLUMNS;
+            $columns = $header ?: (count($row) === count(self::LEGACY_COLUMNS) ? self::LEGACY_COLUMNS : self::COLUMNS);
             $item = [];
             foreach ($columns as $columnIndex => $columnName) {
                 if (!in_array($columnName, self::COLUMNS, true)) {
@@ -422,6 +441,20 @@ class ProviderPlanCatalogService
 
         $value = round((float) $amount, 2);
         return $value > 0 ? $value : null;
+    }
+
+    private function normalizeOptionalAmount(mixed $amount): float|false|null
+    {
+        $amount = str_replace([',', 'NGN', '₦', 'â‚¦', ' '], '', (string) $amount);
+        if ($amount === '') {
+            return null;
+        }
+        if (!is_numeric($amount)) {
+            return false;
+        }
+
+        $value = round((float) $amount, 2);
+        return $value >= 0 ? $value : false;
     }
 
     private function generateLocalPlanCode(string $serviceSlug, ?string $networkCode, string $providerPlanId, string $localPlanName): string
