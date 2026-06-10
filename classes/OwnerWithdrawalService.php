@@ -45,10 +45,12 @@ class OwnerWithdrawalService
         $this->db->execute(
             'INSERT INTO owner_withdrawals (
                 reference, withdrawal_type, amount, status, bank_name, account_number,
-                account_name, transfer_reference, requested_by_admin_id, notes
+                account_name, transfer_reference, bank_code, payout_provider, payout_status,
+                payout_reference, requested_by_admin_id, notes
              ) VALUES (
                 :reference, :withdrawal_type, :amount, "pending", :bank_name, :account_number,
-                :account_name, :transfer_reference, :admin_id, :notes
+                :account_name, :transfer_reference, :bank_code, :payout_provider, :payout_status,
+                :payout_reference, :admin_id, :notes
              )',
             [
                 'reference' => $reference,
@@ -58,12 +60,129 @@ class OwnerWithdrawalService
                 'account_number' => $transferDetails['account_number'],
                 'account_name' => $transferDetails['account_name'],
                 'transfer_reference' => $transferDetails['transfer_reference'],
+                'bank_code' => $transferDetails['bank_code'],
+                'payout_provider' => $transferDetails['payout_provider'],
+                'payout_status' => $transferDetails['payout_status'],
+                'payout_reference' => $transferDetails['payout_reference'],
                 'admin_id' => $adminId,
                 'notes' => $notes,
             ]
         );
 
         return $this->get((int) $this->db->lastInsertId());
+    }
+
+    public function updatePayoutResult(int $withdrawalId, string $status, string $providerReference, array $safeResponse = [], ?string $failureReason = null): array
+    {
+        $this->assertReady();
+        $status = $this->normalizePayoutStatus($status);
+        $providerReference = $this->normalizeOptionalTransferReference($providerReference) ?? '';
+        $failureReason = $failureReason !== null ? $this->safeText($failureReason, 255) : null;
+
+        $this->db->execute(
+            'UPDATE owner_withdrawals
+             SET payout_status = :payout_status,
+                 payout_reference = CASE WHEN :payout_reference <> "" THEN :payout_reference ELSE payout_reference END,
+                 transfer_reference = CASE WHEN :payout_reference <> "" THEN :payout_reference ELSE transfer_reference END,
+                 payout_response_json = :payout_response_json,
+                 payout_requested_at = COALESCE(payout_requested_at, NOW()),
+                 payout_failure_reason = :payout_failure_reason
+             WHERE id = :id AND status IN ("pending","approved")',
+            [
+                'payout_status' => $status,
+                'payout_reference' => $providerReference,
+                'payout_response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
+                'payout_failure_reason' => $failureReason,
+                'id' => $withdrawalId,
+            ]
+        );
+
+        return $this->get($withdrawalId);
+    }
+
+    public function failPayout(int $withdrawalId, string $reason, array $safeResponse = []): void
+    {
+        $this->assertReady();
+        $reason = $this->safeText($reason, 255) ?: 'KatPay payout failed.';
+        $this->db->execute(
+            'UPDATE owner_withdrawals
+             SET status = "rejected", payout_status = "failed", reviewed_at = NOW(),
+                 rejection_reason = :reason, payout_failure_reason = :reason,
+                 payout_response_json = :payout_response_json
+             WHERE id = :id AND status IN ("pending","approved")',
+            [
+                'reason' => $reason,
+                'payout_response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
+                'id' => $withdrawalId,
+            ]
+        );
+    }
+
+    public function markPaidFromPayout(int $withdrawalId, ?int $adminId, string $providerReference, array $safeResponse = []): void
+    {
+        $this->assertReady();
+        $this->db->beginTransaction();
+        try {
+            $withdrawal = $this->db->first('SELECT * FROM owner_withdrawals WHERE id = :id FOR UPDATE', ['id' => $withdrawalId]);
+            if (!$withdrawal || !in_array((string) ($withdrawal['status'] ?? ''), ['pending', 'approved'], true)) {
+                throw new RuntimeException('Only unpaid owner transfers can be marked paid from payout confirmation.');
+            }
+
+            $this->assertStillWithinLimit($withdrawal);
+            $reference = $this->normalizeOptionalTransferReference($providerReference) ?? (string) ($withdrawal['payout_reference'] ?? $withdrawal['transfer_reference'] ?? '');
+            $this->db->execute(
+                'UPDATE owner_withdrawals
+                 SET status = "paid", payout_status = "successful", paid_by_admin_id = :admin_id,
+                     paid_at = NOW(), payout_confirmed_at = NOW(),
+                     payout_reference = CASE WHEN :reference <> "" THEN :reference ELSE payout_reference END,
+                     transfer_reference = CASE WHEN :reference <> "" THEN :reference ELSE transfer_reference END,
+                     payout_response_json = CASE WHEN :response_json IS NOT NULL THEN :response_json ELSE payout_response_json END,
+                     payout_failure_reason = NULL
+                 WHERE id = :id AND status IN ("pending","approved")',
+                [
+                    'admin_id' => $adminId,
+                    'reference' => $reference,
+                    'response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
+                    'id' => $withdrawalId,
+                ]
+            );
+
+            $withdrawal['status'] = 'paid';
+            $withdrawal['transfer_reference'] = $reference !== '' ? $reference : ($withdrawal['transfer_reference'] ?? null);
+            $this->financeLedger->recordOwnerWithdrawalPaid($withdrawal, $adminId);
+            $this->db->commit();
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
+    public function confirmPayoutByReference(string $providerReference, array $safeResponse = []): bool
+    {
+        $this->assertReady();
+        $providerReference = $this->normalizeOptionalTransferReference($providerReference) ?? '';
+        if ($providerReference === '') {
+            return false;
+        }
+
+        $withdrawal = $this->db->first(
+            'SELECT * FROM owner_withdrawals
+             WHERE payout_provider = "katpay"
+               AND (payout_reference = :reference OR transfer_reference = :reference)
+             ORDER BY id DESC
+             LIMIT 1',
+            ['reference' => $providerReference]
+        );
+        if (!$withdrawal) {
+            return false;
+        }
+
+        if (($withdrawal['status'] ?? '') === 'paid') {
+            return true;
+        }
+
+        $this->markPaidFromPayout((int) $withdrawal['id'], null, $providerReference, $safeResponse);
+        return true;
     }
 
     public function approve(int $withdrawalId, int $adminId, string $notes = ''): void
@@ -105,17 +224,11 @@ class OwnerWithdrawalService
             if (!$withdrawal || ($withdrawal['status'] ?? '') !== 'approved') {
                 throw new RuntimeException('Only approved owner transfers can be marked paid.');
             }
-
-            $overview = $this->financeLedger->overview();
-            $withdrawalType = $this->normalizeWithdrawalType((string) ($withdrawal['withdrawal_type'] ?? 'profit'));
-            $limit = $withdrawalType === 'capital_return'
-                ? (float) ($overview['capital_return_withdrawable'] ?? 0)
-                : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
-            if ((float) $withdrawal['amount'] > $limit) {
-                throw new RuntimeException($withdrawalType === 'capital_return'
-                    ? 'Owner capital return is no longer covered by available capital and safe cash.'
-                    : 'Owner profit withdrawal is no longer covered by withdrawable profit.');
+            if (($withdrawal['payout_provider'] ?? 'manual') === 'katpay') {
+                throw new RuntimeException('KatPay owner transfers can only be marked paid after KatPay confirms payout success.');
             }
+
+            $this->assertStillWithinLimit($withdrawal);
 
             $this->db->execute(
                 'UPDATE owner_withdrawals
@@ -217,7 +330,11 @@ class OwnerWithdrawalService
             'bank_name' => $bankName,
             'account_number' => $accountNumber,
             'account_name' => $accountName,
+            'bank_code' => $this->safeText((string) ($details['bank_code'] ?? ''), 60),
             'transfer_reference' => $this->normalizeOptionalTransferReference($details['transfer_reference'] ?? null),
+            'payout_provider' => $this->safeText((string) ($details['payout_provider'] ?? 'manual'), 40) ?: 'manual',
+            'payout_status' => $this->normalizePayoutStatus((string) ($details['payout_status'] ?? 'not_requested')),
+            'payout_reference' => $this->normalizeOptionalTransferReference($details['payout_reference'] ?? null),
         ];
     }
 
@@ -232,6 +349,33 @@ class OwnerWithdrawalService
         }
 
         return substr($accountNumber, 0, 40);
+    }
+
+    private function normalizePayoutStatus(string $status): string
+    {
+        $status = strtolower(trim($status));
+        if ($status === '') {
+            return 'not_requested';
+        }
+        if (!in_array($status, ['not_requested', 'processing', 'successful', 'failed'], true)) {
+            return 'processing';
+        }
+
+        return $status;
+    }
+
+    private function assertStillWithinLimit(array $withdrawal): void
+    {
+        $overview = $this->financeLedger->overview();
+        $withdrawalType = $this->normalizeWithdrawalType((string) ($withdrawal['withdrawal_type'] ?? 'profit'));
+        $limit = $withdrawalType === 'capital_return'
+            ? (float) ($overview['capital_return_withdrawable'] ?? 0)
+            : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
+        if ((float) $withdrawal['amount'] > $limit) {
+            throw new RuntimeException($withdrawalType === 'capital_return'
+                ? 'Owner capital return is no longer covered by available capital and safe cash.'
+                : 'Owner profit withdrawal is no longer covered by withdrawable profit.');
+        }
     }
 
     private function normalizeOptionalTransferReference(?string $reference): ?string

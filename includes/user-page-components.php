@@ -361,14 +361,25 @@ function render_purchase_provider_control(string $name, string $label, array $op
     }
 
     if (count($options) > 0 && count($options) <= 6) {
+        $mobileNetworkLabels = ['mtn' => 'MTN', 'glo' => 'GLO', 'airtel' => 'AIRTEL', '9mobile' => '9MOB', '9mob' => '9MOB', 'etisalat' => '9MOB'];
+        $mobileNetworkCodes = array_keys($mobileNetworkLabels);
+        $usesMobileNetworkStyle = $name === 'network';
+        foreach ($options as $option) {
+            $code = strtolower((string) ($option['network_code'] ?? ''));
+            if (!in_array($code, $mobileNetworkCodes, true)) {
+                $usesMobileNetworkStyle = false;
+                break;
+            }
+        }
         ?>
         <fieldset class="purchase-fieldset">
             <legend><?= e($label); ?></legend>
             <input type="hidden" name="<?= e($name); ?>" value="" data-segmented-input="<?= e($controlId); ?>"<?= $dataAttr; ?> required>
-            <div class="provider-segment-grid" role="group" aria-label="<?= e($label); ?>">
+            <div class="provider-segment-grid<?= $usesMobileNetworkStyle ? ' data-network-segment-grid' : ''; ?>" role="group" aria-label="<?= e($label); ?>">
                 <?php foreach ($options as $option): ?>
-                    <button type="button" class="provider-segment" data-segmented-option="<?= e($controlId); ?>" data-value="<?= e((string) ($option['network_code'] ?? '')); ?>">
-                        <?= e((string) ($option['network_name'] ?? $option['network_code'] ?? 'Option')); ?>
+                    <?php $code = strtolower((string) ($option['network_code'] ?? '')); ?>
+                    <button type="button" class="provider-segment<?= $usesMobileNetworkStyle ? ' data-network-segment' : ''; ?>"<?= $usesMobileNetworkStyle ? ' data-network-tone="' . e($code) . '"' : ''; ?> data-segmented-option="<?= e($controlId); ?>" data-value="<?= e((string) ($option['network_code'] ?? '')); ?>">
+                        <?= e($usesMobileNetworkStyle ? ($mobileNetworkLabels[$code] ?? strtoupper($code)) : (string) ($option['network_name'] ?? $option['network_code'] ?? 'Option')); ?>
                     </button>
                 <?php endforeach; ?>
             </div>

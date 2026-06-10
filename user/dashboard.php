@@ -319,12 +319,12 @@ render_header('Dashboard', 'user');
                                 $rowAccountName = (string) ($fundingRow['account_name'] ?? '');
                                 $rowFullAccountCopy = trim($rowBankName . "\n" . $rowAccountNumber . "\n" . $rowAccountName);
                                 ?>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Bank Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowBankName); ?></div></div>
-                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Number</div><div class="text-[12px] font-mono font-bold mt-1"><?= e($rowAccountNumber); ?></div></div>
-                                    <div class="bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowAccountName); ?></div></div>
+                                <div class="dashboard-funding-account-grid grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div class="dashboard-funding-account-detail bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Bank Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowBankName); ?></div></div>
+                                    <div class="dashboard-funding-account-detail bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Name</div><div class="text-[12px] font-bold mt-1"><?= e($rowAccountName); ?></div></div>
+                                    <div class="dashboard-funding-account-detail bg-white/10 rounded-xl p-2.5"><div class="text-[10px] text-blue-200 uppercase font-bold">Account Number</div><div class="text-[12px] font-mono font-bold mt-1"><?= e($rowAccountNumber); ?></div></div>
                                 </div>
-                                <div class="flex flex-wrap gap-2">
+                                <div class="dashboard-funding-copy-actions flex flex-wrap gap-2">
                                     <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($rowAccountNumber); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Account Number</button>
                                     <button class="gd-copy-button inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold" type="button" data-copy-value="<?= e($rowFullAccountCopy); ?>"><?= dashboard_template_icon('copy', 'w-4 h-4'); ?>Copy Full Details</button>
                                 </div>

@@ -71,6 +71,7 @@ use GemData\Classes\Database;
 use GemData\Classes\DashboardController;
 use GemData\Classes\FraudService;
 use GemData\Classes\FundingAccountProviderService;
+use GemData\Classes\KatPayPayoutService;
 use GemData\Classes\KatPayVirtualAccountService;
 use GemData\Classes\MailService;
 use GemData\Classes\MaintenanceService;
@@ -124,6 +125,7 @@ try {
     $payments = new PaymentGatewayService($database, $wallet, $notifications, $activityLogger, $financeLedger);
     $paystackDva = new PaystackDedicatedAccountService($database, $activityLogger, $notifications);
     $katPay = new KatPayVirtualAccountService($database, $activityLogger, $notifications);
+    $katPayPayouts = new KatPayPayoutService($appLogger);
     $commissionWallet = new CommissionWallet($database);
     $commission = new Commission($database, $commissionWallet);
     $xixaPay = new XixaPay($database, $activityLogger, $notifications);
@@ -163,6 +165,7 @@ try {
     register_service(PaymentGatewayService::class, $payments);
     register_service(PaystackDedicatedAccountService::class, $paystackDva);
     register_service(KatPayVirtualAccountService::class, $katPay);
+    register_service(KatPayPayoutService::class, $katPayPayouts);
     register_service(FundingAccountProviderService::class, $fundingProviders);
     register_service(Commission::class, $commission);
     register_service(CommissionWallet::class, $commissionWallet);

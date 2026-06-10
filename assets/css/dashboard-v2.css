@@ -155,6 +155,43 @@ body[data-app-section="user"] {
     background: rgba(255,255,255,.24);
 }
 
+.dashboard-funding-account-grid {
+    align-items: stretch;
+}
+
+.dashboard-funding-account-detail {
+    min-width: 0;
+}
+
+.dashboard-funding-account-detail > div:last-child {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
+.dashboard-funding-copy-actions .gd-copy-button {
+    min-height: 2.25rem;
+    justify-content: center;
+}
+
+@media (max-width: 420px) {
+    .dashboard-funding-account-grid {
+        gap: 0.45rem;
+    }
+
+    .dashboard-funding-account-detail {
+        padding: 0.65rem;
+    }
+
+    .dashboard-funding-copy-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-funding-copy-actions .gd-copy-button {
+        width: 100%;
+    }
+}
+
 .dashboard-service-overlay {
     z-index: 70;
 }

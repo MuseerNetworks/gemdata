@@ -139,6 +139,48 @@ try {
         ]);
     }
 
+    if ($event === 'payout.processed') {
+        $payoutService = app(\GemData\Classes\KatPayPayoutService::class);
+        $payoutReference = $payoutService->providerReference($decoded, $providerReference);
+        $payoutStatus = $payoutService->classifyStatus($decoded);
+
+        $db->execute(
+            'INSERT INTO webhook_events (source, event_key, signature, payload_json, processing_status)
+             VALUES (:source, :event_key, :signature, :payload_json, :processing_status)',
+            [
+                'source' => 'katpay',
+                'event_key' => $eventKey,
+                'signature' => hash('sha256', $normalizedSignature),
+                'payload_json' => json_encode($safePayload),
+                'processing_status' => 'pending',
+            ]
+        );
+        $webhookEventId = $db->lastInsertId();
+
+        $matched = false;
+        if ($payoutStatus === 'successful' && $payoutReference !== '') {
+            $matched = app(\GemData\Classes\OwnerWithdrawalService::class)->confirmPayoutByReference($payoutReference, $safePayload);
+        }
+
+        $db->execute(
+            'UPDATE webhook_events SET processing_status = :status, processed_at = NOW() WHERE id = :id',
+            ['status' => $matched ? 'processed' : 'failed', 'id' => $webhookEventId]
+        );
+
+        app_logger()->writeToFile(dirname(__DIR__) . '/storage/logs/katpay-webhook.log', 'info', 'KatPay payout webhook processed.', [
+            'event_key' => $eventKey,
+            'event' => $event,
+            'payout_status' => $payoutStatus,
+            'payout_reference' => $payoutReference !== '' ? $payoutReference : null,
+            'matched_owner_transfer' => $matched,
+        ]);
+
+        app(\GemData\Classes\Response::class)->json('success', 'KatPay payout webhook processed.', [
+            'event_key' => $eventKey,
+            'matched_owner_transfer' => $matched,
+        ]);
+    }
+
     $db->beginTransaction();
 
     $db->execute(

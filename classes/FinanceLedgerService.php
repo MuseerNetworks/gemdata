@@ -16,7 +16,11 @@ class FinanceLedgerService
     {
         return $this->db->tableExists('business_cash_ledger')
             && $this->db->tableExists('provider_wallet_ledger')
-            && $this->db->tableExists('owner_withdrawals');
+            && $this->db->tableExists('owner_withdrawals')
+            && $this->db->columnExists('owner_withdrawals', 'withdrawal_type')
+            && $this->db->columnExists('owner_withdrawals', 'bank_code')
+            && $this->db->columnExists('owner_withdrawals', 'payout_status')
+            && $this->db->columnExists('owner_withdrawals', 'payout_reference');
     }
 
     public function overview(): array
@@ -304,7 +308,7 @@ class FinanceLedgerService
         $this->insertBusinessCash('owner_capital_injected', 'in', $amount, $adminId, $notes, null, $idempotencyKey);
     }
 
-    public function recordOwnerWithdrawalPaid(array $withdrawal, int $adminId): void
+    public function recordOwnerWithdrawalPaid(array $withdrawal, ?int $adminId): void
     {
         if (!$this->db->tableExists('business_cash_ledger')) {
             return;
