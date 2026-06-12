@@ -143,7 +143,7 @@ function render_purchase_form(string $slug, array $service, array $dashboard): v
                         <?php foreach ($dataPlanCatalog as $plan): ?>
                             <?php $amount = (float) ($plan['amount'] ?? 0); ?>
                             <option value="<?= e($plan['local_plan_code']); ?>" data-network="<?= e($plan['network_code']); ?>" data-amount="<?= e((string) $amount); ?>" data-display-amount="<?= e($amount > 0 ? money($amount) : ''); ?>">
-                                <?= e($plan['local_plan_name'] . ($amount > 0 ? ' - ' . money($amount) : '')); ?>
+                                <?= e(trim((string) $plan['local_plan_name'] . (trim((string) ($plan['validity_label'] ?? '')) !== '' ? ' - ' . trim((string) $plan['validity_label']) : '') . ($amount > 0 ? ' - ' . money($amount) : ''))); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

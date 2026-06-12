@@ -208,8 +208,9 @@ render_header('Services', 'admin');
                 <p class="mt-2 text-sm text-slate-400">Sync, import, paste, or manually add provider plans. Plans only appear to users after they are published/enabled.</p>
             </div>
             <div class="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-xs text-slate-300">
-                CSV columns: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,is_enabled</span><br>
-                Optional cost format: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled</span>
+                Legacy columns: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,is_enabled</span><br>
+                Cost columns: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled</span><br>
+                Validity format: <span class="font-mono">service_slug,network_code,local_plan_code,local_plan_name,validity_label,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled</span>
             </div>
         </div>
 
@@ -273,7 +274,7 @@ render_header('Services', 'admin');
                             <option value="<?= (int) $service['id']; ?>"><?= e($service['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <textarea class="min-h-40 rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="bulk_plans" placeholder="service_slug,network_code,local_plan_code,local_plan_name,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled" required></textarea>
+                    <textarea class="min-h-40 rounded-lg border border-white/10 bg-slate-900 px-4 py-3 md:col-span-2" name="bulk_plans" placeholder="service_slug,network_code,local_plan_code,local_plan_name,validity_label,provider_plan_id,provider_plan_name,amount,provider_cost_price,is_enabled" required></textarea>
                 </div>
                 <button class="mt-4 w-full rounded-lg border border-white/10 px-5 py-3 font-semibold text-white" type="submit">Preview Bulk Paste</button>
             </form>
@@ -297,6 +298,7 @@ render_header('Services', 'admin');
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="network_code" placeholder="network code e.g. mtn">
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="local_plan_code" placeholder="local plan code, optional">
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="local_plan_name" placeholder="local plan name" required>
+                    <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="validity_label" placeholder="validity e.g. 30 Days">
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_id" placeholder="provider plan ID" required>
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="provider_plan_name" placeholder="provider plan name">
                     <input class="rounded-lg border border-white/10 bg-slate-900 px-4 py-3" name="amount" placeholder="selling amount" required>
@@ -327,7 +329,7 @@ render_header('Services', 'admin');
                         <input type="hidden" name="action" value="publish_provider_plan_preview">
                         <div class="table-shell">
                             <table>
-                                <thead><tr class="text-slate-400"><th>Publish</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan ID</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
+                                <thead><tr class="text-slate-400"><th>Publish</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Validity</th><th>Provider Plan ID</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
                                 <tbody>
                                 <?php $lastGroup = ''; ?>
                                 <?php foreach ($catalogPreview['rows'] as $index => $row): ?>
@@ -336,7 +338,7 @@ render_header('Services', 'admin');
                                     if ($group !== $lastGroup):
                                         $lastGroup = $group;
                                     ?>
-                                        <tr><td colspan="9" class="bg-slate-900/80 px-4 py-2 text-xs font-bold uppercase tracking-widest text-cyan-200"><?= e($group); ?></td></tr>
+                                        <tr><td colspan="10" class="bg-slate-900/80 px-4 py-2 text-xs font-bold uppercase tracking-widest text-cyan-200"><?= e($group); ?></td></tr>
                                     <?php endif; ?>
                                     <tr>
                                         <td>
@@ -353,6 +355,7 @@ render_header('Services', 'admin');
                                             <input class="mb-2 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][local_plan_code]" value="<?= e($row['local_plan_code']); ?>" placeholder="local code">
                                             <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][local_plan_name]" value="<?= e($row['local_plan_name']); ?>" placeholder="local name">
                                         </td>
+                                        <td><input class="w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][validity_label]" value="<?= e((string) ($row['validity_label'] ?? '')); ?>" placeholder="optional"></td>
                                         <td>
                                             <input class="mb-2 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 font-mono" name="plans[<?= (int) $index; ?>][provider_plan_id]" value="<?= e($row['provider_plan_id']); ?>">
                                             <input class="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="plans[<?= (int) $index; ?>][provider_plan_name]" value="<?= e($row['provider_plan_name']); ?>" placeholder="provider name">
@@ -386,10 +389,10 @@ render_header('Services', 'admin');
             </div>
             <div class="table-shell mt-4">
                 <table>
-                    <thead><tr class="text-slate-400"><th>ID</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Provider Plan</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
+                    <thead><tr class="text-slate-400"><th>ID</th><th>Provider</th><th>Service</th><th>Network</th><th>Local Plan</th><th>Validity</th><th>Provider Plan</th><th>Selling Amount</th><th>Provider Cost</th><th>Status</th></tr></thead>
                     <tbody>
                     <?php if ($latestProviderPlanMappings === []): ?>
-                        <tr><td colspan="9" class="text-slate-400">No saved provider plan rows yet.</td></tr>
+                        <tr><td colspan="10" class="text-slate-400">No saved provider plan rows yet.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($latestProviderPlanMappings as $mapping): ?>
                         <tr>
@@ -398,6 +401,7 @@ render_header('Services', 'admin');
                             <td><?= e($mapping['service_name'] . ' [' . $mapping['service_slug'] . ']'); ?></td>
                             <td><?= e((string) ($mapping['network_code'] ?? 'default')); ?></td>
                             <td><?= e($mapping['local_plan_code'] . ' - ' . $mapping['local_plan_name']); ?></td>
+                            <td><?= trim((string) ($mapping['validity_label'] ?? '')) !== '' ? e((string) $mapping['validity_label']) : '&mdash;'; ?></td>
                             <td><?= e($mapping['provider_plan_id'] . ((string) ($mapping['provider_plan_name'] ?? '') !== '' ? ' - ' . $mapping['provider_plan_name'] : '')); ?></td>
                             <td><?= e(money($mapping['amount'])); ?></td>
                             <td><?= $mapping['provider_cost_price'] !== null ? e(money($mapping['provider_cost_price'])) : '—'; ?></td>
@@ -421,7 +425,7 @@ render_header('Services', 'admin');
                         <td><?= e($mapping['provider_name']); ?></td>
                         <td><?= e($mapping['service_name']); ?></td>
                         <td colspan="5">
-                            <form method="post" class="grid gap-2 xl:grid-cols-8">
+                            <form method="post" class="grid gap-2 xl:grid-cols-9">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                 <input type="hidden" name="action" value="save_provider_plan">
                                 <input type="hidden" name="provider_account_id" value="<?= (int) $mapping['provider_account_id']; ?>">
@@ -429,6 +433,7 @@ render_header('Services', 'admin');
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="network_code" value="<?= e((string) ($mapping['network_code'] ?? '')); ?>" placeholder="network">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="local_plan_code" value="<?= e($mapping['local_plan_code']); ?>" placeholder="local code">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="local_plan_name" value="<?= e($mapping['local_plan_name']); ?>" placeholder="local name">
+                                <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="validity_label" value="<?= e((string) ($mapping['validity_label'] ?? '')); ?>" placeholder="validity">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 font-mono" name="provider_plan_id" value="<?= e($mapping['provider_plan_id']); ?>" placeholder="provider ID">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="provider_plan_name" value="<?= e((string) ($mapping['provider_plan_name'] ?? '')); ?>" placeholder="provider name">
                                 <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="amount" value="<?= e((string) $mapping['amount']); ?>" placeholder="selling amount">

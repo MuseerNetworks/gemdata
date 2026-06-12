@@ -755,6 +755,7 @@ CREATE TABLE IF NOT EXISTS provider_service_plans (
     network_code VARCHAR(60) NULL,
     local_plan_code VARCHAR(120) NOT NULL,
     local_plan_name VARCHAR(191) NOT NULL,
+    validity_label VARCHAR(80) NULL,
     provider_plan_id VARCHAR(120) NOT NULL,
     provider_plan_name VARCHAR(191) NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,

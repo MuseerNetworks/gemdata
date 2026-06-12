@@ -20,7 +20,7 @@ class ProviderPlanService
     {
         $showInactiveProviderPlans = $this->showInactiveProviderPlansForTesting();
         $manualProviderId = $this->manualCatalogProviderId($serviceSlug);
-        $cacheKey = 'provider-plan-catalog:v3-real-providers:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict') . ':' . ($manualProviderId ?? 'auto');
+        $cacheKey = 'provider-plan-catalog:v4-validity:' . strtolower($serviceSlug) . ':' . ($showInactiveProviderPlans ? 'testing' : 'strict') . ':' . ($manualProviderId ?? 'auto');
         $cached = $this->cache?->get($cacheKey);
         if (is_array($cached) && $cached !== []) {
             return $cached;
@@ -32,7 +32,7 @@ class ProviderPlanService
         }
 
         $rows = $this->db->query(
-            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.amount, psp.provider_cost_price,
+            'SELECT psp.service_id, psp.network_code, psp.local_plan_code, psp.local_plan_name, psp.validity_label, psp.amount, psp.provider_cost_price,
                     pa.id AS provider_account_id, pa.code AS provider_code, pa.credentials_key, pa.circuit_breaker_status
              FROM provider_service_plans psp
              INNER JOIN services s ON s.id = psp.service_id
@@ -79,6 +79,7 @@ class ProviderPlanService
                 'network_code' => (string) ($normalizedNetwork ?? ''),
                 'local_plan_code' => (string) $row['local_plan_code'],
                 'local_plan_name' => (string) $row['local_plan_name'],
+                'validity_label' => (string) ($row['validity_label'] ?? ''),
                 'amount' => (float) ($row['amount'] ?? 0),
                 'provider_cost_price' => $row['provider_cost_price'] !== null ? (float) $row['provider_cost_price'] : null,
             ];
@@ -237,6 +238,7 @@ class ProviderPlanService
         $networkCode = $this->pricing->normalizeNetwork((string) ($payload['network_code'] ?? ''));
         $localPlanCode = $this->normalizePlanCode((string) ($payload['local_plan_code'] ?? ''));
         $localPlanName = trim((string) ($payload['local_plan_name'] ?? ''));
+        $validityLabel = substr(trim(preg_replace('/\s+/', ' ', (string) ($payload['validity_label'] ?? '')) ?? ''), 0, 80);
         $providerPlanId = trim((string) ($payload['provider_plan_id'] ?? ''));
         $providerPlanName = trim((string) ($payload['provider_plan_name'] ?? ''));
         $amount = round((float) ($payload['amount'] ?? 0), 2);
@@ -281,6 +283,7 @@ class ProviderPlanService
             'network_code' => $networkCode,
             'local_plan_code' => $localPlanCode,
             'local_plan_name' => $localPlanName,
+            'validity_label' => $validityLabel !== '' ? $validityLabel : null,
             'provider_plan_id' => $providerPlanId,
             'provider_plan_name' => $providerPlanName,
             'amount' => $amount,
@@ -291,6 +294,7 @@ class ProviderPlanService
         if ($existing) {
             $updateParams = [
                 'local_plan_name' => $params['local_plan_name'],
+                'validity_label' => $params['validity_label'],
                 'provider_plan_id' => $params['provider_plan_id'],
                 'provider_plan_name' => $params['provider_plan_name'],
                 'amount' => $params['amount'],
@@ -301,6 +305,7 @@ class ProviderPlanService
             $this->db->execute(
                 'UPDATE provider_service_plans
                  SET local_plan_name = :local_plan_name,
+                     validity_label = :validity_label,
                      provider_plan_id = :provider_plan_id,
                      provider_plan_name = :provider_plan_name,
                      amount = :amount,
@@ -313,10 +318,10 @@ class ProviderPlanService
             $this->db->execute(
                 'INSERT INTO provider_service_plans (
                     provider_account_id, service_id, network_code, local_plan_code, local_plan_name,
-                    provider_plan_id, provider_plan_name, amount, provider_cost_price, is_enabled
+                    validity_label, provider_plan_id, provider_plan_name, amount, provider_cost_price, is_enabled
                  ) VALUES (
                     :provider_account_id, :service_id, :network_code, :local_plan_code, :local_plan_name,
-                    :provider_plan_id, :provider_plan_name, :amount, :provider_cost_price, :is_enabled
+                    :validity_label, :provider_plan_id, :provider_plan_name, :amount, :provider_cost_price, :is_enabled
                  )',
                 $params
             );

@@ -106,12 +106,14 @@ $catalogPlanCards = static fn(array $catalog): array => array_map(static fn(arra
     'label' => (string) ($plan['local_plan_name'] ?? ''),
     'amount' => (float) ($plan['amount'] ?? 0),
     'displayAmount' => money((float) ($plan['amount'] ?? 0)),
-    'validity' => 'Available plan',
+    'validity' => trim((string) ($plan['validity_label'] ?? '')) !== '' ? (string) $plan['validity_label'] : 'Available plan',
 ], array_values($catalog));
 
 $catalogSelectOptions = static fn(array $catalog): array => array_map(static fn(array $plan): array => [
     'value' => (string) ($plan['local_plan_code'] ?? ''),
-    'label' => trim((string) ($plan['local_plan_name'] ?? '') . ((float) ($plan['amount'] ?? 0) > 0 ? ' - ' . money((float) $plan['amount']) : '')),
+    'label' => trim((string) ($plan['local_plan_name'] ?? '')
+        . (trim((string) ($plan['validity_label'] ?? '')) !== '' ? ' - ' . trim((string) $plan['validity_label']) : '')
+        . ((float) ($plan['amount'] ?? 0) > 0 ? ' - ' . money((float) $plan['amount']) : '')),
 ], array_values($catalog));
 
 $catalogAmountOptions = static function (array $catalog): array {

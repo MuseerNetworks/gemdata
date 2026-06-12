@@ -13,6 +13,7 @@ class ProviderPlanCatalogService
         'network_code',
         'local_plan_code',
         'local_plan_name',
+        'validity_label',
         'provider_plan_id',
         'provider_plan_name',
         'amount',
@@ -28,6 +29,18 @@ class ProviderPlanCatalogService
         'provider_plan_id',
         'provider_plan_name',
         'amount',
+        'is_enabled',
+    ];
+
+    private const COST_COLUMNS = [
+        'service_slug',
+        'network_code',
+        'local_plan_code',
+        'local_plan_name',
+        'provider_plan_id',
+        'provider_plan_name',
+        'amount',
+        'provider_cost_price',
         'is_enabled',
     ];
 
@@ -115,6 +128,7 @@ class ProviderPlanCatalogService
             'network_code' => (string) ($payload['network_code'] ?? ''),
             'local_plan_code' => (string) ($payload['local_plan_code'] ?? ''),
             'local_plan_name' => (string) ($payload['local_plan_name'] ?? ''),
+            'validity_label' => (string) ($payload['validity_label'] ?? ''),
             'provider_plan_id' => (string) ($payload['provider_plan_id'] ?? ''),
             'provider_plan_name' => (string) ($payload['provider_plan_name'] ?? ''),
             'amount' => (string) ($payload['amount'] ?? ''),
@@ -162,6 +176,7 @@ class ProviderPlanCatalogService
             $providerPlanId = trim((string) ($row['provider_plan_id'] ?? ''));
             $providerPlanName = trim((string) ($row['provider_plan_name'] ?? ''));
             $localPlanName = trim((string) ($row['local_plan_name'] ?? $providerPlanName));
+            $validityLabel = $this->normalizeValidityLabel((string) ($row['validity_label'] ?? ''));
             $amount = $this->normalizeAmount($row['amount'] ?? null);
             $providerCostPrice = $this->normalizeOptionalAmount($row['provider_cost_price'] ?? null);
             $networkCode = $this->normalizeNetworkCode((string) ($row['network_code'] ?? ''));
@@ -197,6 +212,7 @@ class ProviderPlanCatalogService
                 'network_code' => $networkCode,
                 'local_plan_code' => $localPlanCode,
                 'local_plan_name' => $localPlanName,
+                'validity_label' => $validityLabel,
                 'provider_plan_id' => $providerPlanId,
                 'provider_plan_name' => $providerPlanName,
                 'amount' => $amount ?? 0.0,
@@ -288,6 +304,7 @@ class ProviderPlanCatalogService
             'network_code' => $plan['network_code'] ?? null,
             'local_plan_code' => (string) ($plan['local_plan_code'] ?? ''),
             'local_plan_name' => (string) ($plan['local_plan_name'] ?? ''),
+            'validity_label' => (string) ($plan['validity_label'] ?? ''),
             'provider_plan_id' => (string) ($plan['provider_plan_id'] ?? ''),
             'provider_plan_name' => (string) ($plan['provider_plan_name'] ?? ''),
             'amount' => (float) ($plan['amount'] ?? 0),
@@ -395,7 +412,11 @@ class ProviderPlanCatalogService
                 }
             }
 
-            $columns = $header ?: (count($row) === count(self::LEGACY_COLUMNS) ? self::LEGACY_COLUMNS : self::COLUMNS);
+            $columns = $header ?: match (count($row)) {
+                count(self::LEGACY_COLUMNS) => self::LEGACY_COLUMNS,
+                count(self::COST_COLUMNS) => self::COST_COLUMNS,
+                default => self::COLUMNS,
+            };
             $item = [];
             foreach ($columns as $columnIndex => $columnName) {
                 if (!in_array($columnName, self::COLUMNS, true)) {
@@ -455,6 +476,12 @@ class ProviderPlanCatalogService
 
         $value = round((float) $amount, 2);
         return $value >= 0 ? $value : false;
+    }
+
+    private function normalizeValidityLabel(string $validityLabel): string
+    {
+        $validityLabel = trim(preg_replace('/\s+/', ' ', $validityLabel) ?? $validityLabel);
+        return substr($validityLabel, 0, 80);
     }
 
     private function generateLocalPlanCode(string $serviceSlug, ?string $networkCode, string $providerPlanId, string $localPlanName): string
