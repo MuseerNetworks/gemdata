@@ -54,6 +54,9 @@ render_header('Transactions', 'user');
                             <div>
                                 <div class="text-[13px] font-semibold text-gem-text"><?= e($row['service_name']); ?></div>
                                 <div class="text-[11px] text-gem-muted"><?= e($row['recipient']); ?> · <?= e($row['reference']); ?></div>
+                                <?php if ($status === 'successful'): ?>
+                                    <a class="mt-1 inline-flex text-[11px] font-bold text-gem-blue hover:underline" href="<?= e(base_url('user/receipt.php?reference=' . rawurlencode((string) $row['reference']))); ?>">View Receipt</a>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="sm:flex sm:items-center absolute sm:static right-5 top-4"><span class="text-[13px] font-bold font-mono <?= e($amountClass); ?>"><?= e($amountPrefix . money((float) $row['amount'])); ?></span></div>

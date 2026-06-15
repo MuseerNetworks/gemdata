@@ -1115,6 +1115,8 @@ const setupPurchaseModal = () => {
     let activeService = null;
     let step = 'form';
     let lastFocused = null;
+    let statusPollTimer = null;
+    let statusPollStartedAt = 0;
 
     const formatMoney = (amount) => `NGN ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const makeIdempotencyKey = () => generateIdempotencyKey('txn');
@@ -1292,11 +1294,103 @@ const setupPurchaseModal = () => {
     };
 
     const closeModal = () => {
+        if (statusPollTimer) {
+            window.clearTimeout(statusPollTimer);
+            statusPollTimer = null;
+        }
         modal.hidden = true;
         document.body.classList.remove('purchase-modal-open');
         setMessage('');
         form.reset();
         lastFocused?.focus?.();
+    };
+
+    const statusTone = (status) => {
+        const normalized = String(status || 'pending').toLowerCase();
+        if (normalized === 'successful') return 'green';
+        if (['failed', 'refunded', 'reversed'].includes(normalized)) return 'red';
+        return 'amber';
+    };
+
+    const renderRecentRows = (transactions = []) => {
+        const recentTarget = document.querySelector('[data-recent-transactions]');
+        if (!recentTarget) return;
+        if (!Array.isArray(transactions) || transactions.length === 0) {
+            recentTarget.innerHTML = '<div class="user-empty-state px-5 py-8 text-center text-[13px] text-gem-muted">No transactions yet. Fund your wallet and buy your first service.</div>';
+            return;
+        }
+
+        recentTarget.innerHTML = transactions.map((tx) => {
+            const status = String(tx.status || 'pending').toLowerCase();
+            const tone = statusTone(status);
+            const textClass = tone === 'amber' ? 'amber-600' : `gem-${tone}`;
+            const dotClass = tone === 'amber' ? 'amber-500' : `gem-${tone}`;
+            const receipt = tx.receipt_url ? `<a class="mt-1 inline-flex text-[11px] font-bold text-gem-blue hover:underline" href="${safeAttr(tx.receipt_url)}">View Receipt</a>` : '';
+            return `
+                <div class="user-list-row grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-4 px-5 py-4 hover:bg-gem-gray/50 transition-colors" data-search-item data-search="${safeAttr(`${tx.reference || ''} ${tx.service || ''} ${status}`)}">
+                    <div class="col-span-2 flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">${serviceIcon(tx.service_slug || 'services')}</div>
+                        <div><div class="text-[13px] font-semibold text-gem-text">${escapeHTML(tx.service || 'Transaction')}</div><div class="text-[11px] text-gem-muted">${escapeHTML(tx.recipient || tx.reference || '')}</div>${receipt}</div>
+                    </div>
+                    <div class="sm:flex sm:items-center"><span class="text-[13px] font-bold text-gem-text font-mono">${escapeHTML(tx.amount_formatted || formatMoney(tx.amount))}</span></div>
+                    <div class="sm:flex sm:items-center"><span class="inline-flex items-center gap-1 bg-${tone}-50 text-${textClass} text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-${dotClass}"></span>${escapeHTML(status.charAt(0).toUpperCase() + status.slice(1))}</span></div>
+                    <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted" title="${safeAttr(tx.created_at_full || tx.created_at || '')}">${escapeHTML(tx.created_at_display || 'Just now')}</span></div>
+                </div>
+            `;
+        }).join('');
+    };
+
+    const renderProcessingState = (tx, message = 'Transaction is processing with the provider.') => {
+        const status = String(tx?.status || 'pending').toLowerCase();
+        const isDone = ['successful', 'failed', 'refunded', 'reversed'].includes(status);
+        const receipt = tx?.receipt_url && status === 'successful'
+            ? `<a class="primary-action inline-flex justify-center" href="${safeAttr(tx.receipt_url)}">View Receipt</a>`
+            : '';
+        const close = isDone ? '<button class="secondary-action" type="button" data-purchase-close>Close</button>' : '';
+        summaryTarget.hidden = false;
+        summaryTarget.innerHTML = `
+            <div class="purchase-result-success purchase-processing-state">
+                <strong>${escapeHTML(status === 'successful' ? 'Transaction successful' : (isDone ? status.charAt(0).toUpperCase() + status.slice(1) : 'Processing transaction'))}</strong>
+                <span>Reference: ${escapeHTML(tx?.reference || 'Pending')}</span>
+                <p>${escapeHTML(message)}</p>
+                ${(receipt || close) ? `<div class="purchase-result-actions">${receipt}${close}</div>` : ''}
+            </div>
+        `;
+    };
+
+    const pollTransactionStatus = (reference) => {
+        if (!reference || !config.status_endpoint) return;
+        const elapsed = Date.now() - statusPollStartedAt;
+        if (elapsed > 300000) {
+            renderProcessingState({ reference, status: 'pending' }, 'Still processing. You can close this window and check Recent Transactions shortly.');
+            return;
+        }
+
+        const url = `${config.status_endpoint}${config.status_endpoint.includes('?') ? '&' : '?'}reference=${encodeURIComponent(reference)}`;
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then((response) => response.json())
+            .then((payload) => {
+                if (payload.status !== 'success') {
+                    throw new Error(payload.message || 'Could not refresh transaction status.');
+                }
+                const data = payload.data || {};
+                const tx = data.transaction || { reference, status: 'pending' };
+                if (Array.isArray(data.recent_transactions)) {
+                    renderRecentRows(data.recent_transactions);
+                }
+                renderProcessingState(tx, payload.message || data.message || 'Transaction is processing with the provider.');
+                const status = String(tx.status || 'pending').toLowerCase();
+                if (['successful', 'failed', 'refunded', 'reversed'].includes(status)) {
+                    statusPollTimer = null;
+                    return;
+                }
+                const nextDelay = elapsed < 60000 ? 5000 : 10000;
+                statusPollTimer = window.setTimeout(() => pollTransactionStatus(reference), nextDelay);
+            })
+            .catch(() => {
+                const nextDelay = elapsed < 60000 ? 5000 : 10000;
+                statusPollTimer = window.setTimeout(() => pollTransactionStatus(reference), nextDelay);
+            });
     };
 
     const updateDashboard = (payload) => {
@@ -1306,11 +1400,14 @@ const setupPurchaseModal = () => {
                 if (index === 0) node.textContent = payload.wallet_balance_formatted;
             });
         }
-        const recentTarget = document.querySelector('[data-recent-transactions]');
-        if (recentTarget && payload.transaction) {
+        if (Array.isArray(payload.recent_transactions)) {
+            renderRecentRows(payload.recent_transactions);
+        } else if (payload.transaction) {
+            const recentTarget = document.querySelector('[data-recent-transactions]');
+            if (!recentTarget) return;
             const tx = payload.transaction;
             const status = tx.status || 'pending';
-            const statusClass = status === 'successful' ? 'green' : (status === 'failed' ? 'red' : 'amber');
+            const statusClass = statusTone(status);
             const row = document.createElement('div');
             row.className = 'grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-4 px-5 py-4 bg-gem-blue/5';
             row.innerHTML = `
@@ -1406,8 +1503,13 @@ const setupPurchaseModal = () => {
             }
             updateDashboard(payload.data || {});
             setStep('result');
-            summaryTarget.hidden = false;
-            summaryTarget.innerHTML = `<div class="purchase-result-success"><strong>${escapeHTML(payload.message)}</strong><span>Reference: ${escapeHTML(payload.data?.transaction?.reference || payload.data?.reference || 'Pending')}</span></div>`;
+            const tx = payload.data?.transaction || {};
+            const reference = tx.reference || payload.data?.reference || '';
+            renderProcessingState({ reference, status: tx.status || 'pending', receipt_url: tx.receipt_url || null }, 'Transaction accepted. We are processing it with the provider now.');
+            if (reference) {
+                statusPollStartedAt = Date.now();
+                statusPollTimer = window.setTimeout(() => pollTransactionStatus(reference), 5000);
+            }
             setButtonLoading(submitButton, false);
             submitButton.textContent = 'Done';
             submitButton.onclick = (clickEvent) => {

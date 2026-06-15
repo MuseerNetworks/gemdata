@@ -250,6 +250,13 @@ $services = db()->query('SELECT slug, name FROM services ORDER BY name');
 $providers = db()->query('SELECT code, name FROM provider_accounts ORDER BY priority_order, name');
 $savedViews = $ops->savedViews((int) $admin['id'], $pageKey);
 $paginationQuery = array_filter(array_merge($filters, ['view_id' => $selectedViewId ?: null]), static fn($value) => $value !== '' && $value !== null);
+$hasVisiblePendingTransactions = false;
+foreach ($rows as $row) {
+    if (($row['status'] ?? '') === 'pending') {
+        $hasVisiblePendingTransactions = true;
+        break;
+    }
+}
 
 render_header('Transactions', 'admin');
 ?>
@@ -361,7 +368,15 @@ render_header('Transactions', 'admin');
                     Showing page <?= (int) $pagination['page']; ?> of <?= (int) $pagination['total_pages']; ?> |
                     <?= (int) $pagination['total']; ?> transactions
                 </div>
-                <label class="select-page-toggle"><input type="checkbox" data-select-page data-bulk-target="bulk-transactions-form"> Select page</label>
+                <div class="flex flex-wrap items-center gap-3">
+                    <?php if ($hasVisiblePendingTransactions): ?>
+                        <span class="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-200" data-pending-auto-refresh>
+                            <span class="h-2 w-2 rounded-full bg-amber-300"></span>
+                            Auto-refreshing pending rows
+                        </span>
+                    <?php endif; ?>
+                    <label class="select-page-toggle"><input type="checkbox" data-select-page data-bulk-target="bulk-transactions-form"> Select page</label>
+                </div>
             </div>
             <div class="table-shell mt-4">
                 <table>
@@ -538,4 +553,24 @@ render_header('Transactions', 'admin');
             </div>
         </section>
 </div>
+<?php if ($hasVisiblePendingTransactions): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var intervalMs = 15000;
+    window.setTimeout(function refreshPendingTransactions() {
+        var active = document.activeElement;
+        var isEditing = active && active.matches && active.matches('input, select, textarea');
+        var hasSelection = document.querySelector('input[name="transaction_ids[]"]:checked') !== null;
+        var drawerOpen = document.querySelector('.admin-inline-drawer[open]') !== null;
+
+        if (!document.hidden && !isEditing && !hasSelection && !drawerOpen) {
+            window.location.reload();
+            return;
+        }
+
+        window.setTimeout(refreshPendingTransactions, intervalMs);
+    }, intervalMs);
+});
+</script>
+<?php endif; ?>
 <?php render_footer(); ?>

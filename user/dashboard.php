@@ -341,7 +341,7 @@ render_header('Dashboard', 'user');
             </div>
         </div>
 
-        <div class="xl:col-span-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-3">
+        <div class="dashboard-stat-grid xl:col-span-3 grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-2 gap-3">
             <div class="stat-card user-premium-card rounded-2xl p-4 flex flex-col gap-3">
                 <div class="user-icon-box user-icon-blue"><?= dashboard_template_icon('transactions_stat'); ?></div>
                 <div><div class="user-metric-value"><?= $role === 'api' ? (int) ($apiUsage['total_requests'] ?? 0) : (int) $stats['transactions']; ?></div><div class="text-[12px] text-gem-muted font-bold mt-1"><?= $role === 'api' ? 'API Requests Today' : 'Transactions'; ?></div></div>
@@ -409,7 +409,7 @@ render_header('Dashboard', 'user');
                 $card = $serviceCards[$slug] ?? ['label' => (string) $service['name'], 'copy' => 'Complete service', 'icon' => 'funding_account', 'color' => 'bg-blue-600'];
                 $dedicatedUrl = $dedicatedServiceUrls[$slug] ?? base_url('user/dashboard.php#services');
                 ?>
-                <a class="service-icon user-premium-card user-premium-link bg-white rounded-2xl p-4 shadow-card border border-gem-border cursor-pointer text-left block" href="<?= e($dedicatedUrl); ?>" data-service-slug="<?= e($slug); ?>" data-search-item data-search="<?= e($service['name'] . ' ' . ($service['description'] ?? '') . ' ' . ($serviceMeta[$slug]['summary'] ?? '')); ?>">
+                <a class="service-icon user-premium-card user-premium-link bg-white rounded-2xl p-4 shadow-card border border-gem-border cursor-pointer text-left block" href="<?= e($dedicatedUrl); ?>" data-purchase-trigger data-service-slug="<?= e($slug); ?>" data-search-item data-search="<?= e($service['name'] . ' ' . ($service['description'] ?? '') . ' ' . ($serviceMeta[$slug]['summary'] ?? '')); ?>">
                     <div class="w-10 h-10 rounded-xl <?= e($card['color']); ?> flex items-center justify-center mb-3"><?= dashboard_template_icon($card['icon']); ?></div>
                     <div class="text-[13px] font-bold text-gem-text"><?= e($card['label']); ?></div>
                     <div class="text-[11px] text-gem-muted mt-0.5"><?= e($card['copy']); ?></div>
@@ -525,7 +525,7 @@ render_header('Dashboard', 'user');
         </div>
     <?php endif; ?>
 
-    <div class="stagger-5">
+    <div class="stagger-5" id="recent-transactions">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-[16px] font-bold text-gem-text">Recent Transactions</h2>
             <a href="<?= e(base_url('user/transactions.php')); ?>" class="text-gem-blue text-[13px] font-semibold hover:underline">View All</a>
@@ -543,7 +543,13 @@ render_header('Dashboard', 'user');
                     <div class="user-list-row grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-4 px-5 py-4 hover:bg-gem-gray/50 transition-colors" data-search-item data-search="<?= e($row['reference'] . ' ' . $row['service_name'] . ' ' . $row['status']); ?>">
                         <div class="col-span-2 flex items-center gap-3">
                             <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600"><?= icon_svg('services'); ?></div>
-                            <div><div class="text-[13px] font-semibold text-gem-text"><?= e($row['service_name']); ?></div><div class="text-[11px] text-gem-muted"><?= e((string) ($row['recipient'] ?? $row['reference'])); ?></div></div>
+                            <div>
+                                <div class="text-[13px] font-semibold text-gem-text"><?= e($row['service_name']); ?></div>
+                                <div class="text-[11px] text-gem-muted"><?= e((string) ($row['recipient'] ?? $row['reference'])); ?></div>
+                                <?php if (($row['status'] ?? '') === 'successful'): ?>
+                                    <a class="mt-1 inline-flex text-[11px] font-bold text-gem-blue hover:underline" href="<?= e(base_url('user/receipt.php?reference=' . rawurlencode((string) $row['reference']))); ?>">View Receipt</a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <div class="sm:flex sm:items-center"><span class="text-[13px] font-bold text-gem-text font-mono"><?= e(money($row['amount'])); ?></span></div>
                         <div class="sm:flex sm:items-center"><span class="inline-flex items-center gap-1 bg-<?= e($statusColor); ?>-50 text-<?= e($statusColor === 'amber' ? 'amber-600' : 'gem-' . ($statusColor === 'green' ? 'green' : 'red')); ?> text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-<?= e($statusColor === 'amber' ? 'amber-500' : 'gem-' . ($statusColor === 'green' ? 'green' : 'red')); ?>"></span><?= e(ucfirst((string) $row['status'])); ?></span></div>
@@ -602,6 +608,7 @@ render_header('Dashboard', 'user');
     'services' => $purchaseSchemas,
     'icons' => array_map(static fn(array $card): string => $card['icon'], $serviceCards),
     'endpoint' => base_url('user/service-action.php'),
+    'status_endpoint' => base_url('user/transaction-status.php'),
     'pin_configured' => $walletPinConfigured,
     'pin_settings_url' => base_url('user/settings.php#security'),
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>

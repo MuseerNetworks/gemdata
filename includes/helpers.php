@@ -233,8 +233,9 @@ function human_datetime(?string $value): string
     }
 
     try {
-        $date = new DateTimeImmutable($value);
-        $now = new DateTimeImmutable('now');
+        $timezone = new DateTimeZone((string) config('app.timezone', 'Africa/Lagos'));
+        $date = (new DateTimeImmutable($value, $timezone))->setTimezone($timezone);
+        $now = new DateTimeImmutable('now', $timezone);
         $diffSeconds = $now->getTimestamp() - $date->getTimestamp();
 
         if ($diffSeconds >= 0 && $diffSeconds < 60) {
@@ -257,6 +258,20 @@ function human_datetime(?string $value): string
 
         return $date->format('M j, Y g:i A');
     } catch (Throwable $throwable) {
+        return (string) $value;
+    }
+}
+
+function local_datetime(?string $value, string $format = 'M j, Y g:i A'): string
+{
+    if (!$value) {
+        return '-';
+    }
+
+    try {
+        $timezone = new DateTimeZone((string) config('app.timezone', 'Africa/Lagos'));
+        return (new DateTimeImmutable($value, $timezone))->setTimezone($timezone)->format($format);
+    } catch (Throwable) {
         return (string) $value;
     }
 }

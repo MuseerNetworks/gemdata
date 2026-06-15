@@ -4954,13 +4954,73 @@ body[data-standalone="true"] .guest-topbar {
         gap: 0.45rem;
     }
 
-    .wallet-card .grid.grid-cols-1.sm\:grid-cols-3 > div:not(:nth-child(2)) {
-        display: none;
-    }
-
     .wallet-card .gd-copy-button {
         padding: 0.45rem 0.55rem;
         font-size: 0.68rem;
+    }
+
+    .dashboard-funding-account-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .dashboard-funding-account-detail {
+        min-width: 0;
+        padding: 0.55rem 0.65rem !important;
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-funding-account-detail .font-mono {
+        display: block;
+        word-break: break-all;
+    }
+
+    .dashboard-funding-copy-actions {
+        gap: 0.45rem;
+    }
+
+    .dashboard-funding-copy-actions .gd-copy-button {
+        flex: 1 1 8rem;
+        justify-content: center;
+        min-width: 0;
+        white-space: normal;
+        line-height: 1.2;
+    }
+
+    .dashboard-stat-grid {
+        gap: 0.55rem !important;
+    }
+
+    .dashboard-stat-grid .stat-card {
+        min-height: 0;
+        padding: 0.65rem !important;
+        gap: 0.5rem !important;
+        border-radius: 0.9rem !important;
+    }
+
+    .dashboard-stat-grid .user-icon-box {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.75rem;
+    }
+
+    .dashboard-stat-grid .user-icon-box svg {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .dashboard-stat-grid .user-metric-value {
+        font-size: 0.98rem;
+        line-height: 1.12;
+    }
+
+    .dashboard-stat-grid .text-\[12px\] {
+        font-size: 0.66rem;
+        line-height: 1.18;
+    }
+
+    .dashboard-stat-grid .progress-bar,
+    .dashboard-stat-grid .flex.items-center.gap-1\.5 {
+        display: none;
     }
 
     .purchase-modal {

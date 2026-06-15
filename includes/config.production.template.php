@@ -218,7 +218,11 @@ return [
     // ══════════════════════════════════════════════════════
     // 11. CRON JOBS (reference — set these in cPanel Cron)
     // ══════════════════════════════════════════════════════
-    // Every 5 min:  php /home/yyrigitd/public_html/cron/process-pending.php
+    // Every 1 min:  php /home/yyrigitd/public_html/cron/process-pending.php
+    // Optional if cPanel allows staggered commands:
+    // * * * * * php /home/yyrigitd/public_html/cron/process-pending.php
+    // * * * * * sleep 20; php /home/yyrigitd/public_html/cron/process-pending.php
+    // * * * * * sleep 40; php /home/yyrigitd/public_html/cron/process-pending.php
     // Every 10 min: php /home/yyrigitd/public_html/cron/reconcile.php
     // Every 30 min: php /home/yyrigitd/public_html/cron/retry-failed.php
 
