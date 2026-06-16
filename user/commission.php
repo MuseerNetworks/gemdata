@@ -43,17 +43,18 @@ render_header('Commission Wallet', 'user');
         <?php endif; ?>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div id="commission-summary" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <?php
         $cards = [
-            ['label' => 'Available Balance', 'value' => money($balance), 'note' => 'Ready to withdraw', 'icon' => 'wallet', 'tone' => 'green'],
-            ['label' => 'Total Earned', 'value' => money($totalEarned), 'note' => 'All-time commission', 'icon' => 'profit', 'tone' => 'blue'],
-            ['label' => 'Pending Withdrawal', 'value' => money($pendingAmount), 'note' => $hasPending ? 'Awaiting admin review' : 'No active request', 'icon' => 'pending', 'tone' => 'amber'],
-            ['label' => 'Total Withdrawn', 'value' => money($totalWithdrawn), 'note' => 'Paid out to you', 'icon' => 'refund', 'tone' => 'amber'],
+            ['label' => 'Main Wallet Balance', 'value' => money((float) ($user['balance'] ?? 0)), 'note' => 'Spendable wallet funds', 'icon' => 'wallet', 'tone' => 'blue', 'href' => base_url('user/fund-wallet.php')],
+            ['label' => 'Commission Wallet', 'value' => money($balance), 'note' => 'Separate earnings balance', 'icon' => 'wallet', 'tone' => 'green', 'href' => base_url('user/commission.php#commission-summary')],
+            ['label' => 'Total Commission Earned', 'value' => money($totalEarned), 'note' => 'All-time commission', 'icon' => 'profit', 'tone' => 'blue', 'href' => base_url('user/commission.php#commission-history')],
+            ['label' => 'Withdrawable Commission', 'value' => money($balance), 'note' => 'Available for request', 'icon' => 'refund', 'tone' => 'amber', 'href' => base_url('user/commission.php#commission-summary')],
+            ['label' => 'Pending Withdrawal', 'value' => money($pendingAmount), 'note' => $hasPending ? 'Awaiting admin review' : 'No active request', 'icon' => 'pending', 'tone' => 'amber', 'href' => base_url('user/withdrawals.php')],
         ];
         ?>
         <?php foreach ($cards as $card): ?>
-            <div class="user-premium-card rounded-2xl p-5 min-h-[9rem] flex flex-col justify-between">
+            <a class="user-premium-card user-premium-link rounded-2xl p-5 min-h-[9rem] flex flex-col justify-between no-underline" href="<?= e($card['href']); ?>">
                 <div class="flex items-start justify-between gap-4">
                     <div class="min-w-0">
                         <p class="user-muted-label"><?= e($card['label']); ?></p>
@@ -62,11 +63,11 @@ render_header('Commission Wallet', 'user');
                     <span class="user-icon-box user-icon-<?= e($card['tone']); ?>"><?= icon_svg($card['icon']); ?></span>
                 </div>
                 <p class="mt-3 text-[13px] font-semibold text-gem-muted"><?= e($card['note']); ?></p>
-            </div>
+            </a>
         <?php endforeach; ?>
     </div>
 
-    <section class="user-premium-card rounded-2xl overflow-hidden">
+    <section id="commission-history" class="user-premium-card rounded-2xl overflow-hidden">
         <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gem-border">
             <div>
                 <h2 class="text-[16px] font-bold text-gem-text">Commission History</h2>

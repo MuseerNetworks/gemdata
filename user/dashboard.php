@@ -370,32 +370,6 @@ render_header('Dashboard', 'user');
         <a href="<?= e($upgradeButton['href']); ?>" class="flex items-center gap-2 border border-gem-yellow text-gem-orange text-[13px] font-bold px-4 py-2 rounded-xl hover:bg-amber-50 transition-colors flex-shrink-0"><?= e($upgradeButton['label']); ?> <?= icon_svg('chevron'); ?></a>
     </div>
 
-    <?php if (in_array($role, ['reseller', 'api'], true) && $reseller !== null): ?>
-        <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5 stagger-3">
-            <?php
-            $commissionCards = [
-                ['label' => 'Main Wallet Balance', 'value' => money((float) ($wallet['balance'] ?? 0)), 'note' => 'Spendable wallet funds', 'icon' => 'wallet', 'tone' => 'blue'],
-                ['label' => 'Commission Wallet', 'value' => money((float) ($reseller['commission_balance'] ?? 0)), 'note' => 'Separate earnings balance', 'icon' => 'profit', 'tone' => 'green'],
-                ['label' => 'Total Commission Earned', 'value' => money((float) ($reseller['total_earned'] ?? 0)), 'note' => 'All-time commission', 'icon' => 'transactions', 'tone' => 'purple'],
-                ['label' => 'Withdrawable Commission', 'value' => money((float) ($reseller['commission_balance'] ?? 0)), 'note' => 'Available for request', 'icon' => 'refund', 'tone' => 'amber'],
-                ['label' => 'Pending Withdrawal', 'value' => money((float) ($reseller['pending_withdrawal'] ?? 0)), 'note' => 'Awaiting admin review', 'icon' => 'pending', 'tone' => 'orange'],
-            ];
-            ?>
-            <?php foreach ($commissionCards as $card): ?>
-                <a class="user-premium-card user-premium-link rounded-2xl border border-gem-border bg-white p-4 shadow-card" href="<?= e(base_url($card['label'] === 'Pending Withdrawal' || $card['label'] === 'Withdrawable Commission' ? 'user/withdrawals.php' : 'user/commission.php')); ?>">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="text-[11px] font-bold uppercase tracking-wider text-gem-muted"><?= e($card['label']); ?></div>
-                            <div class="mt-2 font-mono text-[18px] font-extrabold text-gem-text"><?= e($card['value']); ?></div>
-                            <div class="mt-1 text-[11px] font-semibold text-gem-muted"><?= e($card['note']); ?></div>
-                        </div>
-                        <span class="user-icon-box user-icon-<?= e($card['tone']); ?>"><?= icon_svg($card['icon']); ?></span>
-                    </div>
-                </a>
-            <?php endforeach; ?>
-        </section>
-    <?php endif; ?>
-
     <div id="services" class="stagger-4">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-[16px] font-bold text-gem-text">Quick Services</h2>
@@ -409,7 +383,7 @@ render_header('Dashboard', 'user');
                 $card = $serviceCards[$slug] ?? ['label' => (string) $service['name'], 'copy' => 'Complete service', 'icon' => 'funding_account', 'color' => 'bg-blue-600'];
                 $dedicatedUrl = $dedicatedServiceUrls[$slug] ?? base_url('user/dashboard.php#services');
                 ?>
-                <a class="service-icon user-premium-card user-premium-link bg-white rounded-2xl p-4 shadow-card border border-gem-border cursor-pointer text-left block" href="<?= e($dedicatedUrl); ?>" data-purchase-trigger data-service-slug="<?= e($slug); ?>" data-search-item data-search="<?= e($service['name'] . ' ' . ($service['description'] ?? '') . ' ' . ($serviceMeta[$slug]['summary'] ?? '')); ?>">
+                <a class="service-icon user-premium-card user-premium-link bg-white rounded-2xl p-4 shadow-card border border-gem-border cursor-pointer text-left block" href="<?= e($dedicatedUrl); ?>" data-service-slug="<?= e($slug); ?>" data-search-item data-search="<?= e($service['name'] . ' ' . ($service['description'] ?? '') . ' ' . ($serviceMeta[$slug]['summary'] ?? '')); ?>">
                     <div class="w-10 h-10 rounded-xl <?= e($card['color']); ?> flex items-center justify-center mb-3"><?= dashboard_template_icon($card['icon']); ?></div>
                     <div class="text-[13px] font-bold text-gem-text"><?= e($card['label']); ?></div>
                     <div class="text-[11px] text-gem-muted mt-0.5"><?= e($card['copy']); ?></div>
