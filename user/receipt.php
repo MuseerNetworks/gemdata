@@ -41,32 +41,7 @@ if (!$transaction) {
     exit;
 }
 
-$payload = json_decode_array((string) ($transaction['payload_json'] ?? '{}'));
-$networkCode = (string) ($payload['network'] ?? $payload['provider'] ?? '');
-$planCode = (string) ($payload['local_plan_code'] ?? $payload['package'] ?? $payload['exam_type'] ?? $payload['plan'] ?? '');
-$mapping = null;
-if ((int) ($transaction['provider_account_id'] ?? 0) > 0 && $planCode !== '') {
-    $mapping = app(\GemData\Classes\ProviderPlanService::class)->resolveForProvider(
-        (int) $transaction['provider_account_id'],
-        (int) $transaction['service_id'],
-        $networkCode,
-        $planCode
-    );
-}
-
-$planName = trim((string) ($payload['local_plan_name'] ?? ''));
-if ($planName === '' && is_array($mapping)) {
-    $planName = trim((string) ($mapping['local_plan_name'] ?? ''));
-}
-if ($planName === '') {
-    $planName = trim($planCode);
-}
-
-$validityLabel = trim((string) ($payload['validity_label'] ?? ''));
-if ($validityLabel === '' && is_array($mapping)) {
-    $validityLabel = trim((string) ($mapping['validity_label'] ?? ''));
-}
-
+$receipt = transaction_receipt_context($transaction);
 $status = strtolower((string) ($transaction['status'] ?? 'pending'));
 $statusColor = $status === 'successful' ? 'text-gem-green bg-green-50' : ($status === 'failed' ? 'text-gem-red bg-red-50' : 'text-amber-600 bg-amber-50');
 
@@ -75,7 +50,10 @@ render_header('Transaction Receipt', 'user');
 <div class="receipt-page mx-auto max-w-2xl space-y-3">
     <div class="receipt-actions flex flex-wrap items-center justify-between gap-2">
         <a class="purchase-back-link" href="<?= e(base_url('user/dashboard.php#recent-transactions')); ?>"><?= icon_svg('chevron'); ?> Back to Dashboard</a>
-        <button class="secondary-action receipt-download-button" type="button" data-receipt-download>Download Receipt</button>
+        <div class="flex flex-wrap items-center gap-2">
+            <a class="secondary-action receipt-download-button" href="<?= e(base_url('user/receipt-download.php?reference=' . rawurlencode((string) $transaction['reference']))); ?>" download>Download Receipt</a>
+            <button class="secondary-action receipt-print-button" type="button" data-receipt-print>Print Receipt</button>
+        </div>
     </div>
 
     <section class="receipt-card user-premium-card rounded-2xl border border-gem-border bg-white p-5 shadow-card">
@@ -100,7 +78,7 @@ render_header('Transaction Receipt', 'user');
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Date / Time</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e(transaction_display_datetime($transaction, 'M j, Y g:i A')); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($receipt['display_time']); ?></dd>
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Service</dt>
@@ -108,17 +86,17 @@ render_header('Transaction Receipt', 'user');
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Plan / Package</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($planName !== '' ? $planName : 'N/A'); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) $receipt['plan_name']); ?></dd>
             </div>
-            <?php if ($validityLabel !== ''): ?>
+            <?php if ($receipt['validity_label'] !== ''): ?>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Validity</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($validityLabel); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) $receipt['validity_label']); ?></dd>
             </div>
             <?php endif; ?>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Recipient</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) ($transaction['recipient'] ?: ($transaction['customer_name'] ?? 'N/A'))); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) $receipt['recipient']); ?></dd>
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Amount</dt>
@@ -131,9 +109,4 @@ render_header('Transaction Receipt', 'user');
         </dl>
     </section>
 </div>
-<script nonce="<?= e(csp_nonce()); ?>">
-document.querySelector('[data-receipt-download]')?.addEventListener('click', function () {
-    window.print();
-});
-</script>
 <?php render_footer(); ?>

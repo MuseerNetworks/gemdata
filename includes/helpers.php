@@ -291,6 +291,44 @@ function transaction_display_datetime(array $transaction, string $format = 'M j,
     return local_datetime(transaction_display_timestamp($transaction), $format);
 }
 
+function transaction_receipt_context(array $transaction): array
+{
+    $payload = json_decode_array((string) ($transaction['payload_json'] ?? '{}'));
+    $networkCode = (string) ($payload['network'] ?? $payload['provider'] ?? '');
+    $planCode = (string) ($payload['local_plan_code'] ?? $payload['package'] ?? $payload['exam_type'] ?? $payload['plan'] ?? '');
+    $mapping = null;
+
+    if ((int) ($transaction['provider_account_id'] ?? 0) > 0 && $planCode !== '') {
+        $mapping = app(\GemData\Classes\ProviderPlanService::class)->resolveForProvider(
+            (int) $transaction['provider_account_id'],
+            (int) $transaction['service_id'],
+            $networkCode,
+            $planCode
+        );
+    }
+
+    $planName = trim((string) ($payload['local_plan_name'] ?? ''));
+    if ($planName === '' && is_array($mapping)) {
+        $planName = trim((string) ($mapping['local_plan_name'] ?? ''));
+    }
+    if ($planName === '') {
+        $planName = trim($planCode);
+    }
+
+    $validityLabel = trim((string) ($payload['validity_label'] ?? ''));
+    if ($validityLabel === '' && is_array($mapping)) {
+        $validityLabel = trim((string) ($mapping['validity_label'] ?? ''));
+    }
+
+    return [
+        'plan_name' => $planName !== '' ? $planName : 'N/A',
+        'validity_label' => $validityLabel,
+        'recipient' => (string) (($transaction['recipient'] ?? '') ?: ($transaction['customer_name'] ?? 'N/A')),
+        'status' => strtolower((string) ($transaction['status'] ?? 'pending')),
+        'display_time' => transaction_display_datetime($transaction, 'M j, Y g:i A'),
+    ];
+}
+
 function client_ip(): string
 {
     $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));

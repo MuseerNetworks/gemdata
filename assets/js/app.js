@@ -1584,6 +1584,18 @@ const setupAdminActionIcons = (scope = document) => {
     });
 };
 
+const setupReceiptActions = (scope = document) => {
+    scope.querySelectorAll('[data-receipt-print]').forEach((button) => {
+        if (button.dataset.receiptPrintBound === 'true') {
+            return;
+        }
+        button.dataset.receiptPrintBound = 'true';
+        button.addEventListener('click', () => {
+            window.print();
+        });
+    });
+};
+
 const initializeGemDataApp = () => {
     document.body.dataset.standalone = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) ? 'true' : 'false';
     setupTheme();
@@ -1605,6 +1617,7 @@ const initializeGemDataApp = () => {
     setupConnectivity();
     setupCopyButtons();
     setupAdminActionIcons();
+    setupReceiptActions();
     setupPurchaseModal();
     setupServiceWorker();
     replayOfflineQueue();
