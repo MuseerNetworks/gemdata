@@ -72,20 +72,19 @@ $statusColor = $status === 'successful' ? 'text-gem-green bg-green-50' : ($statu
 
 render_header('Transaction Receipt', 'user');
 ?>
-<div class="mx-auto max-w-3xl space-y-5">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+<div class="receipt-page mx-auto max-w-2xl space-y-3">
+    <div class="receipt-actions flex flex-wrap items-center justify-between gap-2">
         <a class="purchase-back-link" href="<?= e(base_url('user/dashboard.php#recent-transactions')); ?>"><?= icon_svg('chevron'); ?> Back to Dashboard</a>
-        <button class="secondary-action" type="button" onclick="window.print()">Print Receipt</button>
+        <button class="secondary-action receipt-download-button" type="button" onclick="window.print()">Download Receipt</button>
     </div>
 
-    <section class="receipt-card user-premium-card rounded-2xl border border-gem-border bg-white p-6 shadow-card">
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-gem-border pb-5">
+    <section class="receipt-card user-premium-card rounded-2xl border border-gem-border bg-white p-5 shadow-card">
+        <div class="receipt-card-head flex flex-wrap items-start justify-between gap-3 border-b border-gem-border pb-4">
             <div>
-                <p class="text-[12px] font-bold uppercase tracking-wider text-gem-blue">GemData Receipt</p>
-                <h1 class="mt-1 text-2xl font-extrabold text-gem-text">Museer Networks Limited</h1>
-                <p class="mt-1 text-sm text-gem-muted">VTU transaction receipt</p>
+                <p class="receipt-kicker text-[11px] font-bold uppercase tracking-wider text-gem-blue">GemData</p>
+                <h1 class="receipt-title mt-1 text-xl font-extrabold text-gem-text">Transaction Receipt</h1>
             </div>
-            <span class="inline-flex rounded-full px-3 py-1 text-[12px] font-bold <?= e($statusColor); ?>"><?= e(ucfirst($status)); ?></span>
+            <span class="receipt-status inline-flex rounded-full px-3 py-1 text-[12px] font-bold <?= e($statusColor); ?>"><?= e(ucfirst($status)); ?></span>
         </div>
 
         <?php if ($status !== 'successful'): ?>
@@ -94,38 +93,40 @@ render_header('Transaction Receipt', 'user');
             </div>
         <?php endif; ?>
 
-        <dl class="mt-6 grid gap-4 sm:grid-cols-2">
-            <div class="rounded-xl bg-gem-gray p-4">
+        <dl class="receipt-details mt-4 grid gap-3 sm:grid-cols-2">
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Reference</dt>
                 <dd class="mt-1 font-mono text-[14px] font-extrabold text-gem-text"><?= e((string) $transaction['reference']); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Date / Time</dt>
                 <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e(local_datetime((string) ($transaction['processed_at'] ?: $transaction['created_at']), 'M j, Y g:i A')); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Service</dt>
                 <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) $transaction['service_name']); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Provider</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) ($transaction['provider_code'] ?: 'GemData')); ?></dd>
-            </div>
-            <div class="rounded-xl bg-gem-gray p-4">
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Plan / Package</dt>
                 <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($planName !== '' ? $planName : 'N/A'); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
+            <?php if ($validityLabel !== ''): ?>
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Validity</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($validityLabel !== '' ? $validityLabel : 'N/A'); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e($validityLabel); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
-                <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Recipient / Customer</dt>
+            <?php endif; ?>
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Recipient</dt>
                 <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e((string) ($transaction['recipient'] ?: ($transaction['customer_name'] ?? 'N/A'))); ?></dd>
             </div>
-            <div class="rounded-xl bg-gem-gray p-4">
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Amount</dt>
                 <dd class="mt-1 font-mono text-[16px] font-extrabold text-gem-text"><?= e(money((float) $transaction['amount'])); ?></dd>
+            </div>
+            <div class="receipt-detail rounded-xl bg-gem-gray p-3">
+                <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Status</dt>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e(ucfirst($status)); ?></dd>
             </div>
         </dl>
     </section>

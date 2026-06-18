@@ -175,20 +175,122 @@ body[data-app-section="user"] {
 
 @media (max-width: 420px) {
     .dashboard-funding-account-grid {
-        gap: 0.45rem;
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 0.4rem;
     }
 
     .dashboard-funding-account-detail {
-        padding: 0.65rem;
+        display: block !important;
+        min-width: 0;
+        padding: 0.5rem 0.6rem !important;
+        border-radius: 0.7rem !important;
+    }
+
+    .dashboard-funding-account-detail > div:first-child {
+        font-size: 0.58rem !important;
+        line-height: 1.1;
+    }
+
+    .dashboard-funding-account-detail > div:last-child {
+        display: block !important;
+        margin-top: 0.2rem !important;
+        font-size: 0.72rem !important;
+        line-height: 1.18;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .dashboard-funding-copy-actions {
         display: grid;
         grid-template-columns: 1fr;
+        gap: 0.4rem;
     }
 
     .dashboard-funding-copy-actions .gd-copy-button {
         width: 100%;
+        min-height: 2rem;
+        padding: 0.42rem 0.55rem !important;
+        font-size: 0.68rem !important;
+        line-height: 1.15;
+    }
+}
+
+@media (max-width: 640px) {
+    .dashboard-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.45rem !important;
+    }
+
+    .dashboard-stat-grid .stat-card {
+        min-height: 0 !important;
+        padding: 0.55rem !important;
+        gap: 0.35rem !important;
+        border-radius: 0.8rem !important;
+    }
+
+    .dashboard-stat-grid .user-icon-box {
+        width: 1.75rem !important;
+        height: 1.75rem !important;
+        border-radius: 0.65rem !important;
+    }
+
+    .dashboard-stat-grid .user-icon-box svg {
+        width: 0.9rem !important;
+        height: 0.9rem !important;
+    }
+
+    .dashboard-stat-grid .user-metric-value {
+        font-size: 0.86rem !important;
+        line-height: 1.08 !important;
+    }
+
+    .dashboard-stat-grid .text-\[12px\] {
+        margin-top: 0.1rem !important;
+        font-size: 0.6rem !important;
+        line-height: 1.1 !important;
+    }
+
+    .dashboard-stat-grid .progress-bar,
+    .dashboard-stat-grid .flex.items-center.gap-1\.5 {
+        display: none !important;
+    }
+
+    .activate-banner {
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.55rem !important;
+        padding: 0.55rem 0.7rem !important;
+        border-radius: 0.9rem !important;
+    }
+
+    .activate-banner .flex-1 {
+        min-width: 0;
+    }
+
+    .activate-banner .w-10.h-10 {
+        width: 1.65rem !important;
+        height: 1.65rem !important;
+        border-radius: 0.65rem !important;
+    }
+
+    .activate-banner .text-\[14px\] {
+        font-size: 0.75rem !important;
+        line-height: 1.15 !important;
+    }
+
+    .activate-banner .text-\[13px\] {
+        font-size: 0.64rem !important;
+        line-height: 1.12 !important;
+    }
+
+    .activate-banner a {
+        flex-shrink: 0 !important;
+        min-height: 1.8rem;
+        padding: 0.38rem 0.55rem !important;
+        font-size: 0.64rem !important;
+        border-radius: 0.65rem !important;
+        white-space: nowrap;
     }
 }
 

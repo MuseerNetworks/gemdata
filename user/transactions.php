@@ -67,7 +67,7 @@ render_header('Transactions', 'user');
                             </span>
                         </div>
                         <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted"><?= e(ucfirst((string) $row['channel'])); ?></span></div>
-                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted" title="<?= e($row['created_at']); ?>"><?= e(human_datetime((string) $row['created_at'])); ?></span></div>
+                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted" title="<?= e($row['created_at']); ?>"><?= e(local_datetime((string) $row['created_at'], 'M j, Y g:i A')); ?></span></div>
                     </div>
                 <?php endforeach; ?>
             </div>

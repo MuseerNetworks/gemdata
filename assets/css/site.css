@@ -281,6 +281,135 @@ body[data-app-section] .mobile-bottom-link.is-featured svg {
     color: #ffffff !important;
 }
 
+.receipt-page {
+    width: min(100%, 42rem);
+}
+
+.receipt-card {
+    overflow: hidden;
+}
+
+.receipt-detail dd {
+    overflow-wrap: anywhere;
+}
+
+.receipt-download-button {
+    min-height: 2.35rem;
+}
+
+@media (max-width: 640px) {
+    .receipt-page {
+        max-width: 100%;
+        margin-inline: auto;
+        gap: 0.55rem !important;
+    }
+
+    .receipt-actions {
+        gap: 0.45rem !important;
+    }
+
+    .receipt-actions .purchase-back-link,
+    .receipt-actions .secondary-action {
+        min-height: 2rem;
+        padding: 0.45rem 0.65rem !important;
+        font-size: 0.72rem !important;
+        border-radius: 0.75rem !important;
+    }
+
+    .receipt-card {
+        padding: 0.85rem !important;
+        border-radius: 0.95rem !important;
+    }
+
+    .receipt-card-head {
+        gap: 0.5rem !important;
+        padding-bottom: 0.65rem !important;
+    }
+
+    .receipt-kicker {
+        font-size: 0.62rem !important;
+    }
+
+    .receipt-title {
+        font-size: 1rem !important;
+        line-height: 1.15 !important;
+    }
+
+    .receipt-status {
+        padding: 0.28rem 0.55rem !important;
+        font-size: 0.66rem !important;
+    }
+
+    .receipt-details {
+        grid-template-columns: 1fr !important;
+        gap: 0.45rem !important;
+        margin-top: 0.7rem !important;
+    }
+
+    .receipt-detail {
+        padding: 0.55rem 0.65rem !important;
+        border-radius: 0.75rem !important;
+    }
+
+    .receipt-detail dt {
+        font-size: 0.58rem !important;
+        line-height: 1.1 !important;
+    }
+
+    .receipt-detail dd {
+        margin-top: 0.18rem !important;
+        font-size: 0.75rem !important;
+        line-height: 1.18 !important;
+    }
+
+    .receipt-detail dd.font-mono {
+        font-size: 0.78rem !important;
+    }
+}
+
+@media print {
+    body[data-app-section],
+    body[data-app-section] .app-shell-main,
+    body[data-app-section] .app-content {
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    .app-sidebar,
+    #sidebar,
+    .topbar,
+    header,
+    nav,
+    .mobile-bottom-nav,
+    .user-bottom-nav,
+    .sidebar-backdrop,
+    .receipt-actions,
+    .skip-link {
+        display: none !important;
+    }
+
+    .app-content,
+    .receipt-page {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .receipt-card {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
+        break-inside: avoid;
+    }
+
+    .receipt-detail {
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+}
+
 body[data-app-section] .wallet-card,
 body[data-app-section] .wallet-card-v2 {
     background:
@@ -5679,5 +5808,47 @@ body[data-app-section] .surface-card {
         transform: translateY(-2px);
         border-color: color-mix(in srgb, var(--gd-primary-strong) 24%, var(--gd-border)) !important;
         box-shadow: var(--shadow-card);
+    }
+}
+
+@media (max-width: 640px) {
+    body[data-app-section="user"] .dashboard-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 0.32rem !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .stat-card {
+        min-height: 0 !important;
+        padding: 0.38rem 0.42rem !important;
+        gap: 0.2rem !important;
+        border-radius: 0.65rem !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .user-icon-box {
+        width: 1.35rem !important;
+        height: 1.35rem !important;
+        border-radius: 0.48rem !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .user-icon-box svg {
+        width: 0.68rem !important;
+        height: 0.68rem !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .user-metric-value {
+        font-size: 0.72rem !important;
+        line-height: 1.02 !important;
+        letter-spacing: 0 !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .text-\[12px\] {
+        margin-top: 0.05rem !important;
+        font-size: 0.52rem !important;
+        line-height: 1.02 !important;
+    }
+
+    body[data-app-section="user"] .dashboard-stat-grid .progress-bar,
+    body[data-app-section="user"] .dashboard-stat-grid .flex.items-center.gap-1\.5 {
+        display: none !important;
     }
 }
