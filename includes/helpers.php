@@ -276,6 +276,21 @@ function local_datetime(?string $value, string $format = 'M j, Y g:i A'): string
     }
 }
 
+function transaction_display_timestamp(array $transaction): string
+{
+    $processedAt = trim((string) ($transaction['processed_at'] ?? ''));
+    if ($processedAt !== '' && $processedAt !== '0000-00-00 00:00:00') {
+        return $processedAt;
+    }
+
+    return trim((string) ($transaction['created_at'] ?? ''));
+}
+
+function transaction_display_datetime(array $transaction, string $format = 'M j, Y g:i A'): string
+{
+    return local_datetime(transaction_display_timestamp($transaction), $format);
+}
+
 function client_ip(): string
 {
     $remoteAddr = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));

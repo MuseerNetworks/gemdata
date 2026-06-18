@@ -75,7 +75,7 @@ render_header('Transaction Receipt', 'user');
 <div class="receipt-page mx-auto max-w-2xl space-y-3">
     <div class="receipt-actions flex flex-wrap items-center justify-between gap-2">
         <a class="purchase-back-link" href="<?= e(base_url('user/dashboard.php#recent-transactions')); ?>"><?= icon_svg('chevron'); ?> Back to Dashboard</a>
-        <button class="secondary-action receipt-download-button" type="button" onclick="window.print()">Download Receipt</button>
+        <button class="secondary-action receipt-download-button" type="button" data-receipt-download>Download Receipt</button>
     </div>
 
     <section class="receipt-card user-premium-card rounded-2xl border border-gem-border bg-white p-5 shadow-card">
@@ -100,7 +100,7 @@ render_header('Transaction Receipt', 'user');
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Date / Time</dt>
-                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e(local_datetime((string) ($transaction['processed_at'] ?: $transaction['created_at']), 'M j, Y g:i A')); ?></dd>
+                <dd class="mt-1 text-[14px] font-bold text-gem-text"><?= e(transaction_display_datetime($transaction, 'M j, Y g:i A')); ?></dd>
             </div>
             <div class="receipt-detail rounded-xl bg-gem-gray p-3">
                 <dt class="text-[11px] font-bold uppercase tracking-wider text-gem-muted">Service</dt>
@@ -131,4 +131,9 @@ render_header('Transaction Receipt', 'user');
         </dl>
     </section>
 </div>
+<script nonce="<?= e(csp_nonce()); ?>">
+document.querySelector('[data-receipt-download]')?.addEventListener('click', function () {
+    window.print();
+});
+</script>
 <?php render_footer(); ?>

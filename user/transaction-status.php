@@ -59,8 +59,9 @@ $safeTransaction = static function (array $row): array {
         'amount' => (float) ($row['amount'] ?? 0),
         'amount_formatted' => money((float) ($row['amount'] ?? 0)),
         'created_at' => (string) ($row['created_at'] ?? ''),
-        'created_at_display' => local_datetime((string) ($row['created_at'] ?? ''), 'M j, Y g:i A'),
-        'created_at_full' => local_datetime((string) ($row['created_at'] ?? ''), 'M j, Y g:i A'),
+        'display_at' => transaction_display_timestamp($row),
+        'created_at_display' => transaction_display_datetime($row, 'M j, Y g:i A'),
+        'created_at_full' => transaction_display_datetime($row, 'M j, Y g:i A'),
         'receipt_url' => $status === 'successful' ? base_url('user/receipt.php?reference=' . rawurlencode((string) ($row['reference'] ?? ''))) : null,
     ];
 };

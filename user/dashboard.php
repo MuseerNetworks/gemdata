@@ -527,7 +527,7 @@ render_header('Dashboard', 'user');
                         </div>
                         <div class="sm:flex sm:items-center"><span class="text-[13px] font-bold text-gem-text font-mono"><?= e(money($row['amount'])); ?></span></div>
                         <div class="sm:flex sm:items-center"><span class="inline-flex items-center gap-1 bg-<?= e($statusColor); ?>-50 text-<?= e($statusColor === 'amber' ? 'amber-600' : 'gem-' . ($statusColor === 'green' ? 'green' : 'red')); ?> text-[11px] font-semibold px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-<?= e($statusColor === 'amber' ? 'amber-500' : 'gem-' . ($statusColor === 'green' ? 'green' : 'red')); ?>"></span><?= e(ucfirst((string) $row['status'])); ?></span></div>
-                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted"><?= e(local_datetime((string) $row['created_at'], 'M j, Y g:i A')); ?></span></div>
+                        <div class="sm:flex sm:items-center"><span class="text-[12px] text-gem-muted"><?= e(transaction_display_datetime($row, 'M j, Y g:i A')); ?></span></div>
                     </div>
                 <?php endforeach; ?>
             </div>
