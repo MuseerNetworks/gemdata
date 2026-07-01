@@ -542,12 +542,14 @@ class TransactionService
                 ]
             );
             if ($status === 'successful') {
-                $this->financeLedger?->recordTransactionCost(array_merge($locked, [
+                $successfulTransaction = array_merge($locked, [
                     'id' => $transactionId,
                     'status' => 'successful',
                     'provider_account_id' => $providerAccount['id'] ?? ($locked['provider_account_id'] ?? null),
                     'provider_code' => $providerAccount['code'] ?? ($locked['provider_code'] ?? null),
-                ]));
+                ]);
+                $this->financeLedger?->recordTransactionCost($successfulTransaction);
+                $this->financeLedger?->recordTransactionOwnerBalances($successfulTransaction);
             }
 
             $providerMessage = (string) ($providerResponse['raw']['message'] ?? '');
@@ -1156,6 +1158,13 @@ class TransactionService
             $this->event((int) $locked['id'], 'transaction_successful', 'system', null, 'Transaction marked successful during provider reconciliation.', [
                 'provider_reference' => $providerResponse['provider_reference'] ?? null,
             ]);
+            $successfulTransaction = array_merge($locked, [
+                'status' => 'successful',
+                'provider_account_id' => $providerAccount['id'] ?? ($locked['provider_account_id'] ?? null),
+                'provider_code' => $providerAccount['code'] ?? ($locked['provider_code'] ?? null),
+            ]);
+            $this->financeLedger?->recordTransactionCost($successfulTransaction);
+            $this->financeLedger?->recordTransactionOwnerBalances($successfulTransaction);
             $this->db->commit();
 
             $this->notifications->create(

@@ -35,7 +35,19 @@ if (is_post()) {
         $action = (string) ($_POST['action'] ?? '');
         require_finance_admin_password($admin);
 
-        if ($action === 'backfill') {
+        if ($action === 'initialize_opening_balances') {
+            $finance->initializeOpeningBalances(
+                (float) ($_POST['opening_capital'] ?? 0),
+                (float) ($_POST['opening_profit'] ?? 0),
+                (int) $admin['id'],
+                'One-time opening capital/profit reconciliation.'
+            );
+            $activityLogger->log('admin', (int) $admin['id'], 'finance_opening_balances_initialized', 'Admin initialized owner opening capital and profit.', [
+                'opening_capital' => (float) ($_POST['opening_capital'] ?? 0),
+                'opening_profit' => (float) ($_POST['opening_profit'] ?? 0),
+            ]);
+            flash('success', 'Opening capital and opening profit initialized.');
+        } elseif ($action === 'backfill') {
             $result = $finance->backfillExisting();
             $activityLogger->log('admin', (int) $admin['id'], 'finance_ledger_backfilled', 'Admin ran finance ledger backfill.', $result);
             flash('success', sprintf('Backfill complete. Business cash rows: %d. Provider wallet rows: %d.', (int) $result['business_cash_rows_added'], (int) $result['provider_wallet_rows_added']));
@@ -191,7 +203,9 @@ foreach ($providerBalances as $providerBalanceRow) {
 }
 $businessRows = $finance->recentBusinessLedger(20);
 $providerRows = $finance->recentProviderLedger(20);
+$ownerBalanceRows = $finance->recentOwnerBalanceLedger(20);
 $ownerRows = $ownerWithdrawals->recent(20);
+$openingReconciliation = $finance->openingReconciliation();
 $katPayPayoutConfigured = $katPayPayouts->isConfigured();
 $katPayBanks = $katPayPayoutConfigured ? $katPayPayouts->banks() : [];
 
@@ -223,6 +237,44 @@ render_header('Finance Ledger', 'admin');
             </div>
         <?php endif; ?>
     </section>
+
+    <?php if ($ledgerReady && !$finance->openingReconciliationDone()): ?>
+        <section class="rounded-2xl border border-gem-blue/20 bg-white p-5 shadow-card">
+            <div>
+                <p class="text-[11px] font-bold uppercase tracking-widest text-gem-blue">One-time setup</p>
+                <h2 class="mt-1 text-lg font-extrabold text-gem-text">Opening Capital and Opening Profit</h2>
+                <p class="mt-1 text-[13px] text-gem-muted">Enter only verified opening owner capital and opening owner profit. These values are audited and can be initialized only once.</p>
+            </div>
+            <form class="mt-4 grid gap-3 md:grid-cols-4" method="post">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                <input type="hidden" name="action" value="initialize_opening_balances">
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="opening_capital" type="number" min="0" step="0.01" placeholder="Opening Capital" required>
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="opening_profit" type="number" min="0" step="0.01" placeholder="Opening Profit" required>
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="admin_password" type="password" placeholder="Admin password" required>
+                <button class="rounded-xl bg-gem-blue px-4 py-2.5 font-bold text-white" type="submit">Initialize Once</button>
+            </form>
+        </section>
+    <?php elseif ($ledgerReady && $openingReconciliation): ?>
+        <section class="rounded-2xl border border-gem-border bg-white p-5 shadow-card">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-gem-muted">Opening reconciliation locked</p>
+                    <h2 class="mt-1 text-lg font-extrabold text-gem-text"><?= e($openingReconciliation['reference']); ?></h2>
+                    <p class="mt-1 text-[13px] text-gem-muted">Initialized by <?= e((string) ($openingReconciliation['admin_name'] ?? 'admin')); ?> on <?= e((string) $openingReconciliation['created_at']); ?>.</p>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3">
+                        <p class="text-[11px] font-bold uppercase tracking-wide text-gem-muted">Opening Capital</p>
+                        <p class="font-mono text-lg font-black text-gem-text"><?= e(money((float) $openingReconciliation['opening_capital'])); ?></p>
+                    </div>
+                    <div class="rounded-xl border border-gem-border bg-gem-gray px-4 py-3">
+                        <p class="text-[11px] font-bold uppercase tracking-wide text-gem-muted">Opening Profit</p>
+                        <p class="font-mono text-lg font-black text-gem-text"><?= e(money((float) $openingReconciliation['opening_profit'])); ?></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <?php
@@ -282,13 +334,40 @@ render_header('Finance Ledger', 'admin');
                 'aria' => 'Open provider wallet ledger',
             ],
             [
-                'label' => 'Profit Balance',
-                'amount' => $summary['confirmed_profit'] ?? 0,
-                'note' => 'Confirmed profit before owner profit transfers',
+                'label' => 'Available Capital',
+                'amount' => $summary['available_capital'] ?? 0,
+                'note' => 'Owner capital balance before safe-cash limit',
+                'href' => base_url('admin/finance.php') . '#owner-transfers',
+                'icon' => 'revenue',
+                'tone' => 'capital',
+                'aria' => 'Open owner capital transfers section',
+            ],
+            [
+                'label' => 'Capital Withdrawable',
+                'amount' => $summary['capital_return_withdrawable'] ?? 0,
+                'note' => 'Capital limited by Safe Available Cash',
+                'href' => base_url('admin/finance.php') . '#owner-transfers',
+                'icon' => 'shield',
+                'tone' => 'capital',
+                'aria' => 'Open capital withdrawable details',
+            ],
+            [
+                'label' => 'Available Profit',
+                'amount' => $summary['available_profit'] ?? 0,
+                'note' => 'Owner profit balance before safe-cash limit',
                 'href' => base_url('admin/finance.php') . '#owner-transfers',
                 'icon' => 'profit',
                 'tone' => 'profit',
-                'aria' => 'Open owner transfers section',
+                'aria' => 'Open owner profit transfers section',
+            ],
+            [
+                'label' => 'Profit Withdrawable',
+                'amount' => $summary['profit_withdrawable'] ?? 0,
+                'note' => 'Profit limited by Safe Available Cash',
+                'href' => base_url('admin/finance.php') . '#owner-transfers',
+                'icon' => 'profit',
+                'tone' => 'profit',
+                'aria' => 'Open profit withdrawable details',
             ],
         ];
         $metricToneClasses = [
@@ -298,6 +377,7 @@ render_header('Finance Ledger', 'admin');
             'providers' => 'from-purple-600 to-violet-400 shadow-purple-500/20',
             'transactions' => 'from-indigo-600 to-violet-400 shadow-indigo-500/20',
             'revenue' => 'from-emerald-600 to-teal-400 shadow-emerald-500/20',
+            'capital' => 'from-sky-600 to-cyan-400 shadow-sky-500/20',
             'profit' => 'from-lime-600 to-lime-400 shadow-lime-500/20',
         ];
         ?>
@@ -421,7 +501,7 @@ render_header('Finance Ledger', 'admin');
         </div>
     </section>
 
-    <div class="grid gap-4 xl:grid-cols-3">
+    <div class="grid gap-4 xl:grid-cols-4">
         <section id="owner-transfers" class="scroll-mt-24 rounded-2xl border border-gem-border bg-white p-5 shadow-card">
             <h2 class="text-lg font-extrabold text-gem-text">Owner Transfers</h2>
             <div class="mt-4 space-y-3">
@@ -443,6 +523,33 @@ render_header('Finance Ledger', 'admin');
                     </div>
                 <?php endforeach; ?>
                 <?php if ($ownerRows === []): ?><p class="text-[13px] text-gem-muted">No owner transfers yet.</p><?php endif; ?>
+            </div>
+        </section>
+
+        <section id="owner-balance-ledger" class="scroll-mt-24 rounded-2xl border border-gem-border bg-white p-5 shadow-card">
+            <h2 class="text-lg font-extrabold text-gem-text">Owner balance ledger</h2>
+            <p class="mt-1 text-[13px] text-gem-muted">Capital and profit accounting entries. Withdrawals remain limited by Safe Available Cash.</p>
+            <div class="mt-4 space-y-2">
+                <?php foreach ($ownerBalanceRows as $row): ?>
+                    <?php
+                    $sourceLabel = '';
+                    if (!empty($row['transaction_reference'])) {
+                        $sourceLabel = 'Txn ' . $row['transaction_reference'];
+                    } elseif (!empty($row['owner_withdrawal_reference'])) {
+                        $sourceLabel = 'Owner transfer ' . $row['owner_withdrawal_reference'];
+                    } elseif (!empty($row['admin_name'])) {
+                        $sourceLabel = 'Admin ' . $row['admin_name'];
+                    }
+                    ?>
+                    <div class="rounded-xl border border-gem-border p-3 text-[13px]">
+                        <div class="flex justify-between gap-3">
+                            <span class="font-bold"><?= e($row['balance_type'] . ' ' . $row['entry_type']); ?></span>
+                            <span class="font-mono <?= $row['direction'] === 'in' ? 'text-gem-green' : 'text-gem-orange'; ?>"><?= e(($row['direction'] === 'in' ? '+' : '-') . money((float) $row['amount'])); ?></span>
+                        </div>
+                        <p class="mt-1 text-[12px] text-gem-muted"><?= e($sourceLabel !== '' ? $sourceLabel : ($row['notes'] ?? '')); ?></p>
+                    </div>
+                <?php endforeach; ?>
+                <?php if ($ownerBalanceRows === []): ?><p class="text-[13px] text-gem-muted">No owner balance ledger rows yet.</p><?php endif; ?>
             </div>
         </section>
 

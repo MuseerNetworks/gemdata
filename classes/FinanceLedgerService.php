@@ -16,6 +16,8 @@ class FinanceLedgerService
     {
         return $this->db->tableExists('business_cash_ledger')
             && $this->db->tableExists('provider_wallet_ledger')
+            && $this->db->tableExists('owner_balance_ledger')
+            && $this->db->tableExists('finance_opening_reconciliation')
             && $this->db->tableExists('owner_withdrawals')
             && $this->db->columnExists('owner_withdrawals', 'withdrawal_type')
             && $this->db->columnExists('owner_withdrawals', 'bank_code')
@@ -40,17 +42,12 @@ class FinanceLedgerService
              WHERE t.status = "successful"'
         );
         $confirmedProfit = $grossRevenue - $providerCosts;
-        $profitWithdrawn = $this->sum('SELECT COALESCE(SUM(amount),0) AS total FROM owner_withdrawals WHERE status = "paid" AND withdrawal_type = "profit"');
-        $capitalReturned = $this->sum('SELECT COALESCE(SUM(amount),0) AS total FROM owner_withdrawals WHERE status = "paid" AND withdrawal_type = "capital_return"');
-        $ownerCapitalIn = $this->sum(
-            'SELECT COALESCE(SUM(amount),0) AS total
-             FROM business_cash_ledger
-             WHERE direction = "in"
-               AND entry_type IN ("owner_capital_injected","provider_wallet_recovered")'
-        );
-        $availableOwnerCapital = max(0.0, round($ownerCapitalIn - $capitalReturned, 2));
+        $availableOwnerCapital = $this->ownerBalance('capital');
+        $availableOwnerProfit = $this->ownerBalance('profit');
+        $profitWithdrawn = $this->sumOwnerBalance('profit', 'out', 'owner_withdrawal');
+        $capitalReturned = $this->sumOwnerBalance('capital', 'out', 'owner_withdrawal');
         $safeAvailableCash = max(0.0, round($businessCash - $userLiability - $pendingExposure, 2));
-        $profitWithdrawable = max(0.0, min(round($confirmedProfit - $profitWithdrawn, 2), $safeAvailableCash));
+        $profitWithdrawable = max(0.0, min($availableOwnerProfit, $safeAvailableCash));
         $capitalReturnWithdrawable = max(0.0, min($availableOwnerCapital, $safeAvailableCash));
 
         return [
@@ -63,13 +60,17 @@ class FinanceLedgerService
             'provider_costs' => round($providerCosts, 2),
             'confirmed_profit' => round($confirmedProfit, 2),
             'profit_withdrawn' => round($profitWithdrawn, 2),
+            'available_owner_profit' => $availableOwnerProfit,
+            'available_profit' => $availableOwnerProfit,
             'profit_withdrawable' => $profitWithdrawable,
             'available_owner_capital' => $availableOwnerCapital,
+            'available_capital' => $availableOwnerCapital,
             'capital_returned' => round($capitalReturned, 2),
             'capital_return_withdrawable' => $capitalReturnWithdrawable,
             'owner_withdrawn' => round($profitWithdrawn + $capitalReturned, 2),
             'owner_withdrawable_profit' => $profitWithdrawable,
-            'total_owner_withdrawable' => round($profitWithdrawable + $capitalReturnWithdrawable, 2),
+            'total_owner_withdrawable' => min(round($profitWithdrawable + $capitalReturnWithdrawable, 2), $safeAvailableCash),
+            'opening_reconciliation_done' => $this->openingReconciliationDone(),
         ];
     }
 
@@ -131,6 +132,92 @@ class FinanceLedgerService
              ORDER BY pwl.id DESC
              LIMIT ' . max(1, $limit)
         );
+    }
+
+    public function recentOwnerBalanceLedger(int $limit = 20): array
+    {
+        if (!$this->db->tableExists('owner_balance_ledger')) {
+            return [];
+        }
+
+        return $this->db->query(
+            'SELECT obl.*, t.reference AS transaction_reference, ow.reference AS owner_withdrawal_reference, a.full_name AS admin_name
+             FROM owner_balance_ledger obl
+             LEFT JOIN transactions t ON t.id = obl.transaction_id
+             LEFT JOIN owner_withdrawals ow ON ow.id = obl.owner_withdrawal_id
+             LEFT JOIN admins a ON a.id = obl.created_by_admin_id
+             ORDER BY obl.id DESC
+             LIMIT ' . max(1, $limit)
+        );
+    }
+
+    public function openingReconciliationDone(): bool
+    {
+        if (!$this->db->tableExists('finance_opening_reconciliation')) {
+            return false;
+        }
+
+        return (int) ($this->db->first('SELECT COUNT(*) AS total FROM finance_opening_reconciliation')['total'] ?? 0) > 0;
+    }
+
+    public function openingReconciliation(): ?array
+    {
+        if (!$this->db->tableExists('finance_opening_reconciliation')) {
+            return null;
+        }
+
+        return $this->db->first(
+            'SELECT forr.*, a.full_name AS admin_name
+             FROM finance_opening_reconciliation forr
+             INNER JOIN admins a ON a.id = forr.created_by_admin_id
+             ORDER BY forr.id ASC
+             LIMIT 1'
+        );
+    }
+
+    public function initializeOpeningBalances(float $openingCapital, float $openingProfit, int $adminId, string $notes): void
+    {
+        $this->assertTablesReady();
+        $openingCapital = $this->validNonNegativeAmount($openingCapital);
+        $openingProfit = $this->validNonNegativeAmount($openingProfit);
+        $notes = $this->requireNotes($notes);
+        if ($openingCapital <= 0 && $openingProfit <= 0) {
+            throw new RuntimeException('Opening capital or opening profit must be greater than zero.');
+        }
+        if ($this->openingReconciliationDone()) {
+            throw new RuntimeException('Opening capital and profit have already been initialized.');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $reference = strtoupper('FOR' . bin2hex(random_bytes(6)));
+            $this->db->execute(
+                'INSERT INTO finance_opening_reconciliation
+                    (reference, opening_capital, opening_profit, notes, created_by_admin_id)
+                 VALUES
+                    (:reference, :opening_capital, :opening_profit, :notes, :admin_id)',
+                [
+                    'reference' => $reference,
+                    'opening_capital' => $openingCapital,
+                    'opening_profit' => $openingProfit,
+                    'notes' => $notes,
+                    'admin_id' => $adminId,
+                ]
+            );
+            $openingId = $this->db->lastInsertId();
+            if ($openingCapital > 0) {
+                $businessId = $this->insertBusinessCash('opening_capital', 'in', $openingCapital, $adminId, 'Opening capital: ' . $notes, null, 'finance-opening:capital', 'finance_opening_reconciliation', $openingId);
+                $this->insertOwnerBalance('capital', 'opening', 'in', $openingCapital, null, null, $businessId, $openingId, $adminId, 'Opening capital: ' . $notes, 'owner-opening:capital');
+            }
+            if ($openingProfit > 0) {
+                $businessId = $this->insertBusinessCash('opening_profit', 'in', $openingProfit, $adminId, 'Opening profit: ' . $notes, null, 'finance-opening:profit', 'finance_opening_reconciliation', $openingId);
+                $this->insertOwnerBalance('profit', 'opening', 'in', $openingProfit, null, null, $businessId, $openingId, $adminId, 'Opening profit: ' . $notes, 'owner-opening:profit');
+            }
+            $this->db->commit();
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
     }
 
     public function recordUserFunding(array $fundingRequest, ?int $adminId = null): void
@@ -202,6 +289,31 @@ class FinanceLedgerService
         $provider = $this->db->first('SELECT current_balance FROM provider_accounts WHERE id = :id LIMIT 1', ['id' => $providerId]);
         if ($provider && $provider['current_balance'] !== null) {
             $this->writeProviderBalance($providerId, round((float) $provider['current_balance'] - $cost, 2), 'transaction_cost', 'Provider cost for transaction ' . $transactionId);
+        }
+    }
+
+    public function recordTransactionOwnerBalances(array $transaction): void
+    {
+        if (!$this->db->tableExists('owner_balance_ledger')) {
+            return;
+        }
+
+        $transactionId = (int) ($transaction['id'] ?? 0);
+        if ($transactionId <= 0 || (string) ($transaction['status'] ?? '') !== 'successful') {
+            return;
+        }
+
+        $capitalAmount = round((float) ($transaction['cost_price'] ?? 0), 2);
+        $profitAmount = round((float) ($transaction['profit_amount'] ?? 0), 2);
+        if ($capitalAmount <= 0 && $profitAmount <= 0) {
+            return;
+        }
+
+        if ($capitalAmount > 0) {
+            $this->insertOwnerBalance('capital', 'transaction_success', 'in', $capitalAmount, $transactionId, null, null, null, null, 'Provider-cost portion released from successful transaction.', 'owner-txn:capital:' . $transactionId);
+        }
+        if ($profitAmount > 0) {
+            $this->insertOwnerBalance('profit', 'transaction_success', 'in', $profitAmount, $transactionId, null, null, null, null, 'Profit portion released from successful transaction.', 'owner-txn:profit:' . $transactionId);
         }
     }
 
@@ -306,6 +418,8 @@ class FinanceLedgerService
             return;
         }
         $this->insertBusinessCash('owner_capital_injected', 'in', $amount, $adminId, $notes, null, $idempotencyKey);
+        $businessId = $this->ledgerIdByIdempotencyKey('business_cash_ledger', $idempotencyKey);
+        $this->insertOwnerBalance('capital', 'capital_injection', 'in', $amount, null, null, $businessId, null, $adminId, $notes, $idempotencyKey ? 'owner-' . $idempotencyKey : null);
     }
 
     public function recordOwnerWithdrawalPaid(array $withdrawal, ?int $adminId): void
@@ -334,6 +448,12 @@ class FinanceLedgerService
                 'admin_id' => $adminId,
             ]
         );
+        $businessId = (int) ($this->db->first(
+            'SELECT id FROM business_cash_ledger WHERE owner_withdrawal_id = :owner_withdrawal_id AND entry_type = "owner_withdrawal" LIMIT 1',
+            ['owner_withdrawal_id' => $withdrawalId]
+        )['id'] ?? 0);
+        $balanceType = (string) ($withdrawal['withdrawal_type'] ?? 'profit') === 'capital_return' ? 'capital' : 'profit';
+        $this->insertOwnerBalance($balanceType, 'owner_withdrawal', 'out', $amount, null, $withdrawalId, $businessId > 0 ? $businessId : null, null, $adminId, (string) ($withdrawal['notes'] ?? 'Owner transfer paid.'), 'owner-withdrawal:' . $balanceType . ':' . $withdrawalId);
     }
 
     public function backfillExisting(): array
@@ -430,37 +550,167 @@ class FinanceLedgerService
         return $provider;
     }
 
-    private function insertBusinessCash(string $entryType, string $direction, float $amount, int $adminId, string $notes, ?int $providerId = null, ?string $idempotencyKey = null): int
+    private function ownerBalance(string $balanceType): float
+    {
+        if (!$this->db->tableExists('owner_balance_ledger')) {
+            return 0.0;
+        }
+
+        $balanceType = $this->normalizeBalanceType($balanceType);
+        return round($this->sum(
+            'SELECT COALESCE(SUM(CASE WHEN direction = "in" THEN amount ELSE -amount END),0) AS total
+             FROM owner_balance_ledger
+             WHERE balance_type = :balance_type',
+            ['balance_type' => $balanceType]
+        ), 2);
+    }
+
+    private function sumOwnerBalance(string $balanceType, string $direction, ?string $entryType = null): float
+    {
+        if (!$this->db->tableExists('owner_balance_ledger')) {
+            return 0.0;
+        }
+
+        $balanceType = $this->normalizeBalanceType($balanceType);
+        if (!in_array($direction, ['in', 'out'], true)) {
+            throw new RuntimeException('Invalid owner balance direction.');
+        }
+
+        $sql = 'SELECT COALESCE(SUM(amount),0) AS total
+                FROM owner_balance_ledger
+                WHERE balance_type = :balance_type
+                  AND direction = :direction';
+        $params = [
+            'balance_type' => $balanceType,
+            'direction' => $direction,
+        ];
+        if ($entryType !== null) {
+            $sql .= ' AND entry_type = :entry_type';
+            $params['entry_type'] = $entryType;
+        }
+
+        return round($this->sum($sql, $params), 2);
+    }
+
+    private function insertBusinessCash(
+        string $entryType,
+        string $direction,
+        float $amount,
+        int $adminId,
+        string $notes,
+        ?int $providerId = null,
+        ?string $idempotencyKey = null,
+        ?string $sourceTable = null,
+        ?int $sourceId = null,
+        ?int $ownerWithdrawalId = null
+    ): int
     {
         $reference = strtoupper('BCL' . bin2hex(random_bytes(6)));
         $hasIdempotency = $idempotencyKey !== null && $this->db->columnExists('business_cash_ledger', 'idempotency_key');
-        $columns = $hasIdempotency
-            ? '(reference, entry_type, direction, amount, provider_account_id, notes, created_by_admin_id, idempotency_key)'
-            : '(reference, entry_type, direction, amount, provider_account_id, notes, created_by_admin_id)';
-        $values = $hasIdempotency
-            ? '(:reference, :entry_type, :direction, :amount, :provider_account_id, :notes, :admin_id, :idempotency_key)'
-            : '(:reference, :entry_type, :direction, :amount, :provider_account_id, :notes, :admin_id)';
+        $columns = 'reference, entry_type, direction, amount, source_table, source_id, provider_account_id, owner_withdrawal_id, notes, created_by_admin_id';
+        $values = ':reference, :entry_type, :direction, :amount, :source_table, :source_id, :provider_account_id, :owner_withdrawal_id, :notes, :admin_id';
         $params = [
             'reference' => $reference,
             'entry_type' => $entryType,
             'direction' => $direction,
             'amount' => $amount,
+            'source_table' => $sourceTable,
+            'source_id' => $sourceId,
             'provider_account_id' => $providerId,
+            'owner_withdrawal_id' => $ownerWithdrawalId,
             'notes' => $notes,
             'admin_id' => $adminId,
         ];
         if ($hasIdempotency) {
+            $columns .= ', idempotency_key';
+            $values .= ', :idempotency_key';
             $params['idempotency_key'] = $idempotencyKey;
         }
 
         $this->db->safeExecute(
-            ($hasIdempotency ? 'INSERT IGNORE' : 'INSERT') . ' INTO business_cash_ledger ' . $columns . ' VALUES ' . $values,
+            ($hasIdempotency ? 'INSERT IGNORE' : 'INSERT') . ' INTO business_cash_ledger (' . $columns . ') VALUES (' . $values . ')',
             $params
         );
 
         $insertId = $this->db->lastInsertId();
         if ($insertId <= 0 && $hasIdempotency) {
             return $this->ledgerIdByIdempotencyKey('business_cash_ledger', $idempotencyKey) ?? 0;
+        }
+
+        return $insertId;
+    }
+
+    private function insertOwnerBalance(
+        string $balanceType,
+        string $entryType,
+        string $direction,
+        float $amount,
+        ?int $transactionId,
+        ?int $ownerWithdrawalId,
+        ?int $businessCashLedgerId,
+        ?int $openingReconciliationId,
+        ?int $adminId,
+        string $notes,
+        ?string $idempotencyKey = null
+    ): int {
+        if (!$this->db->tableExists('owner_balance_ledger')) {
+            return 0;
+        }
+
+        $balanceType = $this->normalizeBalanceType($balanceType);
+        if (!in_array($direction, ['in', 'out'], true)) {
+            throw new RuntimeException('Invalid owner balance direction.');
+        }
+
+        $amount = $this->validAmount($amount);
+        $reference = strtoupper('OBL' . bin2hex(random_bytes(6)));
+        $this->db->safeExecute(
+            'INSERT IGNORE INTO owner_balance_ledger
+                (reference, balance_type, entry_type, direction, amount, transaction_id, owner_withdrawal_id,
+                 business_cash_ledger_id, opening_reconciliation_id, idempotency_key, notes, created_by_admin_id)
+             VALUES
+                (:reference, :balance_type, :entry_type, :direction, :amount, :transaction_id, :owner_withdrawal_id,
+                 :business_cash_ledger_id, :opening_reconciliation_id, :idempotency_key, :notes, :admin_id)',
+            [
+                'reference' => $reference,
+                'balance_type' => $balanceType,
+                'entry_type' => $entryType,
+                'direction' => $direction,
+                'amount' => $amount,
+                'transaction_id' => $transactionId,
+                'owner_withdrawal_id' => $ownerWithdrawalId,
+                'business_cash_ledger_id' => $businessCashLedgerId,
+                'opening_reconciliation_id' => $openingReconciliationId,
+                'idempotency_key' => $idempotencyKey,
+                'notes' => substr($notes, 0, 255),
+                'admin_id' => $adminId,
+            ]
+        );
+
+        $insertId = $this->db->lastInsertId();
+        if ($insertId <= 0) {
+            if ($idempotencyKey !== null) {
+                return $this->ledgerIdByIdempotencyKey('owner_balance_ledger', $idempotencyKey) ?? 0;
+            }
+
+            $row = null;
+            if ($transactionId !== null) {
+                $row = $this->db->first(
+                    'SELECT id FROM owner_balance_ledger
+                     WHERE transaction_id = :transaction_id AND balance_type = :balance_type AND entry_type = :entry_type
+                     LIMIT 1',
+                    ['transaction_id' => $transactionId, 'balance_type' => $balanceType, 'entry_type' => $entryType]
+                );
+            } elseif ($ownerWithdrawalId !== null) {
+                $row = $this->db->first(
+                    'SELECT id FROM owner_balance_ledger
+                     WHERE owner_withdrawal_id = :owner_withdrawal_id AND balance_type = :balance_type AND entry_type = :entry_type
+                     LIMIT 1',
+                    ['owner_withdrawal_id' => $ownerWithdrawalId, 'balance_type' => $balanceType, 'entry_type' => $entryType]
+                );
+            }
+
+            return $row ? (int) $row['id'] : 0;
         }
 
         return $insertId;
@@ -563,6 +813,26 @@ class FinanceLedgerService
 
         $current = (float) $provider['current_balance'];
         return round($current + ($direction === 'in' ? $amount : -$amount), 2);
+    }
+
+    private function normalizeBalanceType(string $balanceType): string
+    {
+        $balanceType = strtolower(trim($balanceType));
+        if (!in_array($balanceType, ['capital', 'profit'], true)) {
+            throw new RuntimeException('Invalid owner balance type.');
+        }
+
+        return $balanceType;
+    }
+
+    private function validNonNegativeAmount(float $amount): float
+    {
+        $amount = round($amount, 2);
+        if ($amount < 0) {
+            throw new RuntimeException('Amount cannot be negative.');
+        }
+
+        return $amount;
     }
 
     private function validAmount(float $amount): float
