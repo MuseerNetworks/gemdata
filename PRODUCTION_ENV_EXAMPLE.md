@@ -62,6 +62,7 @@ return [
         'katpay_api_key' => '__CHANGE_ME_KATPAY_API_KEY__',
         'katpay_secret_key' => '__CHANGE_ME_KATPAY_SECRET_KEY__',
         'katpay_base_url' => 'https://api.katpay.co/v1',
+        'katpay_bank_list_base_url' => 'https://api.katpay.co',
         'katpay_merchant_id' => '__CHANGE_ME_KATPAY_MERCHANT_ID__',
         'katpay_bank_codes' => ['PALMPAY', 'OPAY'],
     ],

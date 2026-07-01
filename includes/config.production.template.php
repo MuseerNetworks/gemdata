@@ -144,6 +144,7 @@ return [
         'katpay_api_key'     => '',                    // FILL IN
         'katpay_secret_key'  => '',                    // FILL IN
         'katpay_base_url'    => 'https://api.katpay.co/v1',
+        'katpay_bank_list_base_url' => 'https://api.katpay.co',
         'katpay_merchant_id' => '',                    // FILL IN
         'katpay_bank_codes'  => ['PALMPAY', 'OPAY'],
     ],
