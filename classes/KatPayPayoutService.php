@@ -31,6 +31,21 @@ class KatPayPayoutService
 
     public function banks(): array
     {
+        $this->logger->warning('KatPay banks() entered', [
+            'temporary_debug' => true,
+            'app_logger_default_destination' => 'php_error_log',
+            'provider_log_file' => (string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'),
+        ]);
+        $this->logger->writeToFile(
+            (string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'),
+            'warning',
+            'KatPay banks() entered',
+            [
+                'temporary_debug' => true,
+                'app_logger_default_destination' => 'php_error_log',
+            ]
+        );
+
         if (!$this->isConfigured()) {
             return [];
         }
@@ -39,7 +54,7 @@ class KatPayPayoutService
         try {
             $response = $this->request('GET', '/api/bank-list', [], $debug);
         } catch (\Throwable $throwable) {
-            $this->logger->warning('KatPay bank list fetch failed.', [
+            $context = [
                 'error' => $throwable->getMessage(),
                 'temporary_debug' => true,
                 'request_url' => $debug['request_url'] ?? null,
@@ -48,7 +63,14 @@ class KatPayPayoutService
                 'response_time_ms' => $debug['response_time_ms'] ?? null,
                 'raw_response_body' => $debug['raw_response_body'] ?? null,
                 'decoded_json' => $debug['decoded_json'] ?? null,
-            ]);
+            ];
+            $this->logger->warning('KatPay bank list fetch failed.', $context);
+            $this->logger->writeToFile(
+                (string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'),
+                'warning',
+                'KatPay bank list fetch failed.',
+                $context
+            );
             return [];
         }
 
@@ -70,7 +92,7 @@ class KatPayPayoutService
 
         uasort($banks, static fn(array $a, array $b): int => strcasecmp($a['bank_name'], $b['bank_name']));
         $parsedBanks = array_values($banks);
-        $this->logger->warning('TEMPORARY DEBUG: KatPay bank list response', [
+        $context = [
             'temporary_debug' => true,
             'request_url' => $debug['request_url'] ?? null,
             'request_headers_present' => $debug['request_headers_present'] ?? null,
@@ -80,7 +102,14 @@ class KatPayPayoutService
             'decoded_json' => $debug['decoded_json'] ?? $response,
             'parsed_bank_count' => count($parsedBanks),
             'parser_candidates' => $parserCandidates,
-        ]);
+        ];
+        $this->logger->warning('TEMPORARY DEBUG: KatPay bank list response', $context);
+        $this->logger->writeToFile(
+            (string) config('app.provider_log_file', dirname(__DIR__) . '/storage/logs/provider.log'),
+            'warning',
+            'TEMPORARY DEBUG: KatPay bank list response',
+            $context
+        );
 
         return $parsedBanks;
     }
