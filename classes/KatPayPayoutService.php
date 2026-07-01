@@ -35,15 +35,24 @@ class KatPayPayoutService
             return [];
         }
 
+        $debug = [];
         try {
-            $response = $this->request('GET', '/api/bank-list');
+            $response = $this->request('GET', '/api/bank-list', [], $debug);
         } catch (\Throwable $throwable) {
             $this->logger->warning('KatPay bank list fetch failed.', [
                 'error' => $throwable->getMessage(),
+                'temporary_debug' => true,
+                'request_url' => $debug['request_url'] ?? null,
+                'request_headers_present' => $debug['request_headers_present'] ?? null,
+                'http_status' => $debug['http_status'] ?? null,
+                'response_time_ms' => $debug['response_time_ms'] ?? null,
+                'raw_response_body' => $debug['raw_response_body'] ?? null,
+                'decoded_json' => $debug['decoded_json'] ?? null,
             ]);
             return [];
         }
 
+        $parserCandidates = $this->bankParserCandidates($response);
         $banks = [];
         foreach ($this->extractList($response) as $bank) {
             if (!is_array($bank)) {
@@ -60,7 +69,20 @@ class KatPayPayoutService
         }
 
         uasort($banks, static fn(array $a, array $b): int => strcasecmp($a['bank_name'], $b['bank_name']));
-        return array_values($banks);
+        $parsedBanks = array_values($banks);
+        $this->logger->warning('TEMPORARY DEBUG: KatPay bank list response', [
+            'temporary_debug' => true,
+            'request_url' => $debug['request_url'] ?? null,
+            'request_headers_present' => $debug['request_headers_present'] ?? null,
+            'http_status' => $debug['http_status'] ?? null,
+            'response_time_ms' => $debug['response_time_ms'] ?? null,
+            'raw_response_body' => $debug['raw_response_body'] ?? null,
+            'decoded_json' => $debug['decoded_json'] ?? $response,
+            'parsed_bank_count' => count($parsedBanks),
+            'parser_candidates' => $parserCandidates,
+        ]);
+
+        return $parsedBanks;
     }
 
     public function payout(array $payload): array
@@ -195,7 +217,7 @@ class KatPayPayoutService
         return $redacted;
     }
 
-    private function request(string $method, string $path, array $payload = []): array
+    private function request(string $method, string $path, array $payload = [], ?array &$debug = null): array
     {
         if (!function_exists('curl_init')) {
             throw new RuntimeException('PHP cURL extension is required for KatPay payout integration.');
@@ -208,7 +230,8 @@ class KatPayPayoutService
             throw new RuntimeException($this->configurationMessage());
         }
 
-        $handle = curl_init($baseUrl . '/' . ltrim($path, '/'));
+        $requestUrl = $baseUrl . '/' . ltrim($path, '/');
+        $handle = curl_init($requestUrl);
         $headers = [
             'Authorization: Bearer ' . $secretKey,
             'api-key: ' . $apiKey,
@@ -226,16 +249,34 @@ class KatPayPayoutService
         }
         curl_setopt_array($handle, $options);
 
+        $startedAt = microtime(true);
         $body = curl_exec($handle);
+        $responseTimeMs = round((microtime(true) - $startedAt) * 1000, 2);
         $curlError = curl_error($handle);
         $statusCode = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
         curl_close($handle);
+
+        if (is_array($debug)) {
+            $debug['request_url'] = $requestUrl;
+            $debug['request_headers_present'] = [
+                'Authorization Bearer' => $secretKey !== '' ? 'present' : 'missing',
+                'api-key' => $apiKey !== '' ? 'present' : 'missing',
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ];
+            $debug['http_status'] = $statusCode;
+            $debug['response_time_ms'] = $responseTimeMs;
+            $debug['raw_response_body'] = $body === false ? null : $body;
+        }
 
         if ($body === false) {
             throw new RuntimeException('KatPay request failed: ' . $curlError);
         }
 
         $decoded = json_decode($body, true);
+        if (is_array($debug)) {
+            $debug['decoded_json'] = is_array($decoded) ? $decoded : null;
+        }
         if (!is_array($decoded)) {
             throw new RuntimeException('KatPay returned an invalid response.');
         }
@@ -246,6 +287,37 @@ class KatPayPayoutService
         }
 
         return $decoded;
+    }
+
+    private function bankParserCandidates(array $response): array
+    {
+        return [
+            'data.banks' => [
+                'present' => isset($response['data']) && is_array($response['data']) && array_key_exists('banks', $response['data']),
+                'is_list' => is_array($response['data']['banks'] ?? null) && $this->isList($response['data']['banks']),
+                'count' => is_array($response['data']['banks'] ?? null) ? count($response['data']['banks']) : null,
+            ],
+            'data.bankList' => [
+                'present' => isset($response['data']) && is_array($response['data']) && array_key_exists('bankList', $response['data']),
+                'is_list' => is_array($response['data']['bankList'] ?? null) && $this->isList($response['data']['bankList']),
+                'count' => is_array($response['data']['bankList'] ?? null) ? count($response['data']['bankList']) : null,
+            ],
+            'data' => [
+                'present' => array_key_exists('data', $response),
+                'is_list' => is_array($response['data'] ?? null) && $this->isList($response['data']),
+                'count' => is_array($response['data'] ?? null) ? count($response['data']) : null,
+            ],
+            'banks' => [
+                'present' => array_key_exists('banks', $response),
+                'is_list' => is_array($response['banks'] ?? null) && $this->isList($response['banks']),
+                'count' => is_array($response['banks'] ?? null) ? count($response['banks']) : null,
+            ],
+            'root' => [
+                'present' => true,
+                'is_list' => $this->isList($response),
+                'count' => count($response),
+            ],
+        ];
     }
 
     private function extractList(array $response): array
