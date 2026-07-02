@@ -82,15 +82,18 @@ class OwnerWithdrawalService
         $this->db->execute(
             'UPDATE owner_withdrawals
              SET payout_status = :payout_status,
-                 payout_reference = CASE WHEN :payout_reference <> "" THEN :payout_reference ELSE payout_reference END,
-                 transfer_reference = CASE WHEN :payout_reference <> "" THEN :payout_reference ELSE transfer_reference END,
+                 payout_reference = CASE WHEN :payout_reference_check <> "" THEN :payout_reference_value ELSE payout_reference END,
+                 transfer_reference = CASE WHEN :transfer_reference_check <> "" THEN :transfer_reference_value ELSE transfer_reference END,
                  payout_response_json = :payout_response_json,
                  payout_requested_at = COALESCE(payout_requested_at, NOW()),
                  payout_failure_reason = :payout_failure_reason
              WHERE id = :id AND status IN ("pending","approved")',
             [
                 'payout_status' => $status,
-                'payout_reference' => $providerReference,
+                'payout_reference_check' => $providerReference,
+                'payout_reference_value' => $providerReference,
+                'transfer_reference_check' => $providerReference,
+                'transfer_reference_value' => $providerReference,
                 'payout_response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
                 'payout_failure_reason' => $failureReason,
                 'id' => $withdrawalId,
@@ -107,11 +110,12 @@ class OwnerWithdrawalService
         $this->db->execute(
             'UPDATE owner_withdrawals
              SET status = "rejected", payout_status = "failed", reviewed_at = NOW(),
-                 rejection_reason = :reason, payout_failure_reason = :reason,
+                 rejection_reason = :rejection_reason, payout_failure_reason = :payout_failure_reason,
                  payout_response_json = :payout_response_json
              WHERE id = :id AND status IN ("pending","approved")',
             [
-                'reason' => $reason,
+                'rejection_reason' => $reason,
+                'payout_failure_reason' => $reason,
                 'payout_response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
                 'id' => $withdrawalId,
             ]
@@ -134,15 +138,19 @@ class OwnerWithdrawalService
                 'UPDATE owner_withdrawals
                  SET status = "paid", payout_status = "successful", paid_by_admin_id = :admin_id,
                      paid_at = NOW(), payout_confirmed_at = NOW(),
-                     payout_reference = CASE WHEN :reference <> "" THEN :reference ELSE payout_reference END,
-                     transfer_reference = CASE WHEN :reference <> "" THEN :reference ELSE transfer_reference END,
-                     payout_response_json = CASE WHEN :response_json IS NOT NULL THEN :response_json ELSE payout_response_json END,
+                     payout_reference = CASE WHEN :payout_reference_check <> "" THEN :payout_reference_value ELSE payout_reference END,
+                     transfer_reference = CASE WHEN :transfer_reference_check <> "" THEN :transfer_reference_value ELSE transfer_reference END,
+                     payout_response_json = CASE WHEN :response_json_check IS NOT NULL THEN :response_json_value ELSE payout_response_json END,
                      payout_failure_reason = NULL
-                 WHERE id = :id AND status IN ("pending","approved")',
+                  WHERE id = :id AND status IN ("pending","approved")',
                 [
                     'admin_id' => $adminId,
-                    'reference' => $reference,
-                    'response_json' => $safeResponse !== [] ? json_encode($safeResponse) : null,
+                    'payout_reference_check' => $reference,
+                    'payout_reference_value' => $reference,
+                    'transfer_reference_check' => $reference,
+                    'transfer_reference_value' => $reference,
+                    'response_json_check' => $safeResponse !== [] ? json_encode($safeResponse) : null,
+                    'response_json_value' => $safeResponse !== [] ? json_encode($safeResponse) : null,
                     'id' => $withdrawalId,
                 ]
             );
@@ -168,10 +176,10 @@ class OwnerWithdrawalService
         $withdrawal = $this->db->first(
             'SELECT * FROM owner_withdrawals
              WHERE payout_provider = "katpay"
-               AND (payout_reference = :reference OR transfer_reference = :reference)
+               AND (payout_reference = :payout_reference OR transfer_reference = :transfer_reference)
              ORDER BY id DESC
              LIMIT 1',
-            ['reference' => $providerReference]
+            ['payout_reference' => $providerReference, 'transfer_reference' => $providerReference]
         );
         if (!$withdrawal) {
             return false;
@@ -191,9 +199,9 @@ class OwnerWithdrawalService
         $this->db->execute(
             'UPDATE owner_withdrawals
              SET status = "approved", reviewed_by_admin_id = :admin_id, reviewed_at = NOW(),
-                 notes = CASE WHEN :notes <> "" THEN :notes ELSE notes END
+                 notes = CASE WHEN :notes_check <> "" THEN :notes_value ELSE notes END
              WHERE id = :id AND status = "pending"',
-            ['admin_id' => $adminId, 'notes' => substr(trim($notes), 0, 255), 'id' => $withdrawalId]
+            ['admin_id' => $adminId, 'notes_check' => substr(trim($notes), 0, 255), 'notes_value' => substr(trim($notes), 0, 255), 'id' => $withdrawalId]
         );
         if ($this->db->first('SELECT id FROM owner_withdrawals WHERE id = :id AND status = "approved"', ['id' => $withdrawalId]) === null) {
             throw new RuntimeException('Only pending owner transfers can be approved.');
