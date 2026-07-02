@@ -193,6 +193,67 @@ class OwnerWithdrawalService
         return true;
     }
 
+    public function confirmPayoutPaidManually(int $withdrawalId, int $adminId): void
+    {
+        $this->assertReady();
+        $this->db->beginTransaction();
+        try {
+            $withdrawal = $this->db->first('SELECT * FROM owner_withdrawals WHERE id = :id FOR UPDATE', ['id' => $withdrawalId]);
+            if (!$withdrawal || !in_array((string) ($withdrawal['status'] ?? ''), ['pending', 'approved'], true)) {
+                throw new RuntimeException('Only unpaid owner transfers can be confirmed as paid.');
+            }
+            $payoutProvider = (string) ($withdrawal['payout_provider'] ?? 'manual');
+            if ($payoutProvider === 'manual') {
+                throw new RuntimeException('Manual owner transfers must use the normal Mark Paid flow.');
+            }
+            $providerReference = $this->normalizeOptionalTransferReference($withdrawal['payout_reference'] ?? $withdrawal['transfer_reference'] ?? null) ?? '';
+            $safeResponseJson = json_encode([
+                'manual_recovery' => true,
+                'provider' => $payoutProvider,
+                'provider_reference' => $providerReference !== '' ? $providerReference : null,
+                'confirmed_by_admin_id' => $adminId,
+                'confirmed_at' => date(DATE_ATOM),
+            ]);
+
+            $this->db->execute(
+                'UPDATE owner_withdrawals
+                 SET status = "paid", payout_status = "successful",
+                     reviewed_by_admin_id = COALESCE(reviewed_by_admin_id, :reviewed_admin_id),
+                     reviewed_at = COALESCE(reviewed_at, NOW()),
+                     paid_by_admin_id = :paid_admin_id,
+                     paid_at = NOW(), payout_confirmed_at = NOW(),
+                     payout_reference = CASE WHEN :payout_reference_check <> "" THEN :payout_reference_value ELSE payout_reference END,
+                     transfer_reference = CASE WHEN :transfer_reference_check <> "" THEN :transfer_reference_value ELSE transfer_reference END,
+                     payout_response_json = :response_json,
+                     payout_failure_reason = NULL
+                  WHERE id = :id AND status IN ("pending","approved")',
+                [
+                    'reviewed_admin_id' => $adminId,
+                    'paid_admin_id' => $adminId,
+                    'payout_reference_check' => $providerReference,
+                    'payout_reference_value' => $providerReference,
+                    'transfer_reference_check' => $providerReference,
+                    'transfer_reference_value' => $providerReference,
+                    'response_json' => $safeResponseJson,
+                    'id' => $withdrawalId,
+                ]
+            );
+
+            $withdrawal['status'] = 'paid';
+            $withdrawal['payout_status'] = 'successful';
+            if ($providerReference !== '') {
+                $withdrawal['payout_reference'] = $providerReference;
+                $withdrawal['transfer_reference'] = $providerReference;
+            }
+            $withdrawal['notes'] = 'Manual payout paid confirmation.';
+            $this->financeLedger->recordOwnerWithdrawalPaid($withdrawal, $adminId);
+            $this->db->commit();
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
     public function approve(int $withdrawalId, int $adminId, string $notes = ''): void
     {
         $this->assertReady();

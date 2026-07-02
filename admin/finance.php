@@ -176,6 +176,15 @@ if (is_post()) {
                 'owner_withdrawal_id' => (int) $_POST['withdrawal_id'],
             ]);
             flash('success', 'Owner transfer marked paid and business cash outflow recorded.');
+        } elseif ($action === 'confirm_payout_owner_withdrawal_paid') {
+            $ownerWithdrawals->confirmPayoutPaidManually(
+                (int) $_POST['withdrawal_id'],
+                (int) $admin['id']
+            );
+            $activityLogger->log('admin', (int) $admin['id'], 'owner_transfer_payout_paid_manual', 'Admin manually confirmed an owner payout transfer as paid.', [
+                'owner_withdrawal_id' => (int) $_POST['withdrawal_id'],
+            ]);
+            flash('success', 'Owner payout transfer confirmed paid and business cash outflow recorded.');
         } else {
             throw new RuntimeException('Unsupported finance action.');
         }
@@ -516,6 +525,9 @@ render_header('Finance Ledger', 'admin');
                                 <?php endif; ?>
                                 <?php if ($row['status'] === 'approved' && !$isKatPayTransfer): ?>
                                     <form method="post"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>"><input type="hidden" name="action" value="mark_owner_withdrawal_paid"><input type="hidden" name="withdrawal_id" value="<?= (int) $row['id']; ?>"><input class="mb-2 w-full rounded-xl border border-gem-border px-3 py-2 text-[12px]" name="transfer_reference" placeholder="Transfer Reference optional" value="<?= e((string) ($row['transfer_reference'] ?? '')); ?>"><input class="mb-2 w-full rounded-xl border border-gem-border px-3 py-2 text-[12px]" name="admin_password" type="password" placeholder="Password" required><button class="rounded-xl bg-gem-green px-3 py-2 text-[12px] font-bold text-white">Mark Paid</button></form>
+                                <?php endif; ?>
+                                <?php if ($isKatPayTransfer): ?>
+                                    <form method="post" onsubmit="return confirm('Only confirm paid if the money has already reached the destination account. Continue?');"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>"><input type="hidden" name="action" value="confirm_payout_owner_withdrawal_paid"><input type="hidden" name="withdrawal_id" value="<?= (int) $row['id']; ?>"><input class="mb-2 w-full rounded-xl border border-gem-border px-3 py-2 text-[12px]" name="admin_password" type="password" placeholder="Password" required><button class="rounded-xl bg-gem-green px-3 py-2 text-[12px] font-bold text-white">Confirm Paid</button></form>
                                 <?php endif; ?>
                                 <form method="post"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>"><input type="hidden" name="action" value="reject_owner_withdrawal"><input type="hidden" name="withdrawal_id" value="<?= (int) $row['id']; ?>"><input class="mb-2 w-full rounded-xl border border-gem-border px-3 py-2 text-[12px]" name="notes" placeholder="Reason" required><input class="mb-2 w-full rounded-xl border border-gem-border px-3 py-2 text-[12px]" name="admin_password" type="password" placeholder="Password" required><button class="rounded-xl bg-gem-red px-3 py-2 text-[12px] font-bold text-white">Reject</button></form>
                             </div>
