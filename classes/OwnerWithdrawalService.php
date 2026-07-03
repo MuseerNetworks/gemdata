@@ -28,12 +28,12 @@ class OwnerWithdrawalService
         $transferDetails = $this->normalizeTransferDetails($transferDetails, true);
         $overview = $this->financeLedger->overview();
         $limit = $withdrawalType === 'capital_return'
-            ? (float) ($overview['capital_return_withdrawable'] ?? 0)
-            : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
+            ? (float) ($overview['available_capital'] ?? $overview['available_owner_capital'] ?? 0)
+            : (float) ($overview['available_profit'] ?? $overview['available_owner_profit'] ?? 0);
         if ($amount > $limit) {
             throw new RuntimeException($withdrawalType === 'capital_return'
-                ? 'Owner capital return exceeds capital return withdrawable amount.'
-                : 'Owner profit withdrawal exceeds profit withdrawable amount.');
+                ? 'Owner capital return exceeds available capital.'
+                : 'Owner profit withdrawal exceeds available profit.');
         }
 
         $open = $this->db->first('SELECT id FROM owner_withdrawals WHERE status IN ("pending","approved") LIMIT 1');
@@ -438,12 +438,12 @@ class OwnerWithdrawalService
         $overview = $this->financeLedger->overview();
         $withdrawalType = $this->normalizeWithdrawalType((string) ($withdrawal['withdrawal_type'] ?? 'profit'));
         $limit = $withdrawalType === 'capital_return'
-            ? (float) ($overview['capital_return_withdrawable'] ?? 0)
-            : (float) ($overview['profit_withdrawable'] ?? $overview['owner_withdrawable_profit'] ?? 0);
+            ? (float) ($overview['available_capital'] ?? $overview['available_owner_capital'] ?? 0)
+            : (float) ($overview['available_profit'] ?? $overview['available_owner_profit'] ?? 0);
         if ((float) $withdrawal['amount'] > $limit) {
             throw new RuntimeException($withdrawalType === 'capital_return'
-                ? 'Owner capital return is no longer covered by available capital and safe cash.'
-                : 'Owner profit withdrawal is no longer covered by withdrawable profit.');
+                ? 'Owner capital return exceeds available capital.'
+                : 'Owner profit withdrawal exceeds available profit.');
         }
     }
 

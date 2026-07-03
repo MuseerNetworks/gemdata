@@ -289,94 +289,40 @@ render_header('Finance Ledger', 'admin');
         <?php
         $cards = [
             [
-                'label' => 'User Liability',
-                'amount' => $summary['user_liability'] ?? 0,
-                'note' => 'Wallets, commission wallets, unpaid withdrawals',
-                'href' => base_url('admin/wallet.php'),
-                'icon' => 'wallet',
-                'tone' => 'wallet',
-                'aria' => 'Open wallet liability details',
-            ],
-            [
-                'label' => 'Pending Transactions',
-                'amount' => $summary['pending_exposure'] ?? 0,
-                'note' => 'Pending transaction exposure protected from withdrawal',
-                'href' => base_url('admin/transactions.php?status=pending'),
-                'icon' => 'pending',
-                'tone' => 'pending',
-                'aria' => 'Open pending transactions',
-            ],
-            [
-                'label' => 'Safe Available Cash',
-                'amount' => $summary['safe_available_cash'] ?? 0,
-                'note' => 'Cash left after liabilities and pending exposure',
+                'label' => 'Business Cash',
+                'amount' => $summary['business_cash'] ?? 0,
+                'note' => 'Signed business cash ledger balance',
                 'href' => base_url('admin/finance.php'),
-                'icon' => 'shield',
+                'icon' => 'wallet',
                 'tone' => 'security',
-                'aria' => 'Open finance ledger safe available cash details',
+                'aria' => 'Open business cash ledger details',
             ],
             [
-                'label' => 'Providers Balance',
-                'amount' => $knownProviderBalanceTotal,
-                'note' => 'Known current balances from configured providers',
-                'href' => base_url('admin/finance.php') . '#provider-balances',
+                'label' => 'Provider Float',
+                'amount' => $summary['provider_prepaid_balance'] ?? 0,
+                'note' => 'Provider wallet ledger float',
+                'href' => base_url('admin/finance.php') . '#provider-wallet-ledger',
                 'icon' => 'server',
                 'tone' => 'providers',
-                'aria' => 'Open provider balances section',
-            ],
-            [
-                'label' => 'Successful Transactions',
-                'amount' => $summary['gross_revenue'] ?? 0,
-                'note' => 'Successful transaction selling value',
-                'href' => base_url('admin/transactions.php?status=successful'),
-                'icon' => 'transactions',
-                'tone' => 'transactions',
-                'aria' => 'Open successful transactions',
-            ],
-            [
-                'label' => 'Provider Costs',
-                'amount' => $summary['provider_costs'] ?? 0,
-                'note' => 'Provider costs recognized from successful sales',
-                'href' => base_url('admin/finance.php') . '#provider-wallet-ledger',
-                'icon' => 'revenue',
-                'tone' => 'revenue',
-                'aria' => 'Open provider wallet ledger',
+                'aria' => 'Open provider float ledger',
             ],
             [
                 'label' => 'Available Capital',
                 'amount' => $summary['available_capital'] ?? 0,
-                'note' => 'Owner capital balance before safe-cash limit',
+                'note' => 'Owner capital balance',
                 'href' => base_url('admin/finance.php') . '#owner-transfers',
                 'icon' => 'revenue',
                 'tone' => 'capital',
                 'aria' => 'Open owner capital transfers section',
             ],
             [
-                'label' => 'Capital Withdrawable',
-                'amount' => $summary['capital_return_withdrawable'] ?? 0,
-                'note' => 'Capital limited by Safe Available Cash',
-                'href' => base_url('admin/finance.php') . '#owner-transfers',
-                'icon' => 'shield',
-                'tone' => 'capital',
-                'aria' => 'Open capital withdrawable details',
-            ],
-            [
                 'label' => 'Available Profit',
                 'amount' => $summary['available_profit'] ?? 0,
-                'note' => 'Owner profit balance before safe-cash limit',
+                'note' => 'Owner profit balance',
                 'href' => base_url('admin/finance.php') . '#owner-transfers',
                 'icon' => 'profit',
                 'tone' => 'profit',
                 'aria' => 'Open owner profit transfers section',
-            ],
-            [
-                'label' => 'Profit Withdrawable',
-                'amount' => $summary['profit_withdrawable'] ?? 0,
-                'note' => 'Profit limited by Safe Available Cash',
-                'href' => base_url('admin/finance.php') . '#owner-transfers',
-                'icon' => 'profit',
-                'tone' => 'profit',
-                'aria' => 'Open profit withdrawable details',
             ],
         ];
         $metricToneClasses = [
@@ -439,8 +385,8 @@ render_header('Finance Ledger', 'admin');
             <form class="mt-4 space-y-3" method="post">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <select class="w-full rounded-xl border border-gem-border px-3 py-2" name="withdrawal_type" required>
-                    <option value="profit">Profit Withdrawal - limit <?= e(money((float) ($summary['profit_withdrawable'] ?? 0))); ?></option>
-                    <option value="capital_return">Capital Return - limit <?= e(money((float) ($summary['capital_return_withdrawable'] ?? 0))); ?></option>
+                    <option value="profit">Profit Withdrawal - available <?= e(money((float) ($summary['available_profit'] ?? 0))); ?></option>
+                    <option value="capital_return">Capital Return - available <?= e(money((float) ($summary['available_capital'] ?? 0))); ?></option>
                 </select>
                 <input class="w-full rounded-xl border border-gem-border px-3 py-2" name="amount" type="number" min="0.01" step="0.01" placeholder="Amount" required>
                 <?php if ($katPayPayoutConfigured && $katPayBanks !== []): ?>
@@ -540,7 +486,7 @@ render_header('Finance Ledger', 'admin');
 
         <section id="owner-balance-ledger" class="scroll-mt-24 rounded-2xl border border-gem-border bg-white p-5 shadow-card">
             <h2 class="text-lg font-extrabold text-gem-text">Owner balance ledger</h2>
-            <p class="mt-1 text-[13px] text-gem-muted">Capital and profit accounting entries. Withdrawals remain limited by Safe Available Cash.</p>
+            <p class="mt-1 text-[13px] text-gem-muted">Capital and profit accounting entries. Owner withdrawals are limited by available capital or profit balances.</p>
             <div class="mt-4 space-y-2">
                 <?php foreach ($ownerBalanceRows as $row): ?>
                     <?php
