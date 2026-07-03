@@ -220,6 +220,90 @@ class FinanceLedgerService
         }
     }
 
+    public function resetOpeningBalances(float $newOpeningCapital, float $newOpeningProfit, int $adminId, string $notes): array
+    {
+        $this->assertTablesReady();
+        $newOpeningCapital = $this->validNonNegativeAmount($newOpeningCapital);
+        $newOpeningProfit = $this->validNonNegativeAmount($newOpeningProfit);
+        $notes = $this->requireNotes($notes);
+
+        $this->db->beginTransaction();
+        try {
+            $opening = $this->db->first(
+                'SELECT * FROM finance_opening_reconciliation ORDER BY id ASC LIMIT 1 FOR UPDATE'
+            );
+            if (!$opening) {
+                throw new RuntimeException('Opening capital and profit must be initialized before they can be reset.');
+            }
+
+            $openingId = (int) $opening['id'];
+            $oldOpeningCapital = round((float) ($opening['opening_capital'] ?? 0), 2);
+            $oldOpeningProfit = round((float) ($opening['opening_profit'] ?? 0), 2);
+            $capitalDelta = round($newOpeningCapital - $oldOpeningCapital, 2);
+            $profitDelta = round($newOpeningProfit - $oldOpeningProfit, 2);
+
+            if ($capitalDelta == 0.0 && $profitDelta == 0.0) {
+                $this->db->commit();
+                return [
+                    'opening_id' => $openingId,
+                    'old_opening_capital' => $oldOpeningCapital,
+                    'new_opening_capital' => $newOpeningCapital,
+                    'capital_delta' => 0.0,
+                    'old_opening_profit' => $oldOpeningProfit,
+                    'new_opening_profit' => $newOpeningProfit,
+                    'profit_delta' => 0.0,
+                    'changed' => false,
+                ];
+            }
+
+            $this->db->execute(
+                'UPDATE finance_opening_reconciliation
+                 SET opening_capital = :opening_capital,
+                     opening_profit = :opening_profit,
+                     notes = :notes
+                 WHERE id = :id',
+                [
+                    'opening_capital' => $newOpeningCapital,
+                    'opening_profit' => $newOpeningProfit,
+                    'notes' => substr('Reset: ' . $notes, 0, 255),
+                    'id' => $openingId,
+                ]
+            );
+
+            $resetReference = strtolower(bin2hex(random_bytes(6)));
+            if ($capitalDelta != 0.0) {
+                $direction = $capitalDelta > 0 ? 'in' : 'out';
+                $amount = abs($capitalDelta);
+                $resetNotes = substr(sprintf('Opening capital reset from %0.2f to %0.2f. Reason: %s', $oldOpeningCapital, $newOpeningCapital, $notes), 0, 255);
+                $businessId = $this->insertBusinessCash('manual_adjustment', $direction, $amount, $adminId, $resetNotes, null, 'finance-opening-reset:' . $openingId . ':' . $resetReference . ':capital');
+                $this->insertOwnerBalance('capital', 'admin_reset', $direction, $amount, null, null, $businessId, $openingId, $adminId, $resetNotes, 'owner-opening-reset:' . $openingId . ':' . $resetReference . ':capital');
+            }
+
+            if ($profitDelta != 0.0) {
+                $direction = $profitDelta > 0 ? 'in' : 'out';
+                $amount = abs($profitDelta);
+                $resetNotes = substr(sprintf('Opening profit reset from %0.2f to %0.2f. Reason: %s', $oldOpeningProfit, $newOpeningProfit, $notes), 0, 255);
+                $businessId = $this->insertBusinessCash('manual_adjustment', $direction, $amount, $adminId, $resetNotes, null, 'finance-opening-reset:' . $openingId . ':' . $resetReference . ':profit');
+                $this->insertOwnerBalance('profit', 'admin_reset', $direction, $amount, null, null, $businessId, $openingId, $adminId, $resetNotes, 'owner-opening-reset:' . $openingId . ':' . $resetReference . ':profit');
+            }
+
+            $this->db->commit();
+            return [
+                'opening_id' => $openingId,
+                'old_opening_capital' => $oldOpeningCapital,
+                'new_opening_capital' => $newOpeningCapital,
+                'capital_delta' => $capitalDelta,
+                'old_opening_profit' => $oldOpeningProfit,
+                'new_opening_profit' => $newOpeningProfit,
+                'profit_delta' => $profitDelta,
+                'changed' => true,
+            ];
+        } catch (\Throwable $throwable) {
+            $this->db->rollBack();
+            throw $throwable;
+        }
+    }
+
     public function recordUserFunding(array $fundingRequest, ?int $adminId = null): void
     {
         if (!$this->db->tableExists('business_cash_ledger')) {

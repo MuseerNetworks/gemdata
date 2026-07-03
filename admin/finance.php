@@ -47,6 +47,15 @@ if (is_post()) {
                 'opening_profit' => (float) ($_POST['opening_profit'] ?? 0),
             ]);
             flash('success', 'Opening capital and opening profit initialized.');
+        } elseif ($action === 'reset_opening_balances') {
+            $result = $finance->resetOpeningBalances(
+                (float) ($_POST['opening_capital'] ?? 0),
+                (float) ($_POST['opening_profit'] ?? 0),
+                (int) $admin['id'],
+                (string) ($_POST['notes'] ?? '')
+            );
+            $activityLogger->log('admin', (int) $admin['id'], 'finance_opening_balances_reset', 'Admin reset owner opening capital and profit.', $result);
+            flash('success', $result['changed'] ? 'Opening capital and opening profit reset. Audit ledger entries were recorded.' : 'Opening capital and opening profit were unchanged.');
         } elseif ($action === 'backfill') {
             $result = $finance->backfillExisting();
             $activityLogger->log('admin', (int) $admin['id'], 'finance_ledger_backfilled', 'Admin ran finance ledger backfill.', $result);
@@ -282,6 +291,16 @@ render_header('Finance Ledger', 'admin');
                     </div>
                 </div>
             </div>
+            <form class="mt-5 grid gap-3 md:grid-cols-5" method="post">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                <input type="hidden" name="action" value="reset_opening_balances">
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="opening_capital" type="number" min="0" step="0.01" value="<?= e((string) $openingReconciliation['opening_capital']); ?>" placeholder="Correct Opening Capital" required>
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="opening_profit" type="number" min="0" step="0.01" value="<?= e((string) $openingReconciliation['opening_profit']); ?>" placeholder="Correct Opening Profit" required>
+                <input class="rounded-xl border border-gem-border px-3 py-2 md:col-span-2" name="notes" type="text" maxlength="255" placeholder="Correction reason" required>
+                <input class="rounded-xl border border-gem-border px-3 py-2" name="admin_password" type="password" placeholder="Admin password" required>
+                <button class="rounded-xl bg-gem-red px-4 py-2.5 font-bold text-white md:col-span-5" type="submit">Reset Opening Balances</button>
+            </form>
+            <p class="mt-3 text-[12px] text-gem-muted">Reset records audited correction entries only. It does not delete previous ledger history.</p>
         </section>
     <?php endif; ?>
 
