@@ -307,6 +307,15 @@ render_header('Finance Ledger', 'admin');
                 'aria' => 'Open provider float ledger',
             ],
             [
+                'label' => 'Providers Balance',
+                'amount' => $knownProviderBalanceTotal,
+                'note' => 'Last known balances reported by providers',
+                'href' => base_url('admin/finance.php') . '#provider-balances',
+                'icon' => 'server',
+                'tone' => 'providers',
+                'aria' => 'Open provider balances section',
+            ],
+            [
                 'label' => 'Available Capital',
                 'amount' => $summary['available_capital'] ?? 0,
                 'note' => 'Owner capital balance',
