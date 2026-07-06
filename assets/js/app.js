@@ -617,7 +617,6 @@ const generateIdempotencyKey = (prefix = 'req') => {
 
 const THEME_KEY = 'gemdata-theme';
 const DEFAULT_THEME = 'light-fintech';
-const INSTALL_PROMPT_KEY = 'gemdata-install-dismissed';
 const OFFLINE_QUEUE_KEY = 'gemdata-offline-queue';
 let deferredInstallPrompt = null;
 
@@ -823,17 +822,19 @@ const updateConnectionBanner = (message = '', tone = 'info') => {
     banner.className = `connection-banner is-${tone}`;
 };
 
+const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
 const setInstallButtonsVisible = (visible) => {
+    const shouldShow = visible && !isStandaloneApp();
     document.querySelectorAll('[data-install-trigger]').forEach((button) => {
-        button.hidden = !visible;
+        button.hidden = !shouldShow;
     });
 };
 
 const maybeShowIosInstallMessage = () => {
     const ua = window.navigator.userAgent || '';
     const isIos = /iphone|ipad|ipod/i.test(ua);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if (isIos && !isStandalone) {
+    if (isIos && !isStandaloneApp()) {
         alert('To install GemData on iPhone or iPad, open the Share menu in Safari and choose "Add to Home Screen".');
         return true;
     }
@@ -841,29 +842,26 @@ const maybeShowIosInstallMessage = () => {
 };
 
 const setupInstallPrompt = () => {
-    const dismissed = localStorage.getItem(INSTALL_PROMPT_KEY) === '1';
     const ua = window.navigator.userAgent || '';
     const isIos = /iphone|ipad|ipod/i.test(ua);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if (!dismissed) {
-        setInstallButtonsVisible(false);
+    setInstallButtonsVisible(false);
+
+    if (isStandaloneApp()) {
+        return;
     }
 
-    if (isIos && !isStandalone && !dismissed) {
+    if (isIos) {
         setInstallButtonsVisible(true);
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
         deferredInstallPrompt = event;
-        if (!dismissed) {
-            setInstallButtonsVisible(true);
-        }
+        setInstallButtonsVisible(true);
     });
 
     window.addEventListener('appinstalled', () => {
         deferredInstallPrompt = null;
-        localStorage.setItem(INSTALL_PROMPT_KEY, '1');
         setInstallButtonsVisible(false);
     });
 
@@ -877,12 +875,9 @@ const setupInstallPrompt = () => {
                 return;
             }
             deferredInstallPrompt.prompt();
-            const result = await deferredInstallPrompt.userChoice;
-            if (result.outcome !== 'accepted') {
-                localStorage.setItem(INSTALL_PROMPT_KEY, '1');
-                setInstallButtonsVisible(false);
-            }
+            await deferredInstallPrompt.userChoice;
             deferredInstallPrompt = null;
+            setInstallButtonsVisible(false);
         });
     });
 };

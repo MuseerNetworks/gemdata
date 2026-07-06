@@ -336,7 +336,7 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : (strin
                         <span class="text-sm font-bold uppercase tracking-[0.22em] text-blue-100">Mobile access</span>
                         <h2 class="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Download GemData App</h2>
                         <p class="mt-4 max-w-2xl text-base leading-8 text-slate-300">Monitor wallet balance, buy VTU services, and track delivery on the go with the GemData mobile experience.</p>
-                        <a class="mt-8 inline-flex rounded-full bg-white px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-gem-50" href="<?= e(base_url('user/register.php')); ?>">Install App</a>
+                        <button class="mt-8 inline-flex rounded-full bg-white px-6 py-3.5 text-sm font-bold text-gem-700 transition hover:bg-gem-50" type="button" data-install-trigger hidden>Install App</button>
                     </div>
                     <div class="gd-app-mockup rounded-[1.75rem] p-5">
                         <div class="gd-app-panel rounded-[1.4rem] p-5">
