@@ -165,8 +165,8 @@ $config = [
     ],
     'pwa' => [
         'short_name' => 'GemData',
-        'theme_color' => '#0f172a',
-        'background_color' => '#f8fbff',
+        'theme_color' => '#1B4DFF',
+        'background_color' => '#f4f8fc',
         'display' => 'standalone',
         'orientation' => 'portrait',
         'offline_page' => '/offline.html',

@@ -50,3 +50,23 @@ function gemdata_logo(
          . '</span>'
          . '</span>';
 }
+
+function render_gemdata_splash(): void
+{
+    ?>
+    <div class="gd-app-splash" data-app-splash role="status" aria-live="polite" aria-label="GemData is loading">
+        <div class="gd-app-splash-inner">
+            <div class="gd-app-splash-logo" aria-hidden="true">
+                <?= gemdata_logo('icon', 'auto', 'gd-app-splash-logo-img', ''); ?>
+            </div>
+            <p class="gd-app-splash-name">GemData</p>
+            <p class="gd-app-splash-slogan" data-app-splash-message>Fast • Secure • Reliable</p>
+            <span class="gd-app-splash-dots" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+        </div>
+    </div>
+    <?php
+}

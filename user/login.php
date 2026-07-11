@@ -29,6 +29,13 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : '1';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Login | <?= e(config('app.name')); ?></title>
+    <meta name="theme-color" content="#1B4DFF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="GemData">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="GemData">
+    <link rel="manifest" href="<?= e(base_url('manifest.json')); ?>">
     <link rel="icon" type="image/png" sizes="32x32" href="<?= e(base_url('assets/brand/favicon-32x32.png')); ?>?v=20260522a">
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=plus-jakarta-sans:400,500,600,700,800,900&display=swap" rel="stylesheet">
@@ -42,6 +49,7 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : '1';
     <script nonce="<?= e(csp_nonce()); ?>" defer src="<?= e(base_url('assets/js/app.js') . '?v=' . $siteJsVersion); ?>"></script>
 </head>
 <body class="gd-login-page" data-app-section="auth" data-page-key="login">
+    <?php render_gemdata_splash(); ?>
     <a class="gd-login-back" href="<?= e(base_url('index.php')); ?>" aria-label="Back to home">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
         <span>Back to Home</span>

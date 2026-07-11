@@ -418,9 +418,9 @@ function render_header(string $title, string $section = 'user'): void
         <!-- Android / Chrome -->
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="application-name" content="GemData">
-        <meta name="theme-color" content="#1d4ed8">
+        <meta name="theme-color" content="<?= e($pwaTheme); ?>">
         <!-- Windows -->
-        <meta name="msapplication-TileColor" content="#1d4ed8">
+        <meta name="msapplication-TileColor" content="<?= e($pwaTheme); ?>">
         <meta name="msapplication-TileImage" content="/assets/brand/ms-tile-150.png">
         <meta name="msapplication-config" content="/browserconfig.xml">
         <!-- Open Graph -->
@@ -499,6 +499,7 @@ function render_header(string $title, string $section = 'user'): void
         <?php endif; ?>
     </head>
     <body class="app-body<?= $hasShell ? ' app-shell-body' : ' app-guest-body'; ?>" data-app-section="<?= e($section); ?>" data-page-key="<?= e($activeKey); ?>">
+        <?php render_gemdata_splash(); ?>
         <a class="skip-link" href="#app-main-content">Skip to main content</a>
         <?php if ($hasShell && $section === 'user' && $currentUser): ?>
             <?php render_user_sidebar($activeKey, $currentUser, $currentRole); ?>
