@@ -1,9 +1,9 @@
 /**
- * GemData Service Worker v4
+ * GemData Service Worker v5
  * Production-safe: paths relative to domain root (/), not /gemdata/
- * Bumped to v4 to refresh the self-contained PWA splash fallback.
+ * Bumped to v5 so the splash only appears once on installed PWA launch.
  */
-const VERSION = 'gemdata-pwa-v4';
+const VERSION = 'gemdata-pwa-v5';
 const ASSET_CACHE = `${VERSION}-assets`;
 const PAGE_CACHE  = `${VERSION}-pages`;
 

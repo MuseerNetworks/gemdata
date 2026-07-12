@@ -625,6 +625,10 @@ const createSplashController = () => {
     if (!splash) {
         return { ready() {} };
     }
+    if (splash.dataset.splashActive !== 'true') {
+        splash.remove();
+        return { ready() {} };
+    }
 
     const message = splash.querySelector('[data-app-splash-message]');
     const slowTimer = window.setTimeout(() => {
