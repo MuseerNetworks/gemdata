@@ -122,7 +122,6 @@ $siteJsVersion = is_file($siteJsPath) ? (string) filemtime($siteJsPath) : (strin
     </script>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased" data-app-section="guest" data-page-key="landing">
-    <?php render_gemdata_splash(); ?>
     <div class="gd-landing-shell min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(27,77,255,0.10),_transparent_28%),radial-gradient(circle_at_right,_rgba(0,198,174,0.10),_transparent_24%),linear-gradient(180deg,#F8FAFC_0%,#F8FBFF_52%,#EEF2FF_100%)]">
         <header class="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">

@@ -620,47 +620,6 @@ const DEFAULT_THEME = 'light-fintech';
 const OFFLINE_QUEUE_KEY = 'gemdata-offline-queue';
 let deferredInstallPrompt = null;
 
-const createSplashController = () => {
-    const splash = document.querySelector('[data-app-splash]');
-    if (!splash) {
-        return { ready() {} };
-    }
-    if (splash.dataset.splashActive !== 'true') {
-        splash.remove();
-        return { ready() {} };
-    }
-
-    const message = splash.querySelector('[data-app-splash-message]');
-    const slowTimer = window.setTimeout(() => {
-        if (message && !splash.classList.contains('is-exiting')) {
-            message.textContent = 'Preparing your dashboard…';
-        }
-    }, 4500);
-
-    let hasStartedExit = false;
-    const ready = () => {
-        if (hasStartedExit) {
-            return;
-        }
-        hasStartedExit = true;
-        window.clearTimeout(slowTimer);
-
-        const exit = () => {
-            splash.classList.add('is-exiting');
-            splash.setAttribute('aria-hidden', 'true');
-            window.setTimeout(() => {
-                splash.remove();
-            }, 220);
-        };
-
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(exit);
-        });
-    };
-
-    return { ready };
-};
-
 const applyTheme = (themeName) => {
     const theme = themeName || DEFAULT_THEME;
     document.documentElement.setAttribute('data-theme', theme);
@@ -1633,40 +1592,35 @@ const setupReceiptActions = (scope = document) => {
 };
 
 const initializeGemDataApp = () => {
-    const splash = createSplashController();
-    try {
-        document.body.dataset.standalone = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) ? 'true' : 'false';
-        setupTheme();
-        setupPasswordToggles();
-        setupLoadingForms();
-        setupSegmentedControls();
-        setupCableVerification();
-        setupElectricityVerification();
-        setupBulkSmsEstimator();
-        setupRechargeCardCalculator();
-        bindAjaxForms();
-        bindProviderPlanFields();
-        setupSidebar();
-        setupGuestNav();
-        setupProfileMenu();
-        setupSearch();
-        setupBulkSelection();
-        setupInstallPrompt();
-        setupConnectivity();
-        setupCopyButtons();
-        setupAdminActionIcons();
-        setupReceiptActions();
-        setupPurchaseModal();
-        setupServiceWorker();
-        replayOfflineQueue();
-        setupSkeletonReadiness();
-        if (window.location.hash === '#services') {
-            document.querySelectorAll('[data-nav-key]').forEach((item) => {
-                item.classList.toggle('is-active', item.dataset.navKey === 'services');
-            });
-        }
-    } finally {
-        splash.ready();
+    document.body.dataset.standalone = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) ? 'true' : 'false';
+    setupTheme();
+    setupPasswordToggles();
+    setupLoadingForms();
+    setupSegmentedControls();
+    setupCableVerification();
+    setupElectricityVerification();
+    setupBulkSmsEstimator();
+    setupRechargeCardCalculator();
+    bindAjaxForms();
+    bindProviderPlanFields();
+    setupSidebar();
+    setupGuestNav();
+    setupProfileMenu();
+    setupSearch();
+    setupBulkSelection();
+    setupInstallPrompt();
+    setupConnectivity();
+    setupCopyButtons();
+    setupAdminActionIcons();
+    setupReceiptActions();
+    setupPurchaseModal();
+    setupServiceWorker();
+    replayOfflineQueue();
+    setupSkeletonReadiness();
+    if (window.location.hash === '#services') {
+        document.querySelectorAll('[data-nav-key]').forEach((item) => {
+            item.classList.toggle('is-active', item.dataset.navKey === 'services');
+        });
     }
 };
 

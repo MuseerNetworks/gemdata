@@ -6,7 +6,7 @@
   "lang": "en",
   "dir": "ltr",
   "categories": ["finance", "utilities"],
-  "start_url": "/",
+  "start_url": "/launch.php",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

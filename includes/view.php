@@ -499,7 +499,6 @@ function render_header(string $title, string $section = 'user'): void
         <?php endif; ?>
     </head>
     <body class="app-body<?= $hasShell ? ' app-shell-body' : ' app-guest-body'; ?>" data-app-section="<?= e($section); ?>" data-page-key="<?= e($activeKey); ?>">
-        <?php render_gemdata_splash(); ?>
         <a class="skip-link" href="#app-main-content">Skip to main content</a>
         <?php if ($hasShell && $section === 'user' && $currentUser): ?>
             <?php render_user_sidebar($activeKey, $currentUser, $currentRole); ?>
