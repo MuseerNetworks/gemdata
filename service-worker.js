@@ -1,9 +1,9 @@
 /**
- * GemData Service Worker v7
+ * GemData Service Worker v8
  * Production-safe: paths relative to domain root (/), not /gemdata/
- * Bumped to v7 to refresh native PWA launch metadata.
+ * Bumped to v8 to refresh mobile runtime and service hub assets.
  */
-const VERSION = 'gemdata-pwa-v7';
+const VERSION = 'gemdata-pwa-v8';
 const ASSET_CACHE = `${VERSION}-assets`;
 const PAGE_CACHE  = `${VERSION}-pages`;
 

@@ -271,7 +271,8 @@ render_header('Dashboard', 'user');
                     <span class="flex items-center gap-1 bg-white/15 rounded-lg px-2.5 py-1 text-[12px] font-semibold">NGN <?= icon_svg('chevron'); ?></span>
                 </div>
 
-                <div class="mb-1">
+                <div class="mb-1" data-skeleton-scope>
+                    <div class="skeleton-only mb-2"><div class="skeleton-wallet-amount gd-skeleton"></div></div>
                     <div class="text-[24px] font-extrabold tracking-tight font-mono"><?= e(money($wallet['balance'])); ?></div>
                     <div class="flex items-center gap-1.5 mt-1">
                         <span class="bg-gem-green/20 text-green-300 text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">Live</span>
@@ -373,7 +374,7 @@ render_header('Dashboard', 'user');
     <div id="services" class="stagger-4">
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-[16px] font-bold text-gem-text">Quick Services</h2>
-            <a href="<?= e(base_url('user/dashboard.php#services')); ?>" class="text-gem-blue text-[13px] font-semibold hover:underline">Edit Services</a>
+            <a href="<?= e(base_url('user/services.php')); ?>" class="text-gem-blue text-[13px] font-semibold hover:underline">View All</a>
         </div>
         <div id="ajax-feedback" class="mb-4"></div>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3" data-skeleton-scope>
@@ -381,7 +382,7 @@ render_header('Dashboard', 'user');
                 <?php
                 $slug = (string) $service['slug'];
                 $card = $serviceCards[$slug] ?? ['label' => (string) $service['name'], 'copy' => 'Complete service', 'icon' => 'funding_account', 'color' => 'bg-blue-600'];
-                $dedicatedUrl = $dedicatedServiceUrls[$slug] ?? base_url('user/dashboard.php#services');
+                $dedicatedUrl = $dedicatedServiceUrls[$slug] ?? base_url('user/services.php');
                 ?>
                 <a class="service-icon user-premium-card user-premium-link bg-white rounded-2xl p-4 shadow-card border border-gem-border cursor-pointer text-left block" href="<?= e($dedicatedUrl); ?>" data-service-slug="<?= e($slug); ?>" data-search-item data-search="<?= e($service['name'] . ' ' . ($service['description'] ?? '') . ' ' . ($serviceMeta[$slug]['summary'] ?? '')); ?>">
                     <div class="w-10 h-10 rounded-xl <?= e($card['color']); ?> flex items-center justify-center mb-3"><?= dashboard_template_icon($card['icon']); ?></div>
@@ -508,7 +509,33 @@ render_header('Dashboard', 'user');
             <div class="user-table-head hidden sm:grid grid-cols-5 gap-4 px-5 py-3 bg-gem-gray border-b border-gem-border text-[11px] font-bold text-gem-muted uppercase tracking-wider">
                 <div class="col-span-2">Service / Description</div><div>Amount</div><div>Status</div><div>Date</div>
             </div>
-            <div class="divide-y divide-gem-border" data-recent-transactions>
+            <div class="divide-y divide-gem-border" data-recent-transactions data-skeleton-scope>
+                <div class="skeleton-only p-5 space-y-4">
+                    <div class="skeleton-tx-row">
+                        <div class="skeleton-tx-icon gd-skeleton"></div>
+                        <div class="skeleton-tx-body">
+                            <div class="skeleton-tx-title gd-skeleton"></div>
+                            <div class="skeleton-tx-sub gd-skeleton"></div>
+                        </div>
+                        <div class="skeleton-tx-amount gd-skeleton"></div>
+                    </div>
+                    <div class="skeleton-tx-row">
+                        <div class="skeleton-tx-icon gd-skeleton"></div>
+                        <div class="skeleton-tx-body">
+                            <div class="skeleton-tx-title gd-skeleton"></div>
+                            <div class="skeleton-tx-sub gd-skeleton"></div>
+                        </div>
+                        <div class="skeleton-tx-amount gd-skeleton"></div>
+                    </div>
+                    <div class="skeleton-tx-row">
+                        <div class="skeleton-tx-icon gd-skeleton"></div>
+                        <div class="skeleton-tx-body">
+                            <div class="skeleton-tx-title gd-skeleton"></div>
+                            <div class="skeleton-tx-sub gd-skeleton"></div>
+                        </div>
+                        <div class="skeleton-tx-amount gd-skeleton"></div>
+                    </div>
+                </div>
                 <?php if ($recentTransactions === []): ?>
                     <div class="user-empty-state px-5 py-8 text-center text-[13px] text-gem-muted"><?= $role === 'reseller' ? 'Start your reseller journey by funding your wallet and making your first sale.' : 'No transactions yet. Fund your wallet and buy your first service.'; ?></div>
                 <?php endif; ?>

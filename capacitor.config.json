@@ -1,9 +1,19 @@
 {
   "appId": "com.gemdata.app",
   "appName": "GemData",
-  "webDir": ".",
+  "webDir": "mobile-shell",
   "server": {
-    "url": "https://gemdata.com.ng",
+    "url": "https://gemdata.com.ng/launch.php",
     "cleartext": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "launchAutoHide": false,
+      "backgroundColor": "#f4f8fc",
+      "androidScaleType": "CENTER_INSIDE",
+      "splashFullScreen": true,
+      "splashImmersive": true
+    }
   }
 }

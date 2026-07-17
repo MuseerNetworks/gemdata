@@ -1,3 +1,28 @@
+/* Disable touchscreen tap highlights */
+* {
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+}
+
+/* Disable text selection on interactive chrome and components */
+.sidebar-link,
+.bottom-nav-item,
+.mobile-bottom-link,
+.btn,
+.primary-action,
+.secondary-action,
+.gd-auth-button,
+.gd-button,
+.service-icon,
+.icon-button,
+.profile-trigger,
+.profile-theme-chip,
+[data-password-toggle],
+[data-segmented-option] {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 :root,
 html[data-theme="light-fintech"] {
     --bg-app: #f4f8fc;
@@ -4892,6 +4917,220 @@ html[data-theme="dark"] [class*="skeleton"] {
     color: #92400e;
 }
 
+.mobile-permission-banner {
+    margin-bottom: 1rem;
+    padding: 0.95rem;
+    border-radius: 1rem;
+    border: 1px solid var(--gd-border);
+    background: var(--gd-surface-elevated);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+    color: var(--gd-text);
+}
+
+.mobile-permission-banner strong,
+.mobile-permission-banner span {
+    display: block;
+}
+
+.mobile-permission-banner strong {
+    font-size: 0.88rem;
+    font-weight: 800;
+}
+
+.mobile-permission-banner span {
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    color: var(--gd-text-muted);
+}
+
+.mobile-permission-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.gd-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: grid;
+    place-items: center;
+    padding: 1.25rem;
+    background: rgba(15, 23, 42, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+}
+
+.gd-dialog-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.gd-dialog {
+    width: min(100%, 22rem);
+    padding: 1.1rem;
+    border-radius: 1.25rem;
+    border: 1px solid var(--gd-border);
+    background: var(--gd-surface-elevated);
+    color: var(--gd-text);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+    transform: translateY(10px) scale(0.98);
+    transition: transform 0.18s ease;
+}
+
+.gd-dialog-backdrop.is-open .gd-dialog {
+    transform: translateY(0) scale(1);
+}
+
+.gd-dialog-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--gd-primary-soft);
+    color: var(--gd-primary);
+    font-weight: 900;
+    margin-bottom: 0.8rem;
+}
+
+.gd-dialog h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 900;
+    color: var(--gd-text);
+}
+
+.gd-dialog p {
+    margin: 0.45rem 0 0;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--gd-text-muted);
+}
+
+.gd-dialog-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.gd-dialog-button {
+    min-height: 2.75rem;
+    border-radius: 0.9rem;
+    border: 1px solid var(--gd-border);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.gd-dialog-cancel {
+    background: var(--gd-surface-alt);
+    color: var(--gd-text);
+}
+
+.gd-dialog-confirm {
+    background: var(--gd-primary);
+    border-color: var(--gd-primary);
+    color: #fff;
+}
+
+@media (max-width: 767px) {
+    .mobile-card-table-shell {
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+    }
+
+    .mobile-card-table {
+        display: block;
+        min-width: 0 !important;
+        border-spacing: 0;
+    }
+
+    .mobile-card-table thead {
+        display: none;
+    }
+
+    .mobile-card-table tbody,
+    .mobile-card-table tr,
+    .mobile-card-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .mobile-card-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .mobile-card-table tr {
+        padding: 0.85rem;
+        border: 1px solid var(--gd-border);
+        border-radius: 1rem;
+        background: var(--gd-surface-elevated);
+        box-shadow: var(--shadow-card);
+    }
+
+    .mobile-card-table td {
+        padding: 0.55rem 0 !important;
+        border: 0 !important;
+        white-space: normal !important;
+        color: var(--gd-text);
+    }
+
+    .mobile-card-table td:not(.mobile-card-actions) {
+        display: grid;
+        grid-template-columns: minmax(5.5rem, 38%) minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: start;
+    }
+
+    .mobile-card-table td::before {
+        content: attr(data-label);
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--gd-text-muted);
+    }
+
+    .mobile-card-table td.mobile-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding-top: 0.75rem !important;
+    }
+
+    .mobile-card-table td.mobile-card-actions::before {
+        display: none;
+    }
+
+    .mobile-card-table td.mobile-card-actions a,
+    .mobile-card-table td.mobile-card-actions button,
+    .mobile-card-table td.mobile-card-actions .btn {
+        min-height: 2.4rem;
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    .mobile-permission-banner {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .mobile-permission-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 .funding-steps {
     display: grid;
     gap: 0.9rem;
@@ -5851,4 +6090,525 @@ body[data-app-section] .surface-card {
     body[data-app-section="user"] .dashboard-stat-grid .flex.items-center.gap-1\.5 {
         display: none !important;
     }
+}
+
+/* --- BOTTOM SHEET CUSTOM SELECT COMPONENT --- */
+
+/* Hide raw selects on forms managed by custom selector */
+@media (max-width: 1023px) {
+    .purchase-form select[data-custom-select-bound] {
+        display: none !important;
+    }
+}
+
+/* Custom Selector Trigger Input */
+.custom-select-trigger {
+    display: none;
+}
+@media (max-width: 1023px) {
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 2.85rem;
+        padding: 0.65rem 1rem;
+        border: 1px solid var(--gd-border);
+        border-radius: 12px;
+        background: var(--gd-input);
+        color: var(--gd-text);
+        cursor: pointer;
+        font-size: 0.88rem;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .custom-select-trigger:focus,
+    .custom-select-trigger.is-active {
+        border-color: var(--gd-primary-strong) !important;
+        outline: none;
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--gd-primary-strong) 14%, transparent);
+    }
+}
+
+/* Bottom Sheet Overlay Backdrop */
+.bottom-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 999;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bottom-sheet-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Bottom Sheet Sliding Panel */
+.bottom-sheet-panel {
+    width: 100%;
+    max-height: 75vh;
+    background: var(--gd-surface-elevated);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    border: 1px solid var(--gd-border);
+    border-bottom: none;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.08);
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.bottom-sheet-backdrop.is-open .bottom-sheet-panel {
+    transform: translateY(0);
+}
+
+/* Grab handle pill at top center */
+.bottom-sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--text-soft);
+    border-radius: 999px;
+    margin: 10px auto 4px auto;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+/* Header and close controls */
+.bottom-sheet-header {
+    padding: 0.5rem 1.25rem 0.85rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--gd-border);
+    flex-shrink: 0;
+}
+.bottom-sheet-header h3 {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--gd-text);
+    margin: 0;
+}
+.bottom-sheet-close {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: none;
+    background: var(--gd-surface-alt);
+    color: var(--gd-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.15rem;
+    font-weight: bold;
+    transition: background-color 0.15s;
+}
+.bottom-sheet-close:hover {
+    background-color: var(--gd-border);
+}
+
+/* Search input layout */
+.bottom-sheet-search {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--gd-border);
+    flex-shrink: 0;
+}
+.bottom-sheet-search input {
+    width: 100%;
+    height: 2.5rem;
+    border-radius: 10px;
+    border: 1px solid var(--gd-border);
+    padding: 0.5rem 0.85rem;
+    font-size: 0.85rem;
+    background: var(--gd-input) !important;
+    color: var(--gd-text) !important;
+}
+
+/* Options list scroll area */
+.bottom-sheet-options {
+    overflow-y: auto;
+    max-height: calc(75vh - 120px);
+    padding: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Individual Option button */
+.bottom-sheet-option {
+    width: 100%;
+    text-align: left;
+    padding: 0.9rem 1.2rem;
+    border-radius: 12px;
+    border: none;
+    background: transparent;
+    color: var(--gd-text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.12s, color 0.12s;
+    margin-bottom: 0.2rem;
+}
+.bottom-sheet-option:active {
+    background-color: var(--gd-surface-alt);
+}
+.bottom-sheet-option.is-selected {
+    background-color: var(--gd-primary-soft) !important;
+    color: var(--gd-primary-strong) !important;
+}
+
+/* Checkmark icon style */
+.bottom-sheet-check {
+    width: 1.2rem;
+    height: 1.2rem;
+    color: var(--gd-primary-strong);
+    display: none;
+}
+.bottom-sheet-option.is-selected .bottom-sheet-check {
+    display: block;
+}
+
+/* =============================================================
+   MOBILE DASHBOARD COMPACT LAYOUT
+   Target: ≤767px — 360×800, 390×844, 412×915 screen sizes
+   Goal: eliminate scroll to reach Quick Services section
+   Does NOT affect desktop/tablet (≥768px) in any way
+   ============================================================= */
+@media (max-width: 767px) {
+
+    /* ── 1. PAGE WRAPPER ────────────────────────────────────── */
+    /* Reduce outer p-4 (16px) to 12px horizontal, 10px vertical */
+    main.flex-1.p-4 {
+        padding: 10px 12px 96px !important;
+    }
+
+    /* ── 2. PAGE-LEVEL SECTION GAPS ────────────────────────── */
+    /* space-y-6 = 24px between each section. Compress to 10px  */
+    [data-services-dashboard].space-y-6 > * + * {
+        margin-top: 10px !important;
+    }
+
+    /* ── 3. DASHBOARD HEADING ───────────────────────────────── */
+    [data-services-dashboard] > .stagger-1 h1 {
+        font-size: 1.15rem !important;
+        line-height: 1.2 !important;
+    }
+    [data-services-dashboard] > .stagger-1 p {
+        font-size: 0.75rem !important;
+        margin-top: 0 !important;
+    }
+    [data-services-dashboard] > .stagger-1 {
+        padding-bottom: 0 !important;
+    }
+
+    /* ── 4. WALLET CARD ─────────────────────────────────────── */
+    .wallet-card {
+        padding: 0.75rem !important;
+        border-radius: 1rem !important;
+    }
+
+    /* Balance amount — from 24px down to 20px */
+    .wallet-card .text-\[24px\] {
+        font-size: 1.25rem !important;
+        line-height: 1.1 !important;
+    }
+
+    /* "Main Wallet Balance" label */
+    .wallet-card .text-\[13px\].font-semibold {
+        font-size: 0.7rem !important;
+    }
+
+    /* Live / role badge row */
+    .wallet-card .flex.items-center.gap-1\.5.mt-1 {
+        margin-top: 0.15rem !important;
+        font-size: 0.65rem !important;
+    }
+
+    /* NGN currency badge */
+    .wallet-card .flex.items-center.gap-1.bg-white\/15 {
+        padding: 0.2rem 0.5rem !important;
+        font-size: 0.65rem !important;
+    }
+
+    /* balance + badge wrapper */
+    .wallet-card > div > div:nth-child(2) {
+        margin-bottom: 0 !important;
+    }
+
+    /* ── 5. WALLET ACTION BUTTONS GRID ─────────────────────── */
+    /* Fund / Transfer / Withdraw / History — tighter cells */
+    .wallet-card .grid.grid-cols-2.sm\:grid-cols-4 {
+        gap: 0.3rem !important;
+        margin-top: 0.55rem !important;
+    }
+    .wallet-card .grid.grid-cols-2.sm\:grid-cols-4 > * {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+        border-radius: 0.65rem !important;
+    }
+    /* Icon circles */
+    .wallet-card .grid.grid-cols-2.sm\:grid-cols-4 .w-7 {
+        width: 1.5rem !important;
+        height: 1.5rem !important;
+    }
+    /* Action label text */
+    .wallet-card .grid.grid-cols-2.sm\:grid-cols-4 .text-\[11px\] {
+        font-size: 0.62rem !important;
+    }
+
+    /* ── 6. WALLET FUNDING ACCOUNT SECTION ─────────────────── */
+    .wallet-card .mt-4.pt-3.border-t {
+        margin-top: 0.55rem !important;
+        padding-top: 0.5rem !important;
+    }
+    /* Section heading row */
+    .wallet-card .mt-4.pt-3.border-t .flex.items-center.justify-between.gap-3.mb-2\.5 {
+        margin-bottom: 0.4rem !important;
+    }
+    .wallet-card .mt-4.pt-3.border-t .text-\[13px\].font-bold {
+        font-size: 0.75rem !important;
+    }
+    .wallet-card .mt-4.pt-3.border-t .text-\[11px\].text-blue-200 {
+        font-size: 0.62rem !important;
+    }
+    /* Status badge */
+    .wallet-card .bg-green-400\/20,
+    .wallet-card .bg-amber-400\/20 {
+        font-size: 0.6rem !important;
+        padding: 0.15rem 0.5rem !important;
+    }
+    /* Account detail tiles */
+    .dashboard-funding-account-detail {
+        padding: 0.35rem 0.5rem !important;
+    }
+    .dashboard-funding-account-detail > div:first-child {
+        font-size: 0.55rem !important;
+    }
+    .dashboard-funding-account-detail > div:last-child {
+        font-size: 0.7rem !important;
+        margin-top: 0.1rem !important;
+    }
+    /* Copy buttons */
+    .dashboard-funding-copy-actions {
+        gap: 0.3rem !important;
+        margin-top: 0.35rem !important;
+    }
+    .dashboard-funding-copy-actions .gd-copy-button {
+        font-size: 0.62rem !important;
+        padding: 0.3rem 0.55rem !important;
+    }
+
+    /* ── 7. STAT CARDS GRID ─────────────────────────────────── */
+    .dashboard-stat-grid {
+        gap: 0.3rem !important;
+    }
+    .dashboard-stat-grid .stat-card {
+        padding: 0.5rem !important;
+        gap: 0.35rem !important;
+        border-radius: 0.75rem !important;
+    }
+    .dashboard-stat-grid .user-icon-box {
+        width: 1.65rem !important;
+        height: 1.65rem !important;
+        border-radius: 0.5rem !important;
+    }
+    .dashboard-stat-grid .user-icon-box svg {
+        width: 0.8rem !important;
+        height: 0.8rem !important;
+    }
+    .dashboard-stat-grid .user-metric-value {
+        font-size: 0.85rem !important;
+        line-height: 1 !important;
+    }
+    .dashboard-stat-grid .text-\[12px\] {
+        font-size: 0.58rem !important;
+        line-height: 1.1 !important;
+        margin-top: 0.1rem !important;
+    }
+
+    /* ── 8. UPGRADE / ACTIVATE BANNER ──────────────────────── */
+    .activate-banner {
+        padding: 0.55rem 0.75rem !important;
+        border-radius: 0.85rem !important;
+        gap: 0.55rem !important;
+    }
+    .activate-banner .w-10.h-10 {
+        width: 2rem !important;
+        height: 2rem !important;
+        border-radius: 0.5rem !important;
+        flex-shrink: 0 !important;
+    }
+    .activate-banner .w-10.h-10 svg {
+        width: 1rem !important;
+        height: 1rem !important;
+    }
+    .activate-banner .text-\[14px\].font-bold {
+        font-size: 0.78rem !important;
+    }
+    .activate-banner .text-\[13px\].text-gem-muted {
+        font-size: 0.7rem !important;
+        margin-top: 0.1rem !important;
+    }
+    .activate-banner a.flex.items-center.gap-2 {
+        font-size: 0.72rem !important;
+        padding: 0.35rem 0.75rem !important;
+        border-radius: 0.65rem !important;
+    }
+
+    /* ── 9. QUICK SERVICES SECTION ──────────────────────────── */
+    /* Section header row */
+    #services .flex.items-center.justify-between.mb-4 {
+        margin-bottom: 0.5rem !important;
+    }
+    #services h2.text-\[16px\] {
+        font-size: 0.88rem !important;
+    }
+    #services a.text-\[13px\] {
+        font-size: 0.72rem !important;
+    }
+    /* Services grid — tighter gap */
+    #services .grid {
+        gap: 0.45rem !important;
+    }
+    /* Service icon card — reduce padding and icon margin */
+    .service-icon {
+        padding: 0.6rem !important;
+        border-radius: 0.85rem !important;
+    }
+    .service-icon .w-10.h-10 {
+        width: 2rem !important;
+        height: 2rem !important;
+        border-radius: 0.55rem !important;
+        margin-bottom: 0.4rem !important;
+    }
+    .service-icon .text-\[13px\].font-bold {
+        font-size: 0.72rem !important;
+    }
+    .service-icon .text-\[11px\].text-gem-muted {
+        font-size: 0.62rem !important;
+        margin-top: 0 !important;
+    }
+    .service-icon .flex.items-center.justify-end.mt-2 {
+        margin-top: 0.25rem !important;
+    }
+    .service-icon .flex.items-center.justify-end.mt-2 svg {
+        width: 0.65rem !important;
+        height: 0.65rem !important;
+    }
+
+    /* ── 10. WALLET PIN SETUP BANNER (conditional) ──────────── */
+    /* Only shown if PIN not yet configured — compact it too     */
+    [data-services-dashboard] section.user-premium-card:first-of-type {
+        padding: 0.65rem 0.75rem !important;
+        border-radius: 0.85rem !important;
+    }
+    [data-services-dashboard] section.user-premium-card:first-of-type .user-icon-orange {
+        width: 2rem !important;
+        height: 2rem !important;
+    }
+    [data-services-dashboard] section.user-premium-card:first-of-type h2 {
+        font-size: 0.82rem !important;
+    }
+    [data-services-dashboard] section.user-premium-card:first-of-type p {
+        font-size: 0.7rem !important;
+    }
+    [data-services-dashboard] section.user-premium-card:first-of-type a {
+        font-size: 0.72rem !important;
+        padding: 0.4rem 0.75rem !important;
+    }
+}
+
+/* --- PULL TO REFRESH & SKELETON PLACEHOLDERS --- */
+.ptr-indicator {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-60px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    background: var(--gd-surface-elevated);
+    border: 1px solid var(--gd-border);
+    box-shadow: var(--shadow-card);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--gd-text-secondary);
+    transition: transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.2s;
+    opacity: 0;
+    pointer-events: none;
+}
+.ptr-indicator.ptr-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(calc(env(safe-area-inset-top, 0px) + 12px));
+}
+.ptr-indicator.ptr-releasing {
+    color: var(--gd-primary-strong);
+}
+.ptr-indicator .ptr-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--gd-border);
+    border-top-color: var(--gd-primary-strong);
+    border-radius: 50%;
+    animation: gdSpin 0.7s linear infinite;
+    display: none;
+}
+.ptr-indicator.ptr-loading .ptr-spinner {
+    display: block;
+}
+.ptr-indicator.ptr-loading .ptr-label {
+    display: none;
+}
+
+.skeleton-wallet-amount {
+    height: 2rem;
+    width: 140px;
+    border-radius: 8px;
+}
+.skeleton-tx-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--gd-border);
+}
+.skeleton-tx-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.skeleton-tx-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.skeleton-tx-title {
+    height: 0.75rem;
+    width: 60%;
+    border-radius: 999px;
+}
+.skeleton-tx-sub {
+    height: 0.65rem;
+    width: 40%;
+    border-radius: 999px;
+}
+.skeleton-tx-amount {
+    height: 0.8rem;
+    width: 3.5rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+[data-skeleton-scope]:not(.is-loaded) > :not(.skeleton-only) {
+    display: none !important;
 }

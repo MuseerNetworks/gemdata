@@ -52,7 +52,7 @@ function render_service_shortcut_page(string $title, string $slug, string $copy)
     render_header($title, 'user');
     ?>
     <div class="purchase-page-shell" data-purchase-page>
-        <a class="purchase-back-link" href="<?= e(base_url('user/dashboard.php#services')); ?>"><?= icon_svg('chevron'); ?> Back to Dashboard</a>
+        <a class="purchase-back-link" href="<?= e(base_url('user/services.php')); ?>"><?= icon_svg('chevron'); ?> Back to Services</a>
         <section class="purchase-card stagger-1">
             <div class="purchase-heading">
                 <div>

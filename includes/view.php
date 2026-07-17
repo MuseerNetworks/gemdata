@@ -41,12 +41,15 @@ function current_page_key(string $section, string $path): string
     return match (true) {
         str_contains($path, 'user/transactions.php') => 'transactions',
         str_contains($path, 'user/fund-wallet.php') => 'wallet',
-        str_contains($path, 'user/buy-airtime.php') => 'airtime',
-        str_contains($path, 'user/buy-data.php') => 'data',
-        str_contains($path, 'user/cable-tv.php') => 'cable-tv',
-        str_contains($path, 'user/electricity.php') => 'electricity',
-        str_contains($path, 'user/exam-pin.php') => 'exam-pin',
-        str_contains($path, 'user/bulk-sms.php') => 'bulk-sms',
+        str_contains($path, 'user/services.php') => 'services',
+        str_contains($path, 'user/buy-airtime.php'),
+        str_contains($path, 'user/buy-data.php'),
+        str_contains($path, 'user/cable-tv.php'),
+        str_contains($path, 'user/electricity.php'),
+        str_contains($path, 'user/exam-pin.php'),
+        str_contains($path, 'user/bulk-sms.php'),
+        str_contains($path, 'user/data-card.php'),
+        str_contains($path, 'user/recharge-card.php') => 'services',
         str_contains($path, 'user/customers.php') => 'customers',
         str_contains($path, 'user/pricing.php') => 'pricing',
         str_contains($path, 'user/referrals.php') => 'referrals',
@@ -121,7 +124,7 @@ function nav_items(string $section): array
     $items = [
         ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => base_url('user/dashboard.php'), 'icon' => 'dashboard'],
         ['key' => 'wallet', 'label' => 'Fund Wallet', 'href' => base_url('user/fund-wallet.php'), 'icon' => 'wallet'],
-        ['key' => 'services', 'label' => 'Buy Services', 'href' => base_url('user/dashboard.php#services'), 'icon' => 'services', 'data_key' => 'services'],
+        ['key' => 'services', 'label' => 'Buy Services', 'href' => base_url('user/services.php'), 'icon' => 'services', 'data_key' => 'services'],
         ['key' => 'transactions', 'label' => 'Transactions', 'href' => base_url('user/transactions.php'), 'icon' => 'transactions'],
         ['key' => 'referrals', 'label' => 'Referrals', 'href' => base_url('user/dashboard.php#growth'), 'icon' => 'users', 'data_key' => 'growth'],
     ];
@@ -263,7 +266,7 @@ function user_nav_groups(string $role): array
     $main = [
         ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => base_url('user/dashboard.php'), 'icon' => 'dashboard'],
         ['key' => 'wallet', 'label' => 'Wallet', 'href' => base_url('user/fund-wallet.php'), 'icon' => 'wallet'],
-        ['key' => 'services', 'label' => 'Buy Services', 'href' => base_url('user/dashboard.php#services'), 'icon' => 'services'],
+        ['key' => 'services', 'label' => 'Buy Services', 'href' => base_url('user/services.php'), 'icon' => 'services'],
         ['key' => 'transactions', 'label' => 'Transactions', 'href' => base_url('user/transactions.php'), 'icon' => 'transactions'],
     ];
 
@@ -393,7 +396,7 @@ function render_header(string $title, string $section = 'user'): void
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <title><?= e($title); ?> | <?= e(config('app.name')); ?></title>
         <meta name="description" content="GemData — Fast, secure VTU platform for airtime, data bundles, electricity bills, and reseller operations in Nigeria.">
         <link rel="canonical" href="<?= e(rtrim(app_origin(), '/') . ($_SERVER['REQUEST_URI'] ?? '/')); ?>">
@@ -692,14 +695,14 @@ function render_mobile_bottom_nav(string $activeKey): void
     $items = $role === 'reseller'
         ? [
             ['key' => 'dashboard', 'label' => 'Dashboard', 'href' => base_url('user/dashboard.php'), 'icon' => 'dashboard'],
-            ['key' => 'services', 'label' => 'Services', 'href' => base_url('user/dashboard.php#services'), 'icon' => 'services-mobile', 'data_key' => 'services'],
+            ['key' => 'services', 'label' => 'Services', 'href' => base_url('user/services.php'), 'icon' => 'services-mobile', 'data_key' => 'services'],
             ['key' => 'customers', 'label' => 'Customers', 'href' => base_url('user/customers.php'), 'icon' => 'users'],
             ['key' => 'wallet', 'label' => 'Wallet', 'href' => base_url('user/fund-wallet.php'), 'icon' => 'wallet', 'featured' => true],
             ['key' => 'reports', 'label' => 'Reports', 'href' => base_url('user/commission.php'), 'icon' => 'chart'],
         ]
         : [
             ['key' => 'dashboard', 'label' => 'Home', 'href' => base_url('user/dashboard.php'), 'icon' => 'dashboard'],
-            ['key' => 'services', 'label' => 'Services', 'href' => base_url('user/dashboard.php#services'), 'icon' => 'services-mobile', 'data_key' => 'services'],
+            ['key' => 'services', 'label' => 'Services', 'href' => base_url('user/services.php'), 'icon' => 'services-mobile', 'data_key' => 'services'],
             ['key' => 'wallet', 'label' => 'Wallet', 'href' => base_url('user/fund-wallet.php'), 'icon' => 'wallet', 'featured' => true],
             ['key' => 'transactions', 'label' => 'Activity', 'href' => base_url('user/transactions.php'), 'icon' => 'transactions'],
             $role === 'api'

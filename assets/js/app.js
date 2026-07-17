@@ -1,5 +1,73 @@
 const spinnerMarkup = '<span class="gd-spinner" aria-hidden="true"></span>';
 
+const syncStatusBar = async () => {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.StatusBar) {
+        const StatusBar = window.Capacitor.Plugins.StatusBar;
+        const theme = localStorage.getItem('gemdata-theme') || 'light-fintech';
+        const isDark = theme === 'dark';
+        try {
+            await StatusBar.setStyle({
+                style: isDark ? 'DARK' : 'LIGHT'
+            });
+            await StatusBar.setBackgroundColor({
+                color: isDark ? '#0f172a' : '#1b4dff'
+            });
+        } catch (error) {
+            console.warn('StatusBar Plugin error', error);
+        }
+    }
+};
+
+const triggerHaptics = async (style = 'LIGHT') => {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+        const Haptics = window.Capacitor.Plugins.Haptics;
+        try {
+            if (style === 'SUCCESS') {
+                await Haptics.notification({ type: 'SUCCESS' });
+            } else if (style === 'ERROR') {
+                await Haptics.notification({ type: 'ERROR' });
+            } else if (style === 'WARNING') {
+                await Haptics.notification({ type: 'WARNING' });
+            } else {
+                await Haptics.impact({ style: 'LIGHT' });
+            }
+        } catch (error) {
+            console.warn('Haptics Plugin error', error);
+        }
+    }
+};
+
+let nativeSplashHidden = false;
+const hideNativeSplashWhenReady = () => {
+    if (nativeSplashHidden || !window.Capacitor?.Plugins?.SplashScreen) {
+        return;
+    }
+
+    const hide = () => {
+        if (nativeSplashHidden) {
+            return;
+        }
+        nativeSplashHidden = true;
+        window.Capacitor.Plugins.SplashScreen.hide().catch((error) => {
+            console.warn('SplashScreen hide failed', error);
+        });
+    };
+
+    const afterPaint = () => {
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(hide);
+        });
+    };
+
+    if (document.readyState === 'complete') {
+        afterPaint();
+    } else {
+        window.addEventListener('load', afterPaint, { once: true });
+    }
+
+    window.setTimeout(hide, 4500);
+};
+
 const setButtonLoading = (button, loading, label = '') => {
     if (!button) {
         return;
@@ -29,6 +97,77 @@ const escapeHTML = (value) => String(value ?? '')
     .replaceAll("'", '&#039;');
 
 const safeAttr = escapeHTML;
+
+const showAppDialog = ({ title = 'GemData', message = '', confirm = false, okText = 'OK', cancelText = 'Cancel' } = {}) => new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'gd-dialog-backdrop';
+    backdrop.setAttribute('role', 'presentation');
+
+    const dialog = document.createElement('div');
+    dialog.className = 'gd-dialog';
+    dialog.setAttribute('role', confirm ? 'alertdialog' : 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'gd-dialog-title');
+    dialog.setAttribute('aria-describedby', 'gd-dialog-message');
+
+    dialog.innerHTML = `
+        <div class="gd-dialog-icon" aria-hidden="true">!</div>
+        <h2 id="gd-dialog-title">${escapeHTML(title)}</h2>
+        <p id="gd-dialog-message">${escapeHTML(message)}</p>
+        <div class="gd-dialog-actions">
+            ${confirm ? `<button type="button" class="gd-dialog-button gd-dialog-cancel" data-dialog-result="cancel">${escapeHTML(cancelText)}</button>` : ''}
+            <button type="button" class="gd-dialog-button gd-dialog-confirm" data-dialog-result="ok">${escapeHTML(okText)}</button>
+        </div>
+    `;
+
+    const previousFocus = document.activeElement;
+    const close = (value) => {
+        backdrop.classList.remove('is-open');
+        window.setTimeout(() => {
+            backdrop.remove();
+            if (previousFocus && typeof previousFocus.focus === 'function') {
+                previousFocus.focus();
+            }
+            resolve(value);
+        }, 180);
+    };
+
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    window.requestAnimationFrame(() => backdrop.classList.add('is-open'));
+
+    dialog.querySelectorAll('[data-dialog-result]').forEach((button) => {
+        button.addEventListener('click', () => close(button.dataset.dialogResult === 'ok'));
+    });
+
+    backdrop.addEventListener('click', (event) => {
+        if (event.target === backdrop && confirm) {
+            close(false);
+        }
+    });
+
+    document.addEventListener('keydown', function onKeydown(event) {
+        if (!backdrop.isConnected) {
+            document.removeEventListener('keydown', onKeydown);
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            close(false);
+            document.removeEventListener('keydown', onKeydown);
+        }
+    });
+
+    dialog.querySelector('.gd-dialog-confirm')?.focus();
+});
+
+const showNativeAlert = async (message, title = 'GemData') => {
+    if (window.Capacitor && window.Capacitor.Plugins?.Dialog) {
+        await window.Capacitor.Plugins.Dialog.alert({ title, message });
+        return;
+    }
+    await showAppDialog({ title, message, okText: 'OK' });
+};
 
 const setupPasswordToggles = (scope = document) => {
     scope.querySelectorAll('[data-password-toggle]').forEach((button) => {
@@ -634,6 +773,8 @@ const applyTheme = (themeName) => {
     document.querySelectorAll('[data-theme-option]').forEach((button) => {
         button.classList.toggle('is-active', button.dataset.themeOption === theme);
     });
+
+    syncStatusBar();
 };
 
 const setupTheme = () => {
@@ -835,7 +976,7 @@ const maybeShowIosInstallMessage = () => {
     const ua = window.navigator.userAgent || '';
     const isIos = /iphone|ipad|ipod/i.test(ua);
     if (isIos && !isStandaloneApp()) {
-        alert('To install GemData on iPhone or iPad, open the Share menu in Safari and choose "Add to Home Screen".');
+        void showNativeAlert('To install GemData on iPhone or iPad, open the Share menu in Safari and choose "Add to Home Screen".');
         return true;
     }
     return false;
@@ -871,7 +1012,7 @@ const setupInstallPrompt = () => {
                 return;
             }
             if (!deferredInstallPrompt) {
-                alert('GemData can be installed once your browser reports install availability. Reload the page on Chrome/Android after visiting once online.');
+                void showNativeAlert('GemData can be installed once your browser reports install availability. Reload the page on Chrome/Android after visiting once online.');
                 return;
             }
             deferredInstallPrompt.prompt();
@@ -946,11 +1087,11 @@ const replayOfflineQueue = async () => {
 
 const setupConnectivity = () => {
     const runtime = getRuntime();
-    if (runtime.section !== 'user') {
+    if (!['user', 'admin'].includes(runtime.section || document.body.dataset.appSection || '')) {
         return;
     }
 
-    if (queueStorage.all().length > 0) {
+    if (runtime.section === 'user' && queueStorage.all().length > 0) {
         queueStorage.clear();
         updateConnectionBanner('Previously queued actions were cleared. Financial requests now require a live connection for safe processing.', 'warning');
     }
@@ -958,10 +1099,13 @@ const setupConnectivity = () => {
     const syncBanner = () => {
         const queued = queueStorage.all().length;
         if (!navigator.onLine) {
-            updateConnectionBanner(`You are offline. ${queued} queued action${queued === 1 ? '' : 's'} will sync when connection returns.`, 'warning');
+            const queueCopy = runtime.section === 'user' && queued > 0
+                ? ` ${queued} queued action${queued === 1 ? '' : 's'} will sync when connection returns.`
+                : ' Some actions need a live connection. Retry when the network is back.';
+            updateConnectionBanner(`You are offline.${queueCopy}`, 'warning');
             return;
         }
-        if (queued > 0) {
+        if (runtime.section === 'user' && queued > 0) {
             updateConnectionBanner(`${queued} queued action${queued === 1 ? '' : 's'} waiting to sync.`, 'info');
         } else {
             updateConnectionBanner('');
@@ -1005,7 +1149,7 @@ const setupServiceWorker = () => {
             });
 
             if (registration.waiting) {
-                const shouldRefresh = window.confirm('A new GemData update is ready. Refresh now to use it?');
+                const shouldRefresh = await showConfirmDialog('A new GemData update is ready. Refresh now to use it?');
                 if (shouldRefresh) {
                     registration.waiting.postMessage({ type: 'SKIP_WAITING' });
                 }
@@ -1016,9 +1160,9 @@ const setupServiceWorker = () => {
                 if (!worker) {
                     return;
                 }
-                worker.addEventListener('statechange', () => {
+                worker.addEventListener('statechange', async () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        const shouldRefresh = window.confirm('GemData has been updated. Reload now to apply the latest version?');
+                        const shouldRefresh = await showConfirmDialog('GemData has been updated. Reload now to apply the latest version?');
                         if (shouldRefresh && registration.waiting) {
                             registration.waiting.postMessage({ type: 'SKIP_WAITING' });
                         }
@@ -1070,6 +1214,7 @@ const setupCopyButtons = () => {
                 }
                 button.classList.add('is-copied');
                 button.setAttribute('aria-label', 'Copied');
+                triggerHaptics('LIGHT');
                 window.setTimeout(() => {
                     button.classList.remove('is-copied');
                     button.setAttribute('aria-label', originalText ? `Copy ${originalText.trim()}` : 'Copy');
@@ -1279,6 +1424,7 @@ const setupPurchaseModal = () => {
             ...(activeService.fields || []).map(renderField),
             pinMarkup
         ].join('');
+        setupBottomSheetSelectors(fieldsTarget);
         summaryTarget.innerHTML = '';
         setMessage('');
         setStep('form');
@@ -1475,6 +1621,7 @@ const setupPurchaseModal = () => {
             }
             buildSummary();
             setStep('confirm');
+            triggerHaptics('LIGHT');
             return;
         }
 
@@ -1498,6 +1645,7 @@ const setupPurchaseModal = () => {
             }
             updateDashboard(payload.data || {});
             setStep('result');
+            triggerHaptics('SUCCESS');
             const tx = payload.data?.transaction || {};
             const reference = tx.reference || payload.data?.reference || '';
             renderProcessingState({ reference, status: tx.status || 'pending', receipt_url: tx.receipt_url || null }, 'Transaction accepted. We are processing it with the provider now.');
@@ -1512,6 +1660,7 @@ const setupPurchaseModal = () => {
                 closeModal();
             };
         } catch (error) {
+            triggerHaptics('ERROR');
             setMessage(error.message || 'Something went wrong while processing the request.', 'error');
         } finally {
             setButtonLoading(submitButton, false);
@@ -1580,6 +1729,7 @@ const setupAdminActionIcons = (scope = document) => {
 };
 
 const setupReceiptActions = (scope = document) => {
+    // Print button
     scope.querySelectorAll('[data-receipt-print]').forEach((button) => {
         if (button.dataset.receiptPrintBound === 'true') {
             return;
@@ -1589,11 +1739,723 @@ const setupReceiptActions = (scope = document) => {
             window.print();
         });
     });
+
+    // Native Share on Capacitor — converts download button to native share sheet
+    if (!window.Capacitor || !window.Capacitor.Plugins?.Share) {
+        return;
+    }
+    const { Share } = window.Capacitor.Plugins;
+    scope.querySelectorAll('.receipt-download-button').forEach((btn) => {
+        if (btn.dataset.receiptShareBound === 'true') {
+            return;
+        }
+        btn.dataset.receiptShareBound = 'true';
+
+        // Update label and aria to indicate sharing capability
+        btn.textContent = 'Share Receipt';
+        btn.removeAttribute('download');
+        btn.removeAttribute('href');
+        btn.tagName === 'A' && btn.setAttribute('role', 'button');
+
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+
+            // Extract transaction detail rows from the receipt page DOM
+            const details = {};
+            scope.querySelectorAll('.receipt-details .receipt-detail').forEach((row) => {
+                const label = row.querySelector('dt')?.textContent?.trim()?.toLowerCase() || '';
+                const value = row.querySelector('dd')?.textContent?.trim() || '';
+                if (label && value) {
+                    details[label] = value;
+                }
+            });
+
+            const ref = details['reference'] || '';
+            const service = details['service'] || '';
+            const recipient = details['recipient'] || '';
+            const amount = details['amount'] || '';
+            const status = details['status'] || '';
+            const date = details['date / time'] || details['date'] || '';
+
+            const text = [
+                '📋 GemData Transaction Receipt',
+                ref        ? `Reference: ${ref}` : '',
+                service    ? `Service: ${service}` : '',
+                recipient  ? `Recipient: ${recipient}` : '',
+                amount     ? `Amount: ${amount}` : '',
+                status     ? `Status: ${status}` : '',
+                date       ? `Date: ${date}` : '',
+                '',
+                'Powered by GemData'
+            ].filter(Boolean).join('\n');
+
+            try {
+                await Share.share({
+                    title: 'GemData Receipt',
+                    text,
+                    dialogTitle: 'Share Transaction Receipt',
+                });
+                triggerHaptics('LIGHT');
+            } catch (err) {
+                // User cancelled or platform error — fail silently
+                if (!String(err).includes('cancel')) {
+                    console.warn('Share failed:', err);
+                }
+            }
+        });
+    });
+};
+
+/**
+ * showConfirmDialog — async confirm with native Capacitor dialog fallback.
+ * Returns true if confirmed, false if cancelled.
+ */
+const showConfirmDialog = async (message, title = 'GemData') => {
+    if (window.Capacitor && window.Capacitor.Plugins?.Dialog) {
+        const { value } = await window.Capacitor.Plugins.Dialog.confirm({
+            title,
+            message,
+            okButtonTitle: 'Yes',
+            cancelButtonTitle: 'No',
+        });
+        return value;
+    }
+    return showAppDialog({
+        title,
+        message,
+        confirm: true,
+        okText: 'Yes',
+        cancelText: 'No',
+    });
+};
+
+const extractInlineConfirmMessage = (handler = '') => {
+    const match = String(handler).match(/confirm\((['"])([\s\S]*?)\1\)/);
+    return match ? match[2].replace(/\\'/g, "'").replace(/\\"/g, '"') : '';
+};
+
+const setupNativeConfirmForms = (scope = document) => {
+    scope.querySelectorAll('form[onsubmit*="confirm("]').forEach((form) => {
+        if (form.dataset.nativeConfirmBound === 'true') {
+            return;
+        }
+
+        const message = extractInlineConfirmMessage(form.getAttribute('onsubmit'));
+        if (!message) {
+            return;
+        }
+
+        form.dataset.nativeConfirmBound = 'true';
+        form.dataset.confirmMessage = message;
+        form.removeAttribute('onsubmit');
+        form.addEventListener('submit', async (event) => {
+            if (form.dataset.confirmApproved === 'true') {
+                delete form.dataset.confirmApproved;
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            const approved = await showConfirmDialog(form.dataset.confirmMessage || message);
+            if (!approved) {
+                triggerHaptics('WARNING');
+                return;
+            }
+
+            triggerHaptics('LIGHT');
+            form.dataset.confirmApproved = 'true';
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(event.submitter || undefined);
+            } else {
+                form.submit();
+            }
+        });
+    });
+
+    scope.querySelectorAll('[onclick*="confirm("]').forEach((control) => {
+        if (control.dataset.nativeConfirmBound === 'true') {
+            return;
+        }
+
+        const message = extractInlineConfirmMessage(control.getAttribute('onclick'));
+        if (!message) {
+            return;
+        }
+
+        control.dataset.nativeConfirmBound = 'true';
+        control.dataset.confirmMessage = message;
+        control.removeAttribute('onclick');
+        control.addEventListener('click', async (event) => {
+            if (control.dataset.confirmApproved === 'true') {
+                delete control.dataset.confirmApproved;
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            const approved = await showConfirmDialog(control.dataset.confirmMessage || message);
+            if (!approved) {
+                triggerHaptics('WARNING');
+                return;
+            }
+
+            triggerHaptics('LIGHT');
+            control.dataset.confirmApproved = 'true';
+            if (control.tagName === 'A') {
+                window.location.href = control.href;
+                return;
+            }
+            const form = control.form || control.closest('form');
+            if (form && typeof form.requestSubmit === 'function') {
+                form.requestSubmit(control);
+            } else if (form) {
+                form.submit();
+            } else {
+                control.click();
+            }
+        });
+    });
+};
+
+const setupMobileTableCards = (scope = document) => {
+    scope.querySelectorAll('.table-shell table, table.table').forEach((table) => {
+        if (table.dataset.mobileCardsBound === 'true') {
+            return;
+        }
+
+        const headers = Array.from(table.querySelectorAll('thead th')).map((header) => header.textContent.trim());
+        if (headers.length === 0) {
+            return;
+        }
+
+        table.dataset.mobileCardsBound = 'true';
+        table.classList.add('mobile-card-table');
+        table.closest('.table-shell')?.classList.add('mobile-card-table-shell');
+
+        table.querySelectorAll('tbody tr').forEach((row) => {
+            const cells = Array.from(row.children).filter((cell) => cell.tagName === 'TD');
+            cells.forEach((cell, index) => {
+                if (!cell.dataset.label && headers[index]) {
+                    cell.dataset.label = headers[index];
+                }
+                if (/action|manage|status/i.test(headers[index] || '')) {
+                    cell.classList.add('mobile-card-actions');
+                }
+            });
+        });
+    });
+};
+
+const setupBottomSheetSelectors = (scope = document) => {
+    scope.querySelectorAll('.purchase-form select, .purchase-card select').forEach((select) => {
+        if (select.dataset.customSelectBound === 'true') {
+            return;
+        }
+        select.dataset.customSelectBound = 'true';
+
+        const defaultText = select.options[0]?.textContent || 'Select option';
+        select.dataset.placeholder = defaultText;
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'custom-select-trigger';
+        trigger.setAttribute('aria-haspopup', 'dialog');
+        trigger.setAttribute('aria-label', select.previousElementSibling?.textContent || defaultText);
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'placeholder';
+        labelSpan.textContent = select.value ? select.selectedOptions[0]?.textContent : defaultText;
+
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'arrow-icon';
+        arrowSpan.innerHTML = '&#9662;';
+
+        trigger.appendChild(labelSpan);
+        trigger.appendChild(arrowSpan);
+        select.parentNode.insertBefore(trigger, select.nextSibling);
+
+        select.addEventListener('change', () => {
+            const activeOption = select.selectedOptions[0];
+            labelSpan.textContent = activeOption && activeOption.value ? activeOption.textContent : defaultText;
+        });
+
+        const form = select.closest('form');
+        if (form) {
+            form.addEventListener('change', () => {
+                const activeOption = select.selectedOptions[0];
+                labelSpan.textContent = activeOption && activeOption.value ? activeOption.textContent : defaultText;
+            });
+        }
+
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (window.getComputedStyle(trigger).display === 'none') {
+                return;
+            }
+            openBottomSheetSelect(select, trigger);
+        });
+    });
+};
+
+const openBottomSheetSelect = (select, trigger) => {
+    const titleText = select.previousSibling?.textContent || select.dataset.placeholder || 'Choose Option';
+    const options = Array.from(select.options).filter(opt => opt.value !== "");
+    const currentValue = select.value;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'bottom-sheet-backdrop';
+
+    const panel = document.createElement('div');
+    panel.className = 'bottom-sheet-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', titleText);
+
+    const handle = document.createElement('div');
+    handle.className = 'bottom-sheet-handle';
+    panel.appendChild(handle);
+
+    const header = document.createElement('div');
+    header.className = 'bottom-sheet-header';
+
+    const title = document.createElement('h3');
+    title.textContent = titleText;
+    header.appendChild(title);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'bottom-sheet-close';
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.setAttribute('aria-label', 'Close dialog');
+    header.appendChild(closeBtn);
+
+    panel.appendChild(header);
+
+    let searchInput = null;
+    if (options.length > 6) {
+        const searchDiv = document.createElement('div');
+        searchDiv.className = 'bottom-sheet-search';
+        searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search ' + titleText.toLowerCase() + '...';
+        searchInput.setAttribute('aria-label', 'Search options');
+        searchDiv.appendChild(searchInput);
+        panel.appendChild(searchDiv);
+    }
+
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'bottom-sheet-options';
+
+    const checkSvg = `<svg class="bottom-sheet-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+    options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bottom-sheet-option';
+        if (opt.value === currentValue) {
+            btn.classList.add('is-selected');
+        }
+        btn.dataset.value = opt.value;
+        btn.innerHTML = `<span>${escapeHTML(opt.textContent)}</span>${checkSvg}`;
+        optionsDiv.appendChild(btn);
+
+        btn.addEventListener('click', () => {
+            select.value = opt.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            triggerHaptics('LIGHT');
+            closeSheet();
+        });
+    });
+
+    panel.appendChild(optionsDiv);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+
+    backdrop.offsetHeight;
+    backdrop.classList.add('is-open');
+    trigger.classList.add('is-active');
+
+    if (searchInput) {
+        searchInput.focus();
+    } else {
+        panel.focus();
+    }
+
+    setTimeout(() => {
+        const activeOpt = optionsDiv.querySelector('.bottom-sheet-option.is-selected');
+        if (activeOpt) {
+            activeOpt.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }, 120);
+
+    const closeSheet = () => {
+        backdrop.classList.remove('is-open');
+        trigger.classList.remove('is-active');
+        setTimeout(() => {
+            backdrop.remove();
+            trigger.focus();
+        }, 250);
+    };
+
+    closeBtn.addEventListener('click', closeSheet);
+    backdrop.addEventListener('click', (event) => {
+        if (event.target === backdrop) {
+            closeSheet();
+        }
+    });
+
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase().trim();
+            optionsDiv.querySelectorAll('.bottom-sheet-option').forEach(btn => {
+                const text = btn.textContent.toLowerCase();
+                if (query === '' || text.includes(query)) {
+                    btn.style.display = 'flex';
+                } else {
+                    btn.style.display = 'none';
+                }
+            });
+        });
+    }
+};
+
+const setupPullToRefresh = () => {
+    if (window.innerWidth >= 1024 || !['user', 'admin'].includes(document.body.dataset.appSection || '')) {
+        return;
+    }
+
+    let indicator = document.querySelector('.ptr-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'ptr-indicator';
+        indicator.innerHTML = '<span class="ptr-spinner"></span><span class="ptr-label">Pull to refresh</span>';
+        document.body.appendChild(indicator);
+    }
+
+    const label = indicator.querySelector('.ptr-label');
+
+    let startY = 0;
+    let currentY = 0;
+    let isPulling = false;
+    const threshold = 75;
+
+    document.addEventListener('touchstart', (e) => {
+        const target = e.target;
+        const isInteractive = target.closest?.('input, textarea, select, [contenteditable="true"], .bottom-sheet-backdrop, [data-purchase-modal], .gd-dialog-backdrop, .profile-menu, .guest-mobile-nav, #sidebar, .sidebar');
+        if (window.scrollY === 0 && !isInteractive) {
+            startY = e.touches[0].pageY;
+            isPulling = true;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isPulling) return;
+        currentY = e.touches[0].pageY;
+        const diff = currentY - startY;
+
+        if (diff > 0) {
+            const pullDistance = Math.min(diff * 0.4, threshold + 20);
+            indicator.style.transform = `translateX(-50%) translateY(${Math.min(-60 + pullDistance, 12)}px)`;
+            indicator.style.opacity = Math.min(pullDistance / threshold, 1);
+            indicator.classList.add('ptr-visible');
+
+            if (pullDistance >= threshold) {
+                indicator.classList.add('ptr-releasing');
+                label.textContent = 'Release to refresh';
+            } else {
+                indicator.classList.remove('ptr-releasing');
+                label.textContent = 'Pull to refresh';
+            }
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!isPulling) return;
+        isPulling = false;
+        const diff = currentY - startY;
+
+        if (diff * 0.4 >= threshold) {
+            indicator.style.transform = '';
+            indicator.style.opacity = '';
+            indicator.classList.add('ptr-loading');
+            indicator.classList.remove('ptr-releasing');
+            label.textContent = '';
+
+            triggerHaptics('LIGHT');
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
+        } else {
+            indicator.style.transform = '';
+            indicator.style.opacity = '';
+            indicator.classList.remove('ptr-visible', 'ptr-releasing');
+        }
+        startY = 0;
+        currentY = 0;
+    });
+};
+
+const setupPushNotifications = () => {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.PushNotifications) {
+        return;
+    }
+
+    const PushNotifications = window.Capacitor.Plugins.PushNotifications;
+    const runtime = getRuntime();
+    const eligibleSection = ['user', 'admin'].includes(runtime.section || document.body.dataset.appSection || '');
+
+    const requestAndRegister = async () => {
+        const result = await PushNotifications.requestPermissions();
+        if (result.receive === 'granted') {
+            await PushNotifications.register();
+            localStorage.setItem('gemdata-push-state', 'enabled');
+            document.querySelector('[data-push-permission-banner]')?.remove();
+            triggerHaptics('SUCCESS');
+        } else {
+            localStorage.setItem('gemdata-push-state', 'dismissed');
+            console.warn('Push notification permissions denied by user');
+        }
+    };
+
+    PushNotifications.addListener('registration', (token) => {
+        console.log('FCM Token registered successfully:', token.value);
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+        console.error('FCM Token registration failed:', error.error);
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Push notification received in foreground:', notification);
+        if (window.Capacitor.Plugins.Dialog) {
+            window.Capacitor.Plugins.Dialog.alert({
+                title: notification.title || 'GemData Notification',
+                message: notification.body || ''
+            });
+        }
+    });
+
+    PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        console.log('Push notification action tapped:', action);
+    });
+
+    document.querySelectorAll('[data-enable-push]').forEach((button) => {
+        if (button.dataset.pushBound === 'true') {
+            return;
+        }
+        button.dataset.pushBound = 'true';
+        button.addEventListener('click', () => {
+            requestAndRegister().catch((error) => console.warn('Push permission request failed', error));
+        });
+    });
+
+    if (!eligibleSection || localStorage.getItem('gemdata-push-state')) {
+        return;
+    }
+
+    window.setTimeout(() => {
+        if (localStorage.getItem('gemdata-push-state') || !document.body.isConnected) {
+            return;
+        }
+
+        const host = document.getElementById('connection-banner') || document.querySelector('#app-main-content');
+        if (!host || document.querySelector('[data-push-permission-banner]')) {
+            return;
+        }
+
+        const banner = document.createElement('div');
+        banner.className = 'mobile-permission-banner';
+        banner.dataset.pushPermissionBanner = 'true';
+        banner.innerHTML = `
+            <div>
+                <strong>Enable account alerts?</strong>
+                <span>Get transaction and security updates on this device.</span>
+            </div>
+            <div class="mobile-permission-actions">
+                <button type="button" class="secondary-action" data-dismiss-push>Not now</button>
+                <button type="button" class="primary-action" data-enable-push>Enable</button>
+            </div>
+        `;
+        if (host.id === 'connection-banner') {
+            host.insertAdjacentElement('afterend', banner);
+        } else {
+            host.prepend(banner);
+        }
+        banner.querySelector('[data-enable-push]')?.addEventListener('click', () => {
+            requestAndRegister().catch((error) => console.warn('Push permission request failed', error));
+        });
+        banner.querySelector('[data-dismiss-push]')?.addEventListener('click', () => {
+            localStorage.setItem('gemdata-push-state', 'dismissed');
+            banner.remove();
+        });
+    }, 1800);
+};
+
+const setupBiometricLogin = () => {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.Preferences) {
+        return;
+    }
+
+    const { Preferences } = window.Capacitor.Plugins;
+    const BiometricAuth = window.Capacitor.Plugins.BiometricAuth;
+    if (!BiometricAuth) {
+        return;
+    }
+
+    const pathname = window.location.pathname;
+
+    // 1. LOGIN PAGE FLOW
+    if (pathname.includes('/user/login.php') || document.querySelector('.gd-login-form')) {
+        const loginForm = document.querySelector('.gd-login-form');
+        if (!loginForm) return;
+
+        loginForm.addEventListener('submit', () => {
+            const emailInput = loginForm.querySelector('input[name="email"]');
+            const passwordInput = loginForm.querySelector('input[name="password"]');
+            if (emailInput && passwordInput && emailInput.value && passwordInput.value) {
+                localStorage.setItem('gd_just_submitted_login', 'true');
+                localStorage.setItem('gd_temp_email', emailInput.value.trim());
+                localStorage.setItem('gd_temp_password', passwordInput.value);
+            }
+        });
+
+        Preferences.get({ key: 'biometric_credentials' }).then((res) => {
+            if (res.value) {
+                const submitButton = loginForm.querySelector('.gd-login-submit');
+                if (submitButton) {
+                    const container = document.createElement('div');
+                    container.className = 'gd-biometric-login-container';
+                    container.style.cssText = 'display: flex; justify-content: center; margin-top: 1.25rem; width: 100%;';
+
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'gd-biometric-login-btn';
+                    button.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 0.5rem; background: var(--gd-launch-primary-soft); border: 1px solid var(--gd-launch-border); padding: 0.75rem 1.5rem; border-radius: 12px; cursor: pointer; color: var(--gd-launch-primary); outline: none; transition: all 0.2s ease; width: 100%; justify-content: center;';
+                    button.innerHTML = `
+                        <svg style="width: 32px; height: 32px;" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C11.07 2 10.15 2.14 9.27 2.42c-.52.17-.8.73-.63 1.25.17.52.73.8 1.25.63.75-.24 1.54-.36 2.33-.36 4.39 0 7.97 3.58 7.97 7.97 0 .53-.05 1.05-.15 1.56-.11.54.25 1.07.79 1.18.54.1 1.07-.25 1.18-.79.13-.64.2-1.3.2-1.95C22.25 6.38 17.65 1.75 12 2zm-1.09 4.3c-.53.11-.87.62-.77 1.15.28 1.4.42 2.84.42 4.29 0 2.53-2.06 4.6-4.6 4.6-.33 0-.66-.04-.98-.11-.53-.12-1.06.22-1.18.75s.22 1.06.75 1.18c.46.1 1.01.16 1.5.16 3.63 0 6.58-2.95 6.58-6.58 0-1.74-.18-3.47-.52-5.14-.11-.53-.63-.87-1.16-.77zm-3.1 2.37c-.47-.28-1.09-.13-1.37.34-.84 1.4-1.28 3.01-1.28 4.67 0 5.41 4.41 9.8 9.82 9.8 3.32 0 6.35-1.66 8.11-4.46.3-.47.16-1.09-.31-1.39-.47-.3-1.09-.16-1.39.31-1.39 2.22-3.8 3.54-6.42 3.54-4.32 0-7.82-3.51-7.82-7.8 0-1.33.35-2.61 1.02-3.73.28-.47.13-1.09-.34-1.37zm5.54-3.51c-.54 0-.97.43-.97.97 0 1.25.13 2.5.37 3.72.1.53.62.88 1.15.78.53-.1.88-.62.78-1.15-.2-.99-.3-1.99-.3-2.98.01-.54-.42-.97-.96-.97h-.07zm3.17 2.05c-.53-.1-1.05.25-1.15.79-.31 1.63-.47 3.3-.47 4.97 0 .54.43.97.97.97s.97-.43.97-.97c0-1.5.14-3.01.42-4.48.1-.53-.25-1.05-.79-1.15l-.05-.01z"/>
+                        </svg>
+                        <span style="font-size: 0.85rem; font-weight: 600; font-family: 'Plus Jakarta Sans', sans-serif;">Sign in with Fingerprint / Face ID</span>
+                    `;
+
+                    button.addEventListener('mouseenter', () => button.style.opacity = '0.9');
+                    button.addEventListener('mouseleave', () => button.style.opacity = '1');
+
+                    button.addEventListener('click', async () => {
+                        try {
+                            const check = await BiometricAuth.checkBiometry();
+                            if (!check.isAvailable) {
+                                if (window.Capacitor.Plugins.Dialog) {
+                                    window.Capacitor.Plugins.Dialog.alert({
+                                        title: 'Biometrics Unavailable',
+                                        message: 'Biometric login is not set up or supported on this device.'
+                                    });
+                                }
+                                return;
+                            }
+
+                            await BiometricAuth.authenticate({
+                                reason: 'Scan fingerprint to log in securely',
+                                cancelTitle: 'Cancel',
+                                allowDeviceCredential: true
+                            });
+
+                            const credsResult = await Preferences.get({ key: 'biometric_credentials' });
+                            if (credsResult.value) {
+                                const creds = JSON.parse(credsResult.value);
+                                const emailInput = loginForm.querySelector('input[name="email"]');
+                                const passwordInput = loginForm.querySelector('input[name="password"]');
+                                if (emailInput && passwordInput) {
+                                    emailInput.value = creds.email;
+                                    passwordInput.value = creds.password;
+
+                                    submitButton.disabled = true;
+                                    const loadingLabel = submitButton.getAttribute('data-loading-label');
+                                    if (loadingLabel) {
+                                        submitButton.textContent = loadingLabel;
+                                    }
+                                    loginForm.submit();
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Biometric authentication failed:', err);
+                        }
+                    });
+
+                    // Insert before the footer container
+                    const footerLink = loginForm.nextElementSibling;
+                    loginForm.parentNode.insertBefore(container, footerLink);
+
+                    // Auto-trigger biometric prompt on page load
+                    setTimeout(() => {
+                        button.click();
+                    }, 600);
+                }
+            }
+        });
+    }
+
+    // 2. DASHBOARD PAGE FLOW
+    if (pathname.includes('/user/dashboard.php') || document.querySelector('.gd-dashboard-grid')) {
+        const justLoggedIn = localStorage.getItem('gd_just_submitted_login');
+        if (justLoggedIn === 'true') {
+            localStorage.removeItem('gd_just_submitted_login');
+
+            const tempEmail = localStorage.getItem('gd_temp_email');
+            const tempPassword = localStorage.getItem('gd_temp_password');
+
+            localStorage.removeItem('gd_temp_email');
+            localStorage.removeItem('gd_temp_password');
+
+            if (tempEmail && tempPassword) {
+                Preferences.get({ key: 'biometric_credentials' }).then(async (res) => {
+                    if (!res.value) {
+                        try {
+                            const check = await BiometricAuth.checkBiometry();
+                            if (check.isAvailable) {
+                                if (window.Capacitor.Plugins.Dialog) {
+                                    const confirmResult = await window.Capacitor.Plugins.Dialog.confirm({
+                                        title: 'Enable Biometric Login',
+                                        message: 'Would you like to sign in faster next time using Fingerprint / Face ID?',
+                                        okButtonTitle: 'Yes, Enable',
+                                        cancelButtonTitle: 'No, Thanks'
+                                    });
+
+                                    if (confirmResult.value) {
+                                        await BiometricAuth.authenticate({
+                                            reason: 'Authenticate to enable biometric login',
+                                            cancelTitle: 'Cancel',
+                                            allowDeviceCredential: true
+                                        });
+
+                                        await Preferences.set({
+                                            key: 'biometric_credentials',
+                                            value: JSON.stringify({ email: tempEmail, password: tempPassword })
+                                        });
+
+                                        window.Capacitor.Plugins.Dialog.alert({
+                                            title: 'Success',
+                                            message: 'Biometric login has been enabled successfully!'
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Failed to configure biometrics on dashboard:', err);
+                        }
+                    }
+                });
+            }
+        }
+    }
 };
 
 const initializeGemDataApp = () => {
     document.body.dataset.standalone = (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) ? 'true' : 'false';
     setupTheme();
+    setupNativeConfirmForms();
     setupPasswordToggles();
     setupLoadingForms();
     setupSegmentedControls();
@@ -1612,14 +2474,96 @@ const initializeGemDataApp = () => {
     setupConnectivity();
     setupCopyButtons();
     setupAdminActionIcons();
+    setupMobileTableCards();
     setupReceiptActions();
+    setupBottomSheetSelectors();
     setupPurchaseModal();
     setupServiceWorker();
     replayOfflineQueue();
     setupSkeletonReadiness();
+    setupPullToRefresh();
+    setupPushNotifications();
+    setupBiometricLogin();
+    hideNativeSplashWhenReady();
+
     if (window.location.hash === '#services') {
         document.querySelectorAll('[data-nav-key]').forEach((item) => {
             item.classList.toggle('is-active', item.dataset.navKey === 'services');
+        });
+    }
+
+    // Initialize status bar style on app launch
+    syncStatusBar();
+
+    // Handle Android native back button
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && !window.__gemdataBackButtonBound) {
+        window.__gemdataBackButtonBound = true;
+        const App = window.Capacitor.Plugins.App;
+        App.addListener('backButton', (event) => {
+            const modal = document.querySelector('[data-purchase-modal]');
+            if (modal && !modal.hidden) {
+                const closeBtn = modal.querySelector('[data-purchase-close]');
+                if (closeBtn) {
+                    closeBtn.click();
+                } else {
+                    modal.hidden = true;
+                    document.body.classList.remove('purchase-modal-open');
+                }
+                return;
+            }
+
+            const openSheet = document.querySelector('.bottom-sheet-backdrop.is-open');
+            if (openSheet) {
+                openSheet.querySelector('.bottom-sheet-close')?.click();
+                return;
+            }
+
+            const openDialog = document.querySelector('.gd-dialog-backdrop.is-open');
+            if (openDialog) {
+                openDialog.querySelector('[data-dialog-result="cancel"], [data-dialog-result="ok"]')?.click();
+                return;
+            }
+
+            const shell = document.querySelector('.app-shell');
+            if (shell && shell.classList.contains('is-sidebar-open')) {
+                shell.classList.remove('is-sidebar-open');
+                return;
+            }
+
+            const userSidebar = document.getElementById('sidebar');
+            const userSidebarOverlay = document.getElementById('sidebar-overlay');
+            if (userSidebar && !userSidebar.classList.contains('-translate-x-full')) {
+                userSidebar.classList.add('-translate-x-full');
+                userSidebarOverlay?.classList.add('hidden');
+                return;
+            }
+
+            const mobilePermission = document.querySelector('[data-push-permission-banner]');
+            if (mobilePermission) {
+                mobilePermission.remove();
+                return;
+            }
+
+            const guestPanel = document.querySelector('[data-guest-nav-panel].is-open');
+            if (guestPanel) {
+                guestPanel.classList.remove('is-open');
+                guestPanel.hidden = true;
+                return;
+            }
+
+            const openProfileMenus = document.querySelectorAll('[data-profile-menu].is-open');
+            if (openProfileMenus.length > 0) {
+                openProfileMenus.forEach((menu) => menu.classList.remove('is-open'));
+                return;
+            }
+
+            const pathname = window.location.pathname;
+            const isRootScreen = pathname === '/' || pathname.endsWith('/launch.php') || pathname.endsWith('/index.php') || pathname.includes('/user/dashboard.php');
+            if (!isRootScreen && (event?.canGoBack || window.history.length > 1)) {
+                window.history.back();
+            } else {
+                App.exitApp();
+            }
         });
     }
 };

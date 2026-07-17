@@ -203,6 +203,20 @@ $fallbackUrl = $destination;
     </main>
     <script nonce="<?= e(csp_nonce()); ?>">
         (function () {
+            var nativeSplashHidden = false;
+            var hideNativeSplash = function () {
+                if (nativeSplashHidden || !window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.SplashScreen) {
+                    return;
+                }
+                nativeSplashHidden = true;
+                window.Capacitor.Plugins.SplashScreen.hide().catch(function () {});
+            };
+            var hideNativeSplashAfterPaint = function () {
+                window.requestAnimationFrame(function () {
+                    window.requestAnimationFrame(hideNativeSplash);
+                });
+            };
+
             var screen = document.querySelector('[data-continue-url]');
             if (!screen) {
                 return;
@@ -226,16 +240,19 @@ $fallbackUrl = $destination;
             };
 
             if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                hideNativeSplashAfterPaint();
                 window.requestAnimationFrame(function () {
                     window.requestAnimationFrame(continueToApp);
                 });
             } else {
                 document.addEventListener('DOMContentLoaded', function () {
+                    hideNativeSplashAfterPaint();
                     window.requestAnimationFrame(function () {
                         window.requestAnimationFrame(continueToApp);
                     });
                 }, { once: true });
             }
+            window.setTimeout(hideNativeSplash, 3000);
         }());
     </script>
 </body>

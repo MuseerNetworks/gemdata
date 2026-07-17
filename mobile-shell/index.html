@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1B4DFF">
+  <title>GemData</title>
+  <style>
+    :root {
+      --gd-launch-bg: #f4f8fc;
+      --gd-launch-surface: rgba(255, 255, 255, 0.88);
+      --gd-launch-text: #0f172a;
+      --gd-launch-muted: #64748b;
+      --gd-launch-primary: #1B4DFF;
+      --gd-launch-primary-soft: rgba(27, 77, 255, 0.12);
+      --gd-launch-border: rgba(148, 163, 184, 0.20);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 28%, var(--gd-launch-primary-soft), transparent 34%),
+        var(--gd-launch-bg);
+      color: var(--gd-launch-text);
+      font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    }
+
+    .launch-screen {
+      width: min(100%, 24rem);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      animation: launchFadeIn 520ms ease both;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .launch-logo {
+      width: clamp(5.5rem, 20vw, 7.25rem);
+      height: clamp(5.5rem, 20vw, 7.25rem);
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--gd-launch-border);
+      border-radius: 1.8rem;
+      background: var(--gd-launch-surface);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+      animation: launchLogoScale 1400ms ease-in-out infinite alternate;
+    }
+
+    .launch-logo img {
+      width: 68%;
+      height: 68%;
+      object-fit: contain;
+    }
+
+    .launch-screen h1 {
+      margin: 1.2rem 0 0;
+      font-size: clamp(2rem, 8vw, 2.8rem);
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .launch-slogan {
+      margin: 0.7rem 0 0;
+      color: var(--gd-launch-muted);
+      font-size: clamp(0.92rem, 3.8vw, 1.02rem);
+      font-weight: 700;
+    }
+
+    .launch-dots {
+      display: inline-flex;
+      gap: 0.42rem;
+      margin-top: 1.25rem;
+    }
+
+    .launch-dots span {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 999px;
+      background: var(--gd-launch-primary);
+      opacity: 0.35;
+      animation: launchDotPulse 1000ms ease-in-out infinite;
+    }
+
+    .launch-dots span:nth-child(2) {
+      animation-delay: 140ms;
+    }
+
+    .launch-dots span:nth-child(3) {
+      animation-delay: 280ms;
+    }
+
+    .offline-notice {
+      margin-top: 2rem;
+      padding: 12px 20px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 12px;
+      color: #ef4444;
+      font-size: 0.9rem;
+      font-weight: 600;
+      max-width: 80%;
+      animation: launchFadeIn 800ms ease both;
+    }
+
+    @keyframes launchFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(0.45rem);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes launchLogoScale {
+      from {
+        transform: scale(1);
+      }
+      to {
+        transform: scale(1.03);
+      }
+    }
+
+    @keyframes launchDotPulse {
+      0%,
+      80%,
+      100% {
+        opacity: 0.35;
+        transform: translateY(0);
+      }
+      40% {
+        opacity: 1;
+        transform: translateY(-0.18rem);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .launch-screen,
+      .launch-logo,
+      .launch-dots span,
+      .offline-notice {
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="launch-screen" role="status" aria-live="polite">
+    <div class="launch-logo" aria-hidden="true">
+      <img src="assets/brand/icon.png" alt="GemData Logo">
+    </div>
+
+    <h1>GemData</h1>
+    <p class="launch-slogan">Fast &bull; Secure &bull; Reliable</p>
+
+    <span class="launch-dots" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+
+    <!-- Offline fallback description -->
+    <div class="offline-notice">
+      Please check your internet connection and try again.
+    </div>
+
+    <button type="button" id="retry-launch" style="margin-top: 1rem; border: 0; border-radius: 999px; background: #1B4DFF; color: #fff; font-weight: 800; padding: 0.8rem 1.35rem;">
+      Retry
+    </button>
+  </main>
+  <script>
+    (function () {
+      var hideSplash = function () {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen) {
+          window.Capacitor.Plugins.SplashScreen.hide().catch(function () {});
+        }
+      };
+
+      if (document.readyState === 'complete') {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(hideSplash);
+        });
+      } else {
+        window.addEventListener('load', function () {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(hideSplash);
+          });
+        }, { once: true });
+      }
+
+      window.setTimeout(hideSplash, 3000);
+
+      document.getElementById('retry-launch')?.addEventListener('click', function () {
+        window.location.href = 'https://gemdata.com.ng/launch.php';
+      });
+    }());
+  </script>
+</body>
+</html>
