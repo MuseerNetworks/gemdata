@@ -12,7 +12,19 @@ if (!headers_sent()) {
     header('Content-Type: application/json; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
-    header('Access-Control-Allow-Origin: capacitor://localhost, http://localhost');
+
+    $allowedOrigins = [
+        'http://localhost',
+        'https://localhost',
+        'capacitor://localhost'
+    ];
+    $requestOrigin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (in_array($requestOrigin, $allowedOrigins, true)) {
+        header("Access-Control-Allow-Origin: " . $requestOrigin);
+    } else {
+        header("Access-Control-Allow-Origin: http://localhost");
+    }
+
     header('Access-Control-Allow-Credentials: true');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
