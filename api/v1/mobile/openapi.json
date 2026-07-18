@@ -1,0 +1,336 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GemData v1 Mobile API",
+    "description": "Production-grade versioned endpoints for the GemData Capacitor mobile application. Uses session cookie-based authentication.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/api/v1/mobile",
+      "description": "Local/Production API Base"
+    }
+  ],
+  "paths": {
+    "/auth/login.php": {
+      "post": {
+        "summary": "Authenticate User",
+        "description": "Authenticates user credentials and starts a secure PHP session. Rate limited to 5 requests per minute.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "user@gemdata.com.ng" },
+                  "password": { "type": "string", "example": "password123" }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful.",
+            "headers": {
+              "Set-Cookie": { "schema": { "type": "string" }, "description": "PHPSESSID cookie for subsequent sessions." }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Successfully authenticated." },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "integer", "example": 18 },
+                            "email": { "type": "string", "example": "user@gemdata.com.ng" },
+                            "full_name": { "type": "string", "example": "GemData User" },
+                            "balance": { "type": "number", "example": 25000.5 }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "message": { "type": "string", "example": "Invalid email or password." }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "message": { "type": "string", "example": "Too many requests. Please try again in a minute." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout.php": {
+      "post": {
+        "summary": "Invalidate Session",
+        "description": "Terminates the user's active session and expires the session cookie.",
+        "responses": {
+          "200": {
+            "description": "Logged out successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Successfully logged out." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/session.php": {
+      "get": {
+        "summary": "Check Active Session",
+        "description": "Verifies if the PHPSESSID cookie is active and returning user profile metrics.",
+        "responses": {
+          "200": {
+            "description": "Active session validation data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Session is active." },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "integer", "example": 18 },
+                            "email": { "type": "string", "example": "user@gemdata.com.ng" },
+                            "full_name": { "type": "string", "example": "GemData User" },
+                            "balance": { "type": "number", "example": 25000.5 }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized or timed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "message": { "type": "string", "example": "Your session has expired. Please sign in again." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/dashboard.php": {
+      "get": {
+        "summary": "Fetch Dashboard Data",
+        "description": "Returns user profiles, wallet status, assigned virtual accounts, active service catalogs, and recent transactions list.",
+        "responses": {
+          "200": {
+            "description": "Dashboard dataset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Dashboard metrics fetched." },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "full_name": { "type": "string", "example": "GemData User" },
+                            "email": { "type": "string", "example": "user@gemdata.com.ng" },
+                            "role": { "type": "string", "example": "smart" },
+                            "role_label": { "type": "string", "example": "Smart User" },
+                            "wallet_pin_configured": { "type": "boolean", "example": true }
+                          }
+                        },
+                        "wallet": {
+                          "type": "object",
+                          "properties": {
+                            "balance": { "type": "number", "example": 25000.5 }
+                          }
+                        },
+                        "stats": {
+                          "type": "object",
+                          "properties": {
+                            "total_transactions": { "type": "integer", "example": 142 },
+                            "total_spent": { "type": "number", "example": 89400.0 },
+                            "profit": { "type": "number", "example": 0.0 },
+                            "success_rate": { "type": "number", "example": 98.7 }
+                          }
+                        },
+                        "funding_accounts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "bank_name": { "type": "string", "example": "Wema Bank" },
+                              "account_number": { "type": "string", "example": "1234567890" },
+                              "account_name": { "type": "string", "example": "GEMDATA/USER" }
+                            }
+                          }
+                        },
+                        "recent_transactions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "reference": { "type": "string", "example": "GDTF3A95E12" },
+                              "service": { "type": "string", "example": "airtime" },
+                              "recipient": { "type": "string", "example": "08030000000" },
+                              "amount": { "type": "number", "example": 1000.0 },
+                              "status": { "type": "string", "example": "successful" },
+                              "created_at": { "type": "string", "example": "2026-07-16 12:00:00" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized."
+          }
+        }
+      }
+    },
+    "/services/buy-airtime.php": {
+      "post": {
+        "summary": "Fulfill Airtime Purchase",
+        "description": "Executes VTU airtime recharge transaction on target recipient. Rate limited to 10 requests per minute.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "network": { "type": "string", "example": "mtn" },
+                  "phone": { "type": "string", "example": "08030000000" },
+                  "amount": { "type": "number", "example": 500.0 },
+                  "security_pin": { "type": "string", "example": "1234" }
+                },
+                "required": ["network", "phone", "amount", "security_pin"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction queued successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Transaction accepted and queued for processing." },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "reference": { "type": "string", "example": "GDTF3A95E12" },
+                        "amount": { "type": "number", "example": 500.0 },
+                        "status": { "type": "string", "example": "pending" },
+                        "wallet_balance": { "type": "number", "example": 24500.5 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failure or incorrect PIN."
+          },
+          "400": {
+            "description": "Fulfillment failure (e.g. Insufficient Balance)."
+          }
+        }
+      }
+    },
+    "/services/buy-data.php": {
+      "post": {
+        "summary": "Fulfill Data Purchase",
+        "description": "Fulfills data bundle subscription. Rate limited to 10 requests per minute.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "network": { "type": "string", "example": "mtn" },
+                  "plan": { "type": "string", "example": "MTN_SME_1GB" },
+                  "phone": { "type": "string", "example": "08030000000" },
+                  "amount": { "type": "number", "example": 250.0 },
+                  "security_pin": { "type": "string", "example": "1234" }
+                },
+                "required": ["network", "plan", "phone", "amount", "security_pin"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction queued successfully."
+          },
+          "422": {
+            "description": "Validation failure."
+          }
+        }
+      }
+    }
+  }
+}

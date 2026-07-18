@@ -12,7 +12,7 @@ if ($method !== 'POST') {
     app(\GemData\Classes\Response::class)->json('error', 'Method not allowed.', [], [], [], 405);
 }
 
-$payload = file_get_contents('php://input') ?: '';
+$payload = $GLOBALS['__mock_php_input'] ?? (file_get_contents('php://input') ?: '');
 $headers = function_exists('getallheaders') ? getallheaders() : [];
 $secretKey = trim((string) config('payments.katpay_secret_key', ''));
 

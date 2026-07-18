@@ -151,6 +151,9 @@ render_header('Register');
     <div class="mt-5 text-sm text-gem-muted">
         Already have an account? <a class="text-gem-blue font-bold" href="<?= e(base_url('user/login.php')); ?>">Sign in</a>
     </div>
+    <div class="mt-4 text-xs text-gem-muted" style="border-top: 1px solid rgba(148, 163, 184, 0.15); padding-top: 1rem;">
+        By registering, you agree to our <a class="text-gem-blue font-bold" href="<?= e(base_url('privacy-policy.php')); ?>">Privacy Policy</a> and <a class="text-gem-blue font-bold" href="<?= e(base_url('terms-of-service.php')); ?>">Terms of Service</a>.
+    </div>
     </section>
 </div>
 <?php render_footer(); ?>
