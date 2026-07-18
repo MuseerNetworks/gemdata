@@ -3,6 +3,12 @@
   "appName": "GemData",
   "webDir": "mobile-shell",
   "plugins": {
+    "CapacitorCookies": {
+      "enabled": true
+    },
+    "CapacitorHttp": {
+      "enabled": true
+    },
     "SplashScreen": {
       "launchShowDuration": 3000,
       "launchAutoHide": false,

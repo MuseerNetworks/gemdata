@@ -28,6 +28,26 @@ if (!headers_sent()) {
     header('Access-Control-Allow-Credentials: true');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+
+    // Re-initialize session with SameSite=None to allow cross-origin cookie transmission in WebViews
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $sessionId = session_id();
+        session_write_close();
+        
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'domain' => '',
+            'secure' => true,
+            'httponly' => true,
+            'samesite' => 'None',
+        ]);
+        
+        if ($sessionId !== '') {
+            session_id($sessionId);
+        }
+        session_start();
+    }
 }
 
 // Handle OPTIONS preflight requests
