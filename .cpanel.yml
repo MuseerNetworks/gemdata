@@ -5,6 +5,7 @@ deployment:
     - export DEPLOYPATH=/home/yyrigitd/public_html/
 
     - /bin/cp index.php $DEPLOYPATH
+    - /bin/cp launch.php $DEPLOYPATH
 
     - /bin/cp -R admin $DEPLOYPATH
     - /bin/cp -R api $DEPLOYPATH
