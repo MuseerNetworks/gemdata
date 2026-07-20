@@ -21,13 +21,23 @@ const Api = {
       ...options
     };
 
+    // Inject Bearer token header if refresh token exists in local storage
+    const token = localStorage.getItem('gemdata_refresh_token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+
     if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
       config.headers['Content-Type'] = 'application/json';
       config.body = JSON.stringify(options.body);
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const response = await fetch(url, config);
+      const response = await fetch(url, { ...config, signal: controller.signal });
+      clearTimeout(timeoutId);
       const payload = await response.json().catch(() => ({}));
 
       // Intercept expired or invalid session state
@@ -35,6 +45,7 @@ const Api = {
         // Clear local credentials cache
         localStorage.removeItem('gemdata_user_cache');
         localStorage.removeItem('gemdata_dashboard_cache');
+        localStorage.removeItem('gemdata_refresh_token');
         
         // Auto-redirect to login screen and render session expiry notice
         window.location.hash = '#/login?expired=1';

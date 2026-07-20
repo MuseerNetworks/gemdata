@@ -23,7 +23,9 @@ $dashboardData = $controller->dataFor($user);
 // Sanitize and map the response data payload
 $mappedTransactions = array_map(static fn(array $tx): array => [
     'reference' => (string) ($tx['reference'] ?? ''),
-    'service' => (string) ($tx['service_slug'] ?? ''),
+    'service' => (string) ($tx['service_name'] ?? $tx['service_slug'] ?? ''),
+    'service_slug' => (string) ($tx['service_slug'] ?? ''),
+    'channel' => (string) ($tx['channel'] ?? ''),
     'recipient' => (string) ($tx['recipient'] ?? ''),
     'amount' => (float) ($tx['amount'] ?? 0),
     'status' => (string) ($tx['status'] ?? 'pending'),
@@ -46,6 +48,29 @@ $mappedFunding = array_map(static fn(array $row): array => [
     'account_name' => (string) ($row['account_name'] ?? '')
 ], $assignedFundingAccounts);
 
+$mapPlan = static fn(array $plan): array => [
+    'network_code' => (string) ($plan['network_code'] ?? ''),
+    'network_name' => (string) ($plan['network_name'] ?? ''),
+    'local_plan_code' => (string) ($plan['local_plan_code'] ?? ''),
+    'local_plan_name' => (string) ($plan['local_plan_name'] ?? ''),
+    'amount' => (float) ($plan['amount'] ?? 0),
+    'validity_label' => trim((string) ($plan['validity_label'] ?? '')) !== '' ? (string) $plan['validity_label'] : '',
+];
+
+$providerPlanCatalogs = [];
+foreach (($dashboardData['provider_plan_catalogs'] ?? []) as $slug => $catalog) {
+    $providerPlanCatalogs[(string) $slug] = array_map($mapPlan, array_values((array) $catalog));
+}
+
+$totalTransactions = (int) ($dashboardData['stats']['transactions'] ?? 0);
+$successfulTransactions = 0;
+if ($totalTransactions > 0) {
+    $successfulTransactions = (int) db()->safeFirst(
+        'SELECT COUNT(*) AS total FROM transactions WHERE user_id = :user_id AND status = "successful"',
+        ['user_id' => (int) $user['id']]
+    )['total'] ?? 0;
+}
+
 http_response_code(200);
 echo json_encode([
     'success' => true,
@@ -62,10 +87,10 @@ echo json_encode([
             'balance' => (float) ($dashboardData['wallet']['balance'] ?? 0),
         ],
         'stats' => [
-            'total_transactions' => (int) ($dashboardData['stats']['transactions'] ?? 0),
+            'total_transactions' => $totalTransactions,
             'total_spent' => (float) ($dashboardData['stats']['total_spend'] ?? 0),
             'profit' => (float) ($dashboardData['reseller']['estimated_profit'] ?? 0),
-            'success_rate' => $dashboardData['stats']['transactions'] > 0 ? 98.7 : 0
+            'success_rate' => $totalTransactions > 0 ? round(($successfulTransactions / $totalTransactions) * 100, 1) : 0
         ],
         'funding_accounts' => $mappedFunding,
         'recent_transactions' => $mappedTransactions,
@@ -74,12 +99,11 @@ echo json_encode([
             'slug' => (string) $srv['slug'],
             'status' => (string) ($srv['status'] ?? 'active')
         ], $dashboardData['services'] ?? []),
-        'data_plan_catalog' => array_map(static fn(array $plan): array => [
-            'network' => (string) ($plan['network_code'] ?? ''),
-            'value' => (string) ($plan['local_plan_code'] ?? ''),
-            'label' => (string) ($plan['local_plan_name'] ?? ''),
-            'amount' => (float) ($plan['amount'] ?? 0),
-            'validity' => trim((string) ($plan['validity_label'] ?? '')) !== '' ? (string) $plan['validity_label'] : 'Available plan'
-        ], array_values($dashboardData['data_plan_catalog'] ?? []))
+        'service_meta' => $dashboardData['service_meta'] ?? [],
+        'service_networks' => $dashboardData['service_networks'] ?? [],
+        'provider_plan_catalogs' => $providerPlanCatalogs,
+        'data_plan_catalog' => array_map($mapPlan, array_values($dashboardData['data_plan_catalog'] ?? [])),
+        'upgrade' => $dashboardData['upgrade'] ?? null,
+        'reseller' => $dashboardData['reseller'] ?? null
     ]
 ], JSON_UNESCAPED_SLASHES);

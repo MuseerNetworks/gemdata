@@ -36,13 +36,53 @@ if ($email === '' || $password === '') {
     exit;
 }
 
+$db = db();
+$checkUser = $db->first('SELECT * FROM users WHERE email = :email LIMIT 1', ['email' => $email]);
+if ($checkUser && !empty($checkUser['security_lock_until']) && strtotime((string) $checkUser['security_lock_until']) > time()) {
+    $diff = strtotime((string) $checkUser['security_lock_until']) - time();
+    $minutes = max(1, (int) ceil($diff / 60));
+    http_response_code(423); // 423 Locked
+    echo json_encode([
+        'success' => false,
+        'message' => "This account is temporarily locked due to repeated failed login attempts. Try again in {$minutes} minute(s)."
+    ]);
+    exit;
+}
+
 if (auth()->loginUser($email, $password)) {
     $user = user();
+    
+    // Generate secure refresh token for mobile app auto-login/token storage
+    $refreshToken = bin2hex(random_bytes(32));
+    $tokenHash = hash('sha256', $refreshToken);
+    $deviceId = trim((string) ($input['device_id'] ?? 'unknown_device'));
+    $expiresAt = date('Y-m-d H:i:s', time() + 30 * 86400); // Valid for 30 days
+    
+    $db = db();
+    // Delete any old session token for this user and device
+    $db->execute('DELETE FROM mobile_device_tokens WHERE user_id = :user_id AND device_id = :device_id', [
+        'user_id' => (int) $user['id'],
+        'device_id' => $deviceId
+    ]);
+    
+    // Store new token
+    $db->execute(
+        'INSERT INTO mobile_device_tokens (user_id, device_id, token_hash, expires_at) 
+         VALUES (:user_id, :device_id, :token_hash, :expires_at)',
+        [
+            'user_id' => (int) $user['id'],
+            'device_id' => $deviceId,
+            'token_hash' => $tokenHash,
+            'expires_at' => $expiresAt
+        ]
+    );
+
     http_response_code(200);
     echo json_encode([
         'success' => true,
         'message' => 'Successfully authenticated.',
         'data' => [
+            'refresh_token' => $refreshToken,
             'user' => [
                 'id' => (int) $user['id'],
                 'email' => (string) $user['email'],

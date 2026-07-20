@@ -16,7 +16,7 @@ const ScreenWallet = {
 
           <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px; color: var(--color-text);">Your Virtual Bank Accounts</h3>
           <div id="wallet-banks-container" style="display: flex; flex-direction: column; gap: 12px;">
-            <div style="font-size: 0.88rem; color: var(--color-text-muted);">Fetching accounts...</div>
+            <div class="shimmer-skeleton skeleton-list-item" style="height: 120px;"></div>
           </div>
         </main>
 
@@ -25,6 +25,16 @@ const ScreenWallet = {
     `;
 
     this.loadData();
+
+    // Configure Pull-to-refresh gesture
+    const scrollEl = this.container.querySelector('.app-main');
+    App.enablePullToRefresh(scrollEl, async () => {
+      const result = await Api.get('/user/dashboard.php');
+      if (result.success) {
+        localStorage.setItem('gemdata_dashboard_cache', JSON.stringify(result.data));
+        this.loadData();
+      }
+    });
   },
 
   loadData() {

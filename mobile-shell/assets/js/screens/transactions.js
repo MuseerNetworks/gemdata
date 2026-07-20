@@ -22,46 +22,62 @@ const ScreenTransactions = {
     `;
 
     this.loadData();
+
+    // Configure Pull-to-refresh gesture
+    const scrollEl = this.container.querySelector('.app-main');
+    App.enablePullToRefresh(scrollEl, async () => {
+      await this.loadData();
+    });
   },
 
-  loadData() {
-    const cache = localStorage.getItem('gemdata_dashboard_cache');
-    if (cache) {
-      try {
-        const data = JSON.parse(cache);
-        const container = document.getElementById('history-tx-container');
-        
-        // Update balance indicator in header
-        App.updateHeaderBalance(data.wallet.balance);
+  async loadData() {
+    const container = document.getElementById('history-tx-container');
+    if (!container) return;
 
-        if (container) {
-          if (data.recent_transactions && data.recent_transactions.length > 0) {
-            container.innerHTML = data.recent_transactions.map(tx => `
-              <div class="tx-item">
-                <div class="tx-left">
-                  <span class="tx-title">${tx.service} - ${tx.recipient}</span>
-                  <span class="tx-meta">${tx.created_at}</span>
-                  <span class="tx-meta" style="font-family: monospace; font-size: 0.7rem; color: var(--color-primary);">${tx.reference}</span>
-                </div>
-                <div class="tx-right">
-                  <span class="tx-amount">NGN ${Number(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                  <div>
-                    <span class="badge badge-${tx.status}">${tx.status}</span>
-                  </div>
-                </div>
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="shimmer-skeleton skeleton-list-item" style="height: 60px;"></div>
+        <div class="shimmer-skeleton skeleton-list-item" style="height: 60px;"></div>
+        <div class="shimmer-skeleton skeleton-list-item" style="height: 60px;"></div>
+      </div>
+    `;
+
+    const response = await Api.get('/user/transactions.php');
+    if (response.success && response.data) {
+      const data = response.data;
+      if (data.length > 0) {
+        container.innerHTML = data.map(tx => `
+          <div class="tx-item" style="cursor: pointer; transition: transform 0.2s;" onclick="Router.navigate('#/receipt?reference=${tx.reference}')">
+            <div class="tx-left">
+              <span class="tx-title">${tx.service} - ${tx.recipient}</span>
+              <span class="tx-meta">${tx.created_at}</span>
+              <span class="tx-meta" style="font-family: monospace; font-size: 0.7rem; color: var(--color-primary);">${tx.reference}</span>
+            </div>
+            <div class="tx-right">
+              <span class="tx-amount">NGN ${Number(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              <div>
+                <span class="badge badge-${tx.status}">${tx.status}</span>
               </div>
-            `).join('');
-          } else {
-            container.innerHTML = `
-              <div style="font-size: 0.85rem; color: var(--color-text-muted); background: var(--color-surface); border: 1px solid var(--color-border); padding: 16px; border-radius: var(--radius-md); text-align: center;">
-                No transactions found.
-              </div>
-            `;
-          }
-        }
-      } catch (err) {
-        console.error('Failed to render transaction history:', err);
+            </div>
+          </div>
+        `).join('');
+      } else {
+        container.innerHTML = `
+          <div style="font-size: 0.85rem; color: var(--color-text-muted); background: var(--color-surface); border: 1px solid var(--color-border); padding: 16px; border-radius: var(--radius-md); text-align: center;">
+            No transactions found.
+          </div>
+        `;
       }
+      
+      if (window.SyncEngine) {
+        window.SyncEngine.refreshLocalTransactionLogs();
+      }
+    } else {
+      container.innerHTML = `
+        <div class="alert alert-danger" style="margin: 0; padding: 10px;">
+          ${response.message || 'Unable to sync history.'}
+        </div>
+      `;
     }
   },
 

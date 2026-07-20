@@ -149,3 +149,35 @@ set_exception_handler(static function (Throwable $e): void {
     ], JSON_UNESCAPED_SLASHES);
     exit;
 });
+
+// Extract Authorization Bearer token from request headers
+function get_bearer_token(): ?string
+{
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null;
+    if (!$header && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        $header = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+    }
+    if ($header && preg_match('/Bearer\s+(.*)$/i', $header, $matches)) {
+        return trim($matches[1]);
+    }
+    return null;
+}
+
+// Authenticate session via device refresh token if cookie session is not set or active
+if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['user_id'])) {
+    $bearer = get_bearer_token();
+    if ($bearer !== null) {
+        $tokenHash = hash('sha256', $bearer);
+        $tokenRow = db()->first(
+            'SELECT * FROM mobile_device_tokens WHERE token_hash = :hash AND expires_at > NOW() LIMIT 1',
+            ['hash' => $tokenHash]
+        );
+        if ($tokenRow) {
+            $_SESSION['user_id'] = (int) $tokenRow['user_id'];
+            $_SESSION['last_activity_at'] = time();
+            $_SESSION['mobile_device_id'] = (string) $tokenRow['device_id'];
+        }
+    }
+}
+

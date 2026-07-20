@@ -18,8 +18,14 @@ const ScreenDashboard = {
       }
     }
 
-    // 3. Trigger API call to fetch fresh data
-    await this.fetchFreshData();
+    // 3. Trigger API call to fetch fresh data in background (non-blocking so splash screen hides immediately)
+    this.fetchFreshData();
+
+    // 4. Configure Pull-to-refresh gesture
+    const scrollEl = this.container.querySelector('.app-main');
+    App.enablePullToRefresh(scrollEl, async () => {
+      await this.fetchFreshData();
+    });
   },
 
   renderSkeleton() {
@@ -37,33 +43,72 @@ const ScreenDashboard = {
 
           <!-- Quick Services -->
           <div style="margin-bottom: 24px;">
-            <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px; color: var(--color-text);">Quick Services</h3>
-            <div class="grid-cols-2">
-              <button class="menu-card" onclick="Router.navigate('#/buy?service=airtime')">
-                <div class="icon-box green">
-                  <svg style="width: 22px; height: 22px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h18M3 10h18M3 15h12M3 20h7"/>
+            <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px; color: var(--color-text);">Utility Services</h3>
+            <div class="grid-cols-2" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+              <button class="menu-card" onclick="Router.navigate('#/buy?service=airtime')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box green" style="width: 36px; height: 36px;">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                   </svg>
                 </div>
-                <div style="font-size: 0.88rem; font-weight: 800;">Buy Airtime</div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Airtime</div>
               </button>
 
-              <button class="menu-card" onclick="Router.navigate('#/buy?service=data')">
-                <div class="icon-box blue">
-                  <svg style="width: 22px; height: 22px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <button class="menu-card" onclick="Router.navigate('#/buy?service=data')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box blue" style="width: 36px; height: 36px;">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0"/>
                   </svg>
                 </div>
-                <div style="font-size: 0.88rem; font-weight: 800;">Buy Data</div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Data</div>
+              </button>
+
+              <button class="menu-card" onclick="Router.navigate('#/cable')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box purple" style="width: 36px; height: 36px;">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                  </svg>
+                </div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Cable TV</div>
+              </button>
+
+              <button class="menu-card" onclick="Router.navigate('#/electricity')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box orange" style="width: 36px; height: 36px;">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                  </svg>
+                </div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Electricity</div>
+              </button>
+
+              <button class="menu-card" onclick="Router.navigate('#/exam')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box green" style="width: 36px; height: 36px; background: hsl(172, 70%, 40%);">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Exam PINs</div>
+              </button>
+
+              <button class="menu-card" onclick="Router.navigate('#/upgrade')" style="padding: 12px 8px; text-align: center; align-items: center;">
+                <div class="icon-box blue" style="width: 36px; height: 36px; background: hsl(342, 85%, 55%);">
+                  <svg style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                  </svg>
+                </div>
+                <div style="font-size: 0.78rem; font-weight: 800; margin-top: 4px;">Upgrade</div>
               </button>
             </div>
           </div>
+
+          <!-- Quick Re-purchase Widget Staging Container -->
+          <div id="dashboard-recent-purchases-container"></div>
 
           <!-- Funding Accounts -->
           <div id="funding-section" style="margin-bottom: 24px;">
             <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px; color: var(--color-text);">Bank Funding Accounts</h3>
             <div id="funding-accounts-container" style="display: flex; flex-direction: column; gap: 8px;">
-              <div style="font-size: 0.88rem; color: var(--color-text-muted);">Fetching accounts...</div>
+              <div class="shimmer-skeleton skeleton-list-item" style="height: 52px;"></div>
             </div>
           </div>
 
@@ -71,7 +116,8 @@ const ScreenDashboard = {
           <div>
             <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px; color: var(--color-text);">Recent Activity</h3>
             <div id="recent-transactions-container" class="tx-list">
-              <div style="font-size: 0.88rem; color: var(--color-text-muted);">Fetching transactions...</div>
+              <div class="shimmer-skeleton skeleton-list-item" style="height: 60px; margin-bottom: 8px;"></div>
+              <div class="shimmer-skeleton skeleton-list-item" style="height: 60px;"></div>
             </div>
           </div>
         </main>
@@ -105,6 +151,12 @@ const ScreenDashboard = {
       dashRoleEl.textContent = data.user.role_label || 'Smart User';
     }
 
+    // Render Recent purchases widget
+    const recentsContainer = document.getElementById('dashboard-recent-purchases-container');
+    if (recentsContainer) {
+      recentsContainer.innerHTML = StorageHelper.renderRecentPurchasesWidget();
+    }
+    
     // 2. Render Funding Accounts list
     const fundingContainer = document.getElementById('funding-accounts-container');
     if (fundingContainer) {
@@ -154,6 +206,10 @@ const ScreenDashboard = {
             No transactions found yet.
           </div>
         `;
+      }
+
+      if (window.SyncEngine) {
+        window.SyncEngine.refreshLocalTransactionLogs();
       }
     }
   },

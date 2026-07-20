@@ -3,13 +3,32 @@ const ScreenBuy = {
   service: 'airtime',
   selectedNetwork: '',
   catalog: [],
-  
+  networks: [],
+
+  // Load available networks from dashboard cache (service_networks.airtime or .data)
+  loadNetworks() {
+    try {
+      const cache = localStorage.getItem('gemdata_dashboard_cache');
+      if (cache) {
+        const parsed = JSON.parse(cache);
+        const serviceKey = this.service === 'data' ? 'data' : 'airtime';
+        this.networks = (parsed.service_networks && parsed.service_networks[serviceKey]) || [];
+        if (this.service === 'data') {
+          this.catalog = parsed.data_plan_catalog || [];
+        }
+      }
+    } catch (e) {
+      this.networks = [];
+    }
+  },
+
   mount(container, params) {
     this.container = container;
     this.service = params.service === 'data' ? 'data' : 'airtime';
     this.selectedNetwork = '';
+    this.networks = [];
     
-    // Load data plan catalog from cache
+    // Load data plan catalog and network list from cache
     const cache = localStorage.getItem('gemdata_dashboard_cache');
     this.catalog = [];
     if (cache) {
@@ -20,6 +39,7 @@ const ScreenBuy = {
       }
     }
 
+    this.loadNetworks();
     this.renderForm();
   },
 
@@ -40,22 +60,27 @@ const ScreenBuy = {
           <div id="buy-feedback"></div>
 
           <form id="buy-form" style="display: flex; flex-direction: column; gap: 16px;">
-            <!-- Network buttons -->
+            <!-- Network buttons (dynamically populated from service_networks) -->
             <div class="form-group">
               <span class="form-label">Select Network</span>
-              <div class="grid-cols-2" style="grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px;">
-                ${['mtn', 'airtel', 'glo', '9mobile'].map(net => `
-                  <button type="button" class="net-btn" data-network="${net}" onclick="ScreenBuy.selectNetwork('${net}')" style="background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 6px; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; cursor: pointer; transition: var(--transition-smooth); color: var(--color-text-muted);">
-                    ${net === '9mobile' ? '9Mob' : net}
-                  </button>
-                `).join('')}
+              <div id="network-buttons-grid" class="grid-cols-2" style="grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px;">
+                <span style="font-size: 0.82rem; color: var(--color-text-muted);">Loading networks...</span>
               </div>
             </div>
+
+            <!-- Favorites select dropdown -->
+            ${StorageHelper.renderFavoritesDropdown('phone', 'buy-favs-dropdown', 'ScreenBuy.selectFavorite')}
 
             <!-- Recipient Input -->
             <div class="form-group">
               <label class="form-label" for="buy-phone">Phone Number</label>
               <input class="form-control" type="tel" id="buy-phone" required placeholder="e.g. 08030000000">
+            </div>
+
+            <!-- Save Favorite Checkbox -->
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem; margin-top: -6px; margin-bottom: 8px;">
+              <input type="checkbox" id="buy-save-fav" style="cursor: pointer;">
+              <label for="buy-save-fav" style="color: var(--color-text-muted); cursor: pointer; user-select: none;">Save as Favorite</label>
             </div>
 
             <!-- Conditional Airtime / Data inputs -->
@@ -116,6 +141,27 @@ const ScreenBuy = {
         App.updateHeaderBalance(JSON.parse(cache).wallet.balance);
       } catch (e) {}
     }
+
+    // Render network buttons after HTML is in DOM
+    this.renderNetworks();
+  },
+
+  renderNetworks() {
+    const grid = document.getElementById('network-buttons-grid');
+    if (!grid) return;
+
+    if (this.networks.length === 0) {
+      grid.innerHTML = `<span style="font-size: 0.82rem; color: var(--color-text-muted);">No networks available. Please refresh the app.</span>`;
+      return;
+    }
+
+    const maxCols = Math.min(this.networks.length, 4);
+    grid.style.gridTemplateColumns = `repeat(${maxCols}, 1fr)`;
+    grid.innerHTML = this.networks.map(net => {
+      const code = net.network_code;
+      const label = net.network_name.length > 7 ? net.network_name.substring(0, 6) + '.' : net.network_name;
+      return `<button type="button" class="net-btn" data-network="${code}" onclick="ScreenBuy.selectNetwork('${code}')" style="background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 6px; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; cursor: pointer; transition: var(--transition-smooth); color: var(--color-text-muted);">${label}</button>`;
+    }).join('');
   },
 
   selectNetwork(net) {
@@ -193,6 +239,15 @@ const ScreenBuy = {
     document.getElementById('wallet-pin').focus();
   },
 
+  selectFavorite(val) {
+    if (val) {
+      document.getElementById('buy-phone').value = val;
+      if (window.Logger) {
+        window.Logger.triggerHaptic('light');
+      }
+    }
+  },
+
   hidePinModal() {
     document.getElementById('pin-modal').style.display = 'none';
     document.getElementById('wallet-pin').value = '';
@@ -225,6 +280,26 @@ const ScreenBuy = {
     }
 
     const endpoint = this.service === 'data' ? '/services/buy-data.php' : '/services/buy-airtime.php';
+    
+    // Check if offline, queue request if so
+    if (!navigator.onLine) {
+      const description = this.service === 'data' ? `Data: ${network.toUpperCase()} (${phone})` : `Airtime: ${network.toUpperCase()} (${phone})`;
+      SyncEngine.enqueue(endpoint, payload, description);
+      this.hidePinModal();
+      pinBtn.disabled = false;
+      pinBtn.textContent = 'Confirm';
+      
+      const feedback = document.getElementById('buy-feedback');
+      if (feedback) {
+        feedback.innerHTML = `
+          <div class="alert alert-warning">
+            <strong>Offline Mode!</strong> Your transaction has been queued and will process automatically when your connection is restored.
+          </div>
+        `;
+      }
+      return;
+    }
+
     const result = await Api.post(endpoint, payload);
 
     this.hidePinModal();
@@ -241,6 +316,19 @@ const ScreenBuy = {
           </div>
         `;
         
+        // Handle saving favorite beneficiary if checked
+        const saveFav = document.getElementById('buy-save-fav')?.checked;
+        if (saveFav) {
+          const label = prompt('Enter a label for this saved number:', network.toUpperCase());
+          if (label && label.trim() !== '') {
+            StorageHelper.addFavorite('phone', phone, label);
+          }
+        }
+
+        // Cache this transaction inside Recents list
+        const recDescription = `${network.toUpperCase()} (${phone})`;
+        StorageHelper.addRecent(this.service, { network, phone, amount, plan }, recDescription);
+
         // Reset form inputs
         document.getElementById('buy-phone').value = '';
         document.getElementById('buy-amount').value = '';

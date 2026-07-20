@@ -39,25 +39,25 @@ const ScreenProfile = {
 
           <!-- Settings list links -->
           <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;">
-            <div class="menu-card" style="flex-direction: row; align-items: center; justify-content: space-between; padding: 18px;">
+            <div class="menu-card" style="flex-direction: row; align-items: center; justify-content: space-between; padding: 18px; cursor: pointer;" onclick="Router.navigate('#/security')">
               <div>
-                <div style="font-size: 0.88rem; font-weight: 800;">Wallet Security PIN</div>
-                <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 1px;">Update transaction PIN</div>
+                <div style="font-size: 0.88rem; font-weight: 800;">Account & PIN Security</div>
+                <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 1px;">Update password and Wallet PIN</div>
               </div>
               <span style="color: var(--color-text-muted); font-size: 0.88rem;">&gt;</span>
             </div>
 
-            <div class="menu-card" style="flex-direction: row; align-items: center; justify-content: space-between; padding: 18px;">
+            <div class="menu-card" style="flex-direction: row; align-items: center; justify-content: space-between; padding: 18px; cursor: pointer;" onclick="Router.navigate('#/upgrade')">
               <div>
-                <div style="font-size: 0.88rem; font-weight: 800;">Push Notifications</div>
-                <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 1px;">Preferences configure</div>
+                <div style="font-size: 0.88rem; font-weight: 800;">Upgrade Account</div>
+                <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 1px;">Request Reseller or API access tier</div>
               </div>
               <span style="color: var(--color-text-muted); font-size: 0.88rem;">&gt;</span>
             </div>
           </div>
 
           <!-- Log out action -->
-          <button class="btn-primary" onclick="ScreenProfile.handleLogout()" style="background: var(--color-danger); box-shadow: 0 8px 24px hsla(350, 89%, 60%, 0.25);">
+          <button class="btn-primary" onclick="App.logout()" style="background: var(--color-danger); box-shadow: 0 8px 24px hsla(350, 89%, 60%, 0.25);">
             Logout Account
           </button>
         </main>
@@ -65,15 +65,6 @@ const ScreenProfile = {
         ${App.renderNavigation('#/profile')}
       </div>
     `;
-  },
-
-  async handleLogout() {
-    if (confirm('Are you sure you want to log out of your GemData account?')) {
-      await Api.post('/auth/logout.php');
-      localStorage.removeItem('gemdata_user_cache');
-      localStorage.removeItem('gemdata_dashboard_cache');
-      Router.navigate('#/login');
-    }
   },
 
   unmount() {

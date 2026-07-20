@@ -42,9 +42,19 @@ const Router = {
     this.currentScreen = screen;
     const container = document.getElementById('app-container');
     
-    // Mount screen views
-    if (typeof screen.mount === 'function') {
-      await screen.mount(container, queryParams);
+    // Mount screen views — wrapped in try/finally so the splash ALWAYS hides
+    // even if mount() throws an unhandled exception (prevents permanent hang)
+    try {
+      if (typeof screen.mount === 'function') {
+        await screen.mount(container, queryParams);
+      }
+    } catch (err) {
+      console.error('[Router] screen.mount() threw an unhandled error:', err);
+    } finally {
+      // Dismiss native splash screen unconditionally
+      if (window.App && typeof window.App.hideSplashScreen === 'function') {
+        window.App.hideSplashScreen();
+      }
     }
   },
 
