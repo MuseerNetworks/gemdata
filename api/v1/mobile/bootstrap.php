@@ -168,15 +168,21 @@ function get_bearer_token(): ?string
 if (session_status() === PHP_SESSION_ACTIVE && empty($_SESSION['user_id'])) {
     $bearer = get_bearer_token();
     if ($bearer !== null) {
-        $tokenHash = hash('sha256', $bearer);
-        $tokenRow = db()->first(
-            'SELECT * FROM mobile_device_tokens WHERE token_hash = :hash AND expires_at > NOW() LIMIT 1',
-            ['hash' => $tokenHash]
-        );
-        if ($tokenRow) {
-            $_SESSION['user_id'] = (int) $tokenRow['user_id'];
-            $_SESSION['last_activity_at'] = time();
-            $_SESSION['mobile_device_id'] = (string) $tokenRow['device_id'];
+        try {
+            $tokenHash = hash('sha256', $bearer);
+            $tokenRow = db()->first(
+                'SELECT * FROM mobile_device_tokens WHERE token_hash = :hash AND expires_at > NOW() LIMIT 1',
+                ['hash' => $tokenHash]
+            );
+            if ($tokenRow) {
+                $_SESSION['user_id'] = (int) $tokenRow['user_id'];
+                $_SESSION['last_activity_at'] = time();
+                $_SESSION['mobile_device_id'] = (string) $tokenRow['device_id'];
+            }
+        } catch (Throwable $tokenEx) {
+            // mobile_device_tokens table may not exist yet — skip token auth, fall back to session
+            // Run the SQL migration (database/migrations/mobile_tables.sql) to enable persistent token auth
+            error_log('[GemData Mobile] Bearer token lookup failed (table may not exist): ' . $tokenEx->getMessage());
         }
     }
 }

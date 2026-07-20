@@ -51,43 +51,56 @@ if ($checkUser && !empty($checkUser['security_lock_until']) && strtotime((string
 
 if (auth()->loginUser($email, $password)) {
     $user = user();
-    
-    // Generate secure refresh token for mobile app auto-login/token storage
+
+    // Generate secure refresh token for persistent mobile app sessions
     $refreshToken = bin2hex(random_bytes(32));
-    $tokenHash = hash('sha256', $refreshToken);
-    $deviceId = trim((string) ($input['device_id'] ?? 'unknown_device'));
-    $expiresAt = date('Y-m-d H:i:s', time() + 30 * 86400); // Valid for 30 days
-    
-    $db = db();
-    // Delete any old session token for this user and device
-    $db->execute('DELETE FROM mobile_device_tokens WHERE user_id = :user_id AND device_id = :device_id', [
-        'user_id' => (int) $user['id'],
-        'device_id' => $deviceId
-    ]);
-    
-    // Store new token
-    $db->execute(
-        'INSERT INTO mobile_device_tokens (user_id, device_id, token_hash, expires_at) 
-         VALUES (:user_id, :device_id, :token_hash, :expires_at)',
-        [
-            'user_id' => (int) $user['id'],
-            'device_id' => $deviceId,
-            'token_hash' => $tokenHash,
-            'expires_at' => $expiresAt
-        ]
-    );
+    $tokenHash    = hash('sha256', $refreshToken);
+    $deviceId     = trim((string) ($input['device_id'] ?? 'unknown_device'));
+    $expiresAt    = date('Y-m-d H:i:s', time() + 30 * 86400); // 30 days
+
+    try {
+        $db = db();
+        // Delete any existing token for this user+device before inserting new one
+        $db->execute(
+            'DELETE FROM mobile_device_tokens WHERE user_id = :user_id AND device_id = :device_id',
+            ['user_id' => (int) $user['id'], 'device_id' => $deviceId]
+        );
+        // Store new refresh token
+        $db->execute(
+            'INSERT INTO mobile_device_tokens (user_id, device_id, token_hash, expires_at)
+             VALUES (:user_id, :device_id, :token_hash, :expires_at)',
+            [
+                'user_id'    => (int) $user['id'],
+                'device_id'  => $deviceId,
+                'token_hash' => $tokenHash,
+                'expires_at' => $expiresAt,
+            ]
+        );
+    } catch (Throwable $tokenEx) {
+        // mobile_device_tokens table may not exist yet.
+        // Login still succeeds — run the SQL migration to enable persistent token auth.
+        error_log('[GemData Mobile] Token storage failed: ' . $tokenEx->getMessage());
+    }
+
+    $walletBalance = 0.0;
+    try {
+        $walletRow = db()->safeFirst('SELECT balance FROM wallets WHERE user_id = :id LIMIT 1', ['id' => (int) $user['id']]);
+        $walletBalance = (float) ($walletRow['balance'] ?? $user['balance'] ?? 0);
+    } catch (Throwable $e) {
+        $walletBalance = (float) ($user['balance'] ?? 0);
+    }
 
     http_response_code(200);
     echo json_encode([
         'success' => true,
         'message' => 'Successfully authenticated.',
-        'data' => [
+        'data'    => [
             'refresh_token' => $refreshToken,
-            'user' => [
-                'id' => (int) $user['id'],
-                'email' => (string) $user['email'],
+            'user'          => [
+                'id'        => (int) $user['id'],
+                'email'     => (string) $user['email'],
                 'full_name' => (string) $user['full_name'],
-                'balance' => (float) $user['balance']
+                'balance'   => $walletBalance
             ]
         ]
     ]);
