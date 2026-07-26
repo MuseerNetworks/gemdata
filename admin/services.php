@@ -78,10 +78,15 @@ if (is_post()) {
     }
 }
 
+// Correlated subquery ensures exactly ONE commission row per service (no multi-row
+// rendering due to duplicate commission entries). Uses ORDER BY id DESC so the most
+// recently written row is always returned, consistent with upsert() behaviour.
 $services = db()->query(
-    'SELECT s.*, c.rate_percent AS default_rate
+    'SELECT s.*,
+            (SELECT rate_percent FROM commissions
+             WHERE service_id = s.id AND user_id IS NULL
+             ORDER BY id DESC LIMIT 1) AS default_rate
      FROM services s
-     LEFT JOIN commissions c ON c.service_id = s.id AND c.user_id IS NULL
      ORDER BY s.name'
 );
 $apiUsers = db()->query('SELECT id, full_name FROM users WHERE is_api_user = 1 ORDER BY full_name');
@@ -404,7 +409,7 @@ render_header('Services', 'admin');
                             <td><?= trim((string) ($mapping['validity_label'] ?? '')) !== '' ? e((string) $mapping['validity_label']) : '&mdash;'; ?></td>
                             <td><?= e($mapping['provider_plan_id'] . ((string) ($mapping['provider_plan_name'] ?? '') !== '' ? ' - ' . $mapping['provider_plan_name'] : '')); ?></td>
                             <td><?= e(money($mapping['amount'])); ?></td>
-                            <td><?= $mapping['provider_cost_price'] !== null ? e(money($mapping['provider_cost_price'])) : '—'; ?></td>
+                            <td><?= $mapping['provider_cost_price'] !== null ? e(money($mapping['provider_cost_price'])) : '&mdash;'; ?></td>
                             <td><?= (int) $mapping['is_enabled'] === 1 ? 'Enabled' : 'Disabled'; ?></td>
                         </tr>
                     <?php endforeach; ?>
