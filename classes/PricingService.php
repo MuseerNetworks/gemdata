@@ -109,13 +109,25 @@ class PricingService
         $configuredSelling = (float) ($price['selling_price'] ?? 0);
         $costPrice = (float) ($price['cost_price'] ?? 0);
         $sellingPrice = $requestedAmount > 0 ? $requestedAmount : $configuredSelling;
-        $profitAmount = max(0, $sellingPrice - ($costPrice > 0 ? $costPrice : $sellingPrice));
+
+        if ($requestedAmount > 0) {
+            if ($configuredSelling > 0 && $costPrice > 0) {
+                $costRatio = min(1.0, $costPrice / $configuredSelling);
+                $costPrice = round($requestedAmount * $costRatio, 2);
+            } else {
+                $costPrice = $sellingPrice;
+            }
+        } else {
+            $costPrice = $costPrice > 0 ? $costPrice : $sellingPrice;
+        }
+
+        $profitAmount = max(0, round($sellingPrice - $costPrice, 2));
 
         $resolved = [
             'tier' => $tier,
             'network_code' => $networkCode,
             'selling_price' => $sellingPrice,
-            'cost_price' => $costPrice > 0 ? $costPrice : $sellingPrice,
+            'cost_price' => $costPrice,
             'profit_amount' => $profitAmount,
             'pricing_source' => $price ? 'tier' : 'legacy',
         ];
