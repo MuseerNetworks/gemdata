@@ -52,7 +52,15 @@ if (is_post()) {
                 db()->execute('UPDATE services SET is_enabled = :enabled WHERE id = :id', ['enabled' => (int) ($_POST['enabled'] ?? 0), 'id' => $serviceId]);
             }
             if ($action === 'commission') {
-                app(\GemData\Classes\Commission::class)->upsert(($_POST['user_id'] ?? '') === '' ? null : (int) $_POST['user_id'], $serviceId, (float) ($_POST['rate_percent'] ?? 0));
+                // Only 'reseller' and 'api' are valid configurable types.
+                // Any other value (including User / Agent) is rejected silently.
+                $commUserType = in_array($_POST['user_type'] ?? '', \GemData\Classes\Commission::CONFIGURABLE_TYPES, true)
+                    ? (string) $_POST['user_type']
+                    : '';
+                if ($commUserType === '') {
+                    throw new \InvalidArgumentException('Invalid commission user type. Only "reseller" and "api" are supported.');
+                }
+                app(\GemData\Classes\Commission::class)->upsert(null, $serviceId, (float) ($_POST['rate_percent'] ?? 0), $commUserType);
             }
             if ($action === 'toggle_network') {
                 db()->execute('UPDATE service_networks SET is_enabled = :enabled WHERE id = :id', ['enabled' => (int) ($_POST['enabled'] ?? 0), 'id' => (int) ($_POST['network_id'] ?? 0)]);
@@ -78,14 +86,17 @@ if (is_post()) {
     }
 }
 
-// Correlated subquery ensures exactly ONE commission row per service (no multi-row
-// rendering due to duplicate commission entries). Uses ORDER BY id DESC so the most
-// recently written row is always returned, consistent with upsert() behaviour.
+// Load per-type commission rates (reseller and api) independently.
+// Legacy rows (user_type IS NULL) are intentionally excluded from both subqueries;
+// they are preserved in the database but are no longer read by the application.
 $services = db()->query(
     'SELECT s.*,
             (SELECT rate_percent FROM commissions
-             WHERE service_id = s.id AND user_id IS NULL
-             ORDER BY id DESC LIMIT 1) AS default_rate
+             WHERE service_id = s.id AND user_id IS NULL AND user_type = "reseller"
+             ORDER BY id DESC LIMIT 1) AS reseller_rate,
+            (SELECT rate_percent FROM commissions
+             WHERE service_id = s.id AND user_id IS NULL AND user_type = "api"
+             ORDER BY id DESC LIMIT 1) AS api_rate
      FROM services s
      ORDER BY s.name'
 );
@@ -113,16 +124,22 @@ render_header('Services', 'admin');
             <table>
                 <thead>
                     <tr class="text-slate-400">
-                        <th>Service</th><th>Status</th><th>Default Commission</th><th>Tier Pricing</th><th>Actions</th>
+                        <th>Service</th><th>Status</th><th>Commission (Reseller / API User)</th><th>Tier Pricing</th><th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($services as $service): ?>
                         <?php $tierPrices = $pricing->tierPricesByService((int) $service['id']); ?>
-                        <tr data-search-item data-search="<?= e($service['name'] . ' ' . ($service['default_rate'] ?? '0.00')); ?>">
+                        <tr data-search-item data-search="<?= e($service['name']); ?>">
                             <td><?= e($service['name']); ?></td>
                             <td><?= (int) $service['is_enabled'] === 1 ? 'Enabled' : 'Disabled'; ?></td>
-                            <td><?= e((string) ($service['default_rate'] ?? '0.00')); ?>%</td>
+                            <td>
+                                <span class="text-xs text-slate-400">Reseller:</span>
+                                <span class="font-semibold text-white"><?= e(number_format((float) ($service['reseller_rate'] ?? 0), 2)); ?>%</span>
+                                <br>
+                                <span class="text-xs text-slate-400">API User:</span>
+                                <span class="font-semibold text-white"><?= e(number_format((float) ($service['api_rate'] ?? 0), 2)); ?>%</span>
+                            </td>
                             <td>
                                 <div class="space-y-2">
                                     <?php foreach (array_slice($tierPrices, 0, 4) as $price): ?>
@@ -139,19 +156,30 @@ render_header('Services', 'admin');
                                         <input type="hidden" name="enabled" value="<?= (int) $service['is_enabled'] === 1 ? 0 : 1; ?>">
                                         <button class="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950" type="submit"><?= (int) $service['is_enabled'] === 1 ? 'Disable' : 'Enable'; ?></button>
                                     </form>
+                                    <!-- Reseller commission -->
                                     <form method="post" class="flex items-center gap-2">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                         <input type="hidden" name="action" value="commission">
                                         <input type="hidden" name="service_id" value="<?= (int) $service['id']; ?>">
-                                        <input class="w-28 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="rate_percent" placeholder="Rate %" value="<?= e((string) ($service['default_rate'] ?? '0.00')); ?>">
-                                        <button class="rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold" type="submit">Save Commission</button>
+                                        <input type="hidden" name="user_type" value="reseller">
+                                        <input class="w-24 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="rate_percent" placeholder="Reseller %" value="<?= e(number_format((float) ($service['reseller_rate'] ?? 0), 2)); ?>">
+                                        <button class="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm font-semibold text-emerald-300" type="submit">Save Reseller</button>
+                                    </form>
+                                    <!-- API User commission -->
+                                    <form method="post" class="flex items-center gap-2">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                        <input type="hidden" name="action" value="commission">
+                                        <input type="hidden" name="service_id" value="<?= (int) $service['id']; ?>">
+                                        <input type="hidden" name="user_type" value="api">
+                                        <input class="w-24 rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="rate_percent" placeholder="API User %" value="<?= e(number_format((float) ($service['api_rate'] ?? 0), 2)); ?>">
+                                        <button class="rounded-lg border border-violet-500/40 px-3 py-2 text-sm font-semibold text-violet-300" type="submit">Save API User</button>
                                     </form>
                                 </div>
                                 <form method="post" class="mt-3 grid gap-2 md:grid-cols-5">
                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                     <input type="hidden" name="action" value="save_tier_price">
                                     <input type="hidden" name="service_id" value="<?= (int) $service['id']; ?>">
-                                    <select class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="tier"><?php foreach (['USER','RESELLER','AGENT','API_RESELLER'] as $tier): ?><option value="<?= e($tier); ?>"><?= e($tier); ?></option><?php endforeach; ?></select>
+                                    <select class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="tier"><?php foreach (['RESELLER','API_RESELLER'] as $tier): ?><option value="<?= e($tier); ?>"><?= e($tier); ?></option><?php endforeach; ?></select>
                                     <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="network_code" placeholder="network">
                                     <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="cost_price" placeholder="cost price">
                                     <input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2" name="selling_price" placeholder="selling price">

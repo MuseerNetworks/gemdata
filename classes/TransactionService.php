@@ -483,13 +483,26 @@ class TransactionService
             $providerAccount = $providerResponse['provider_account'] ?? null;
             $commissionAmount = 0.0;
             if ($status === 'successful') {
-                // Resolve user type to determine commission eligibility
-                $txUser = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
-                $isReseller = in_array($txUser['user_type'] ?? '', ['reseller', 'api'], true)
-                           || in_array($txUser['tier'] ?? '', ['RESELLER', 'API_RESELLER'], true)
-                           || (int) ($txUser['is_api_user'] ?? 0) === 1;
-                if ($isReseller) {
-                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
+                // Resolve the user's commission category ('reseller' or 'api').
+                // Only these two types earn commissions; 'smart' users do not.
+                // The resolved string is passed to resolveRate() so that type-based
+                // commission rows are consulted instead of the legacy NULL-user_type rows.
+                $txUser      = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $commUserType = '';
+                if (
+                    in_array($txUser['user_type'] ?? '', ['reseller'], true)
+                    || in_array($txUser['tier'] ?? '', ['RESELLER'], true)
+                ) {
+                    $commUserType = \GemData\Classes\Commission::TYPE_RESELLER;
+                } elseif (
+                    in_array($txUser['user_type'] ?? '', ['api'], true)
+                    || in_array($txUser['tier'] ?? '', ['API_RESELLER'], true)
+                    || (int) ($txUser['is_api_user'] ?? 0) === 1
+                ) {
+                    $commUserType = \GemData\Classes\Commission::TYPE_API;
+                }
+                if ($commUserType !== '') {
+                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id'], $commUserType);
                     $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
                     $this->commission->creditToWallet(
                         (int) $locked['user_id'],
@@ -1113,12 +1126,22 @@ class TransactionService
 
             $commissionAmount = (float) ($locked['commission_amount'] ?? 0);
             if ($commissionAmount <= 0) {
-                $reconUser = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
-                $isReseller = in_array($reconUser['user_type'] ?? '', ['reseller', 'api'], true)
-                           || in_array($reconUser['tier'] ?? '', ['RESELLER', 'API_RESELLER'], true)
-                           || (int) ($reconUser['is_api_user'] ?? 0) === 1;
-                if ($isReseller) {
-                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id']);
+                $reconUser    = $this->db->first('SELECT user_type, tier, is_api_user FROM users WHERE id = :id LIMIT 1', ['id' => (int) $locked['user_id']]);
+                $commUserType = '';
+                if (
+                    in_array($reconUser['user_type'] ?? '', ['reseller'], true)
+                    || in_array($reconUser['tier'] ?? '', ['RESELLER'], true)
+                ) {
+                    $commUserType = \GemData\Classes\Commission::TYPE_RESELLER;
+                } elseif (
+                    in_array($reconUser['user_type'] ?? '', ['api'], true)
+                    || in_array($reconUser['tier'] ?? '', ['API_RESELLER'], true)
+                    || (int) ($reconUser['is_api_user'] ?? 0) === 1
+                ) {
+                    $commUserType = \GemData\Classes\Commission::TYPE_API;
+                }
+                if ($commUserType !== '') {
+                    $rate = $this->commission->resolveRate((int) $locked['user_id'], (int) $locked['service_id'], $commUserType);
                     $commissionAmount = round(((float) $locked['amount'] * $rate) / 100, 2);
                     $this->commission->creditToWallet(
                         (int) $locked['user_id'],
