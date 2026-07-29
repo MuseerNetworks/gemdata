@@ -20,3 +20,9 @@ includes/config.local.php
 .DS_Store
 Thumbs.db
 fallback_test.php
+
+# Android release artifacts
+*.apk
+android/*.jks
+check_mobile_db.php
+storage/backups/

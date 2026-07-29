@@ -18,34 +18,139 @@
 
   <!-- Main SPA Container -->
   <div id="app-container">
-    <!-- Instant load splash loading template screen -->
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; background: var(--color-bg);">
-      <div style="width: 72px; height: 72px; display: grid; place-items: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 20px; box-shadow: var(--shadow-md); margin-bottom: 16px;">
-        <span style="font-size: 2rem; font-weight: 900; color: var(--color-primary);">G</span>
+    <div class="mobile-launch-screen" role="status" aria-live="polite">
+      <div class="mobile-launch-logo" aria-hidden="true">
+        <img src="assets/brand/icon.png" alt="">
       </div>
-      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--color-text);">GemData</h2>
-      <div style="width: 24px; height: 24px; border: 3px solid var(--color-primary-soft); border-top-color: var(--color-primary); border-radius: 99px; animation: spin 800ms linear infinite; margin-top: 16px;"></div>
+      <h1>GemData</h1>
+      <p>Fast &bull; Secure &bull; Reliable</p>
+      <span class="mobile-launch-dots" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
     </div>
   </div>
 
-  <style>
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
+  <!-- Sidebar Navigation Drawer Overlay -->
+  <div id="app-sidebar" class="app-sidebar-overlay" onclick="if (event.target === this) App.toggleSidebar(false)">
+    <div class="app-sidebar-drawer">
+      <div class="sidebar-header">
+        <div class="sidebar-profile">
+          <div class="profile-initial" id="sidebar-user-initial">G</div>
+          <div class="profile-info">
+            <div class="profile-name" id="sidebar-user-name">Guest User</div>
+            <div class="profile-role" id="sidebar-user-tier">Smart User</div>
+          </div>
+        </div>
+        <button class="sidebar-close-btn" onclick="App.toggleSidebar(false)">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      
+      <div class="sidebar-content">
+        <div class="sidebar-section">
+          <button class="sidebar-item" onclick="Router.navigate('#/dashboard'); App.toggleSidebar(false)">
+            <span>Dashboard</span>
+          </button>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Services</div>
+          <button class="sidebar-item" onclick="Router.navigate('#/buy?service=airtime'); App.toggleSidebar(false)">
+            <span>Buy Airtime</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/buy?service=data'); App.toggleSidebar(false)">
+            <span>Buy Data</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/cable'); App.toggleSidebar(false)">
+            <span>Cable TV Sub</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/electricity'); App.toggleSidebar(false)">
+            <span>Electricity Bill</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/exam'); App.toggleSidebar(false)">
+            <span>Exam PINs</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/recharge'); App.toggleSidebar(false)">
+            <span>Recharge Cards</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/bulksms'); App.toggleSidebar(false)">
+            <span>Bulk SMS</span>
+          </button>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Finance</div>
+          <button class="sidebar-item" onclick="Router.navigate('#/wallet'); App.toggleSidebar(false)">
+            <span>Fund Wallet</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/transactions'); App.toggleSidebar(false)">
+            <span>Transactions</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/withdrawals'); App.toggleSidebar(false)">
+            <span>Withdraw commissions</span>
+          </button>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Account</div>
+          <button class="sidebar-item" onclick="Router.navigate('#/upgrade'); App.toggleSidebar(false)">
+            <span>Upgrade Account</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/security'); App.toggleSidebar(false)">
+            <span>Security Settings</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/profile'); App.toggleSidebar(false)">
+            <span>My Profile</span>
+          </button>
+          <button class="sidebar-item" onclick="Router.navigate('#/referrals'); App.toggleSidebar(false)">
+            <span>Refer & Earn</span>
+          </button>
+          <button class="sidebar-item" onclick="App.openWhatsAppSupport(); App.toggleSidebar(false)">
+            <span style="color: var(--color-success); font-weight: 700;">WhatsApp Support</span>
+          </button>
+        </div>
+      </div>
+      
+      <div class="sidebar-footer">
+        <button class="sidebar-logout-btn" onclick="App.logout(); App.toggleSidebar(false)">
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Capacitor Native bridge script (Auto-injected by Capacitor in Native mode, placeholder here) -->
   <script src="capacitor.js" onerror="console.info('Running in browser context.')"></script>
 
   <!-- Core App Libraries -->
+  <script src="assets/js/logger.js"></script>
+  <script src="assets/js/storage-helper.js"></script>
   <script src="assets/js/api.js"></script>
   <script src="assets/js/router.js"></script>
+  <script src="assets/js/sync.js"></script>
+  <script src="assets/js/biometrics.js"></script>
+  <script src="assets/js/push.js"></script>
 
   <!-- View Screens -->
+  <script src="assets/js/screens/welcome.js"></script>
   <script src="assets/js/screens/login.js"></script>
+  <script src="assets/js/screens/register.js"></script>
   <script src="assets/js/screens/dashboard.js"></script>
   <script src="assets/js/screens/wallet.js"></script>
   <script src="assets/js/screens/buy.js"></script>
+  <script src="assets/js/screens/cable.js"></script>
+  <script src="assets/js/screens/electricity.js"></script>
+  <script src="assets/js/screens/exam.js"></script>
+  <script src="assets/js/screens/services.js"></script>
+  <script src="assets/js/screens/recharge.js"></script>
+  <script src="assets/js/screens/bulksms.js"></script>
+  <script src="assets/js/screens/withdrawals.js"></script>
+  <script src="assets/js/screens/referrals.js"></script>
+  <script src="assets/js/screens/security.js"></script>
+  <script src="assets/js/screens/upgrade.js"></script>
+  <script src="assets/js/screens/receipt.js"></script>
   <script src="assets/js/screens/profile.js"></script>
   <script src="assets/js/screens/transactions.js"></script>
 

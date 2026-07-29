@@ -22,14 +22,41 @@ class SessionAuth
             $this->logUserLogin(null, $email, false);
             return false;
         }
-        if (!password_verify($password, $user['password_hash'])) {
-            $this->logUserLogin((int) $user['id'], $email, false);
+
+        if (!empty($user['security_lock_until']) && strtotime((string) $user['security_lock_until']) > time()) {
+            $this->logUserLogin((int) $user['id'], $email, false, 'locked');
             return false;
         }
+
+        if (!password_verify($password, $user['password_hash'])) {
+            $this->logUserLogin((int) $user['id'], $email, false);
+            
+            // Check if user has exceeded consecutive login failures in the window
+            $windowMinutes = max(1, (int) config('app.user_login_attempt_window_minutes', 15));
+            $limit = max(1, (int) config('app.user_login_attempt_limit', 5));
+            $window = (int) $windowMinutes;
+            $failedCount = $this->db->first(
+                'SELECT COUNT(*) AS total FROM user_login_logs 
+                 WHERE user_id = :user_id AND was_successful = 0 
+                   AND created_at >= DATE_SUB(NOW(), INTERVAL ' . $window . ' MINUTE)',
+                ['user_id' => (int) $user['id']]
+            );
+
+            if ((int) ($failedCount['total'] ?? 0) >= $limit) {
+                $this->db->execute(
+                    'UPDATE users SET security_lock_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE id = :id',
+                    ['id' => (int) $user['id']]
+                );
+                $this->logger->log('user', (int) $user['id'], 'user_account_locked', 'Account locked due to consecutive login failures.');
+            }
+
+            return false;
+        }
+
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $user['id'];
         $_SESSION['last_activity_at'] = time();
-        $this->db->execute('UPDATE users SET last_login_at = NOW() WHERE id = :id', ['id' => $user['id']]);
+        $this->db->execute('UPDATE users SET last_login_at = NOW(), security_lock_until = NULL WHERE id = :id', ['id' => $user['id']]);
         $this->logUserLogin((int) $user['id'], $email, true, 'success');
         return true;
     }
