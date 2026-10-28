@@ -4,6 +4,19 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 
 $pendingAdmin = auth()->pendingTwoFactorAdmin();
 if (!$pendingAdmin) { redirect(base_url('admin/login.php')); }
+
+// The pending-login session is intentionally created before enrollment. Read
+// the current enrollment state from the database so a newly generated secret
+// remains stable across the QR display and the form submission.
+$currentAdmin = db()->first(
+    'SELECT id, email, two_factor_enabled, two_factor_secret FROM admins WHERE id = :id AND is_active = 1 LIMIT 1',
+    ['id' => (int) $pendingAdmin['id']]
+);
+if (!$currentAdmin) {
+    auth()->clearPendingAdminTwoFactor();
+    redirect(base_url('admin/login.php'));
+}
+$pendingAdmin = array_merge($pendingAdmin, $currentAdmin);
 $error = null;
 $isEnrollment = (int) ($pendingAdmin['two_factor_enabled'] ?? 0) !== 1;
 $secret = trim((string) ($pendingAdmin['two_factor_secret'] ?? ''));
