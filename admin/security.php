@@ -19,7 +19,18 @@ if (is_post()) {
     }
 
     try {
-        if ($action === 'fraud_status') {
+        if ($action === 'reset_admin_2fa') {
+            if (($admin['role_slug'] ?? '') !== 'super_admin') {
+                throw new RuntimeException('Only a Super Admin can reset administrator two-factor authentication.');
+            }
+            $targetAdminId = (int) ($_POST['target_admin_id'] ?? 0);
+            $password = (string) ($_POST['admin_password'] ?? '');
+            if ($targetAdminId < 1 || !auth()->confirmAdminPassword((int) $admin['id'], $password)) {
+                throw new RuntimeException('Password confirmation failed. No two-factor reset was applied.');
+            }
+            auth()->resetAdminTwoFactor($targetAdminId, (int) $admin['id']);
+            flash('success', 'The admin two-factor enrollment was reset. They must enroll a new authenticator at their next login.');
+        } elseif ($action === 'fraud_status') {
             $status = (string) ($_POST['review_status'] ?? 'reviewing');
             if (!in_array($status, ['reviewing', 'dismissed', 'confirmed'], true)) {
                 throw new RuntimeException('Unsupported fraud review status.');
@@ -99,6 +110,9 @@ $webhookFailures = db()->tableExists('webhook_dead_letters')
     ? db()->query('SELECT * FROM webhook_dead_letters ORDER BY id DESC LIMIT 20')
     : db()->query('SELECT * FROM webhook_events WHERE processing_status = "failed" ORDER BY id DESC LIMIT 20');
 $activity = db()->query('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 35');
+$adminTwoFactorRows = ($admin['role_slug'] ?? '') === 'super_admin'
+    ? db()->query('SELECT a.id, a.full_name, a.email, a.two_factor_enabled, a.last_login_at, r.slug AS role_slug FROM admins a LEFT JOIN admin_roles r ON r.id = a.role_id WHERE a.is_active = 1 ORDER BY a.full_name ASC')
+    : [];
 
 render_header('Security Center', 'admin');
 ?>
@@ -109,6 +123,18 @@ render_header('Security Center', 'admin');
         <h1 class="mt-2 text-3xl font-black text-white">Security Center</h1>
         <p class="mt-2 text-slate-400">Review fraud events, duplicate patterns, API pressure, webhook failures, and sensitive admin activity.</p>
     </section>
+    <?php if (($admin['role_slug'] ?? '') === 'super_admin'): ?>
+    <section class="surface-card p-6">
+        <p class="eyebrow">Administrator access</p>
+        <h2 class="mt-2 text-2xl font-black text-white">Admin two-factor authentication</h2>
+        <p class="mt-2 text-slate-400">Reset only when an administrator has lost their authenticator. This action is recorded and forces QR enrollment at the next login.</p>
+        <div class="table-shell mt-4"><table><thead><tr class="text-slate-400"><th>Admin</th><th>Role</th><th>2FA status</th><th>Last login</th><th>Reset</th></tr></thead><tbody>
+        <?php foreach ($adminTwoFactorRows as $twoFactorAdmin): ?>
+            <tr><td><div class="font-semibold text-white"><?= e($twoFactorAdmin['full_name']); ?></div><div class="text-xs text-slate-400"><?= e($twoFactorAdmin['email']); ?></div></td><td><?= e($twoFactorAdmin['role_slug'] ?? 'admin'); ?></td><td><?= (int) $twoFactorAdmin['two_factor_enabled'] === 1 ? 'Enrolled' : 'Enrollment required'; ?></td><td><?= e($twoFactorAdmin['last_login_at'] ?? 'Never'); ?></td><td><form method="post" class="grid gap-2"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>"><input type="hidden" name="action" value="reset_admin_2fa"><input type="hidden" name="target_admin_id" value="<?= (int) $twoFactorAdmin['id']; ?>"><input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="admin_password" type="password" placeholder="Confirm your password" required><input class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm" name="reason" value="Super admin 2FA reset" required><button class="secondary-action" type="submit">Reset 2FA</button></form></td></tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+    </section>
+    <?php endif; ?>
     <div class="grid gap-4 md:grid-cols-4">
         <div class="surface-card p-5"><p class="text-slate-400">Open Fraud Events</p><p class="mt-2 text-3xl font-black text-white"><?= (int) $riskSummary['open_fraud']; ?></p></div>
         <div class="surface-card p-5"><p class="text-slate-400">High Risk This Week</p><p class="mt-2 text-3xl font-black text-white"><?= (int) $riskSummary['high_risk']; ?></p></div>

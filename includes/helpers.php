@@ -262,6 +262,19 @@ function human_datetime(?string $value): string
     }
 }
 
+function totp_provisioning_uri(string $accountName, string $secret): string
+{
+    $issuer = trim((string) config('app.name', 'GemData')) ?: 'GemData';
+    $label = $issuer . ':' . trim($accountName);
+    return 'otpauth://totp/' . rawurlencode($label) . '?' . http_build_query([
+        'secret' => $secret,
+        'issuer' => $issuer,
+        'algorithm' => 'SHA1',
+        'digits' => 6,
+        'period' => 30,
+    ], '', '&', PHP_QUERY_RFC3986);
+}
+
 function local_datetime(?string $value, string $format = 'M j, Y g:i A'): string
 {
     if (!$value) {

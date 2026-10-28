@@ -258,6 +258,17 @@ CREATE TABLE IF NOT EXISTS provider_expense_logs (
     CONSTRAINT fk_provider_expense_logs_transaction FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS admin_two_factor_recovery_codes (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NOT NULL,
+    code_hash VARCHAR(255) NOT NULL,
+    used_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_admin_two_factor_recovery_codes_active (admin_id, used_at),
+    CONSTRAINT fk_admin_two_factor_recovery_codes_admin
+        FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS owner_withdrawals (
     id INT AUTO_INCREMENT PRIMARY KEY,
     reference VARCHAR(80) NOT NULL UNIQUE,

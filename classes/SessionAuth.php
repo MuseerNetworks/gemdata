@@ -122,13 +122,72 @@ class SessionAuth
 
     public function completeAdminTwoFactor(int $adminId): void
     {
+        $wasEnrolled = (int) (($this->db->first('SELECT two_factor_enabled FROM admins WHERE id = :id LIMIT 1', ['id' => $adminId])['two_factor_enabled'] ?? 0)) === 1;
         session_regenerate_id(true);
         unset($_SESSION['admin_2fa_pending_id']);
         $_SESSION['admin_id'] = $adminId;
         $_SESSION['admin_2fa_verified'] = true;
         $_SESSION['last_activity_at'] = time();
         $this->db->execute('UPDATE admins SET last_login_at = NOW(), two_factor_enabled = 1 WHERE id = :id', ['id' => $adminId]);
-        $this->logger->log('admin', $adminId, 'admin_2fa_verified', 'Admin completed two-factor verification.');
+        if (!$wasEnrolled) {
+            $_SESSION['admin_2fa_recovery_codes'] = $this->generateAdminRecoveryCodes($adminId);
+        }
+        unset($_SESSION['admin_2fa_reenrollment_required']);
+        $this->logger->log('admin', $adminId, $wasEnrolled ? 'admin_2fa_verified' : 'admin_2fa_enrolled', $wasEnrolled ? 'Admin completed two-factor verification.' : 'Admin completed two-factor enrollment and received recovery codes.');
+    }
+
+    public function verifyAdminRecoveryCode(int $adminId, string $code): bool
+    {
+        $normalized = strtoupper(preg_replace('/[^A-Z0-9]/', '', $code) ?? '');
+        if ($normalized === '') {
+            return false;
+        }
+        $codes = $this->db->query(
+            'SELECT id, code_hash FROM admin_two_factor_recovery_codes WHERE admin_id = :admin_id AND used_at IS NULL ORDER BY id ASC',
+            ['admin_id' => $adminId]
+        );
+        foreach ($codes as $recoveryCode) {
+            if (!password_verify($normalized, (string) $recoveryCode['code_hash'])) {
+                continue;
+            }
+            $this->db->execute('UPDATE admin_two_factor_recovery_codes SET used_at = NOW() WHERE id = :id AND used_at IS NULL', ['id' => (int) $recoveryCode['id']]);
+            $this->db->execute('UPDATE admins SET two_factor_secret = NULL, two_factor_enabled = 0 WHERE id = :id', ['id' => $adminId]);
+            $_SESSION['admin_2fa_reenrollment_required'] = true;
+            $this->logger->log('admin', $adminId, 'admin_2fa_recovery_code_used', 'Admin used a recovery code and must enroll a new authenticator.');
+            return true;
+        }
+        return false;
+    }
+
+    public function clearPendingAdminTwoFactor(string $reason = 'too_many_attempts'): void
+    {
+        $adminId = (int) ($_SESSION['admin_2fa_pending_id'] ?? 0);
+        unset($_SESSION['admin_2fa_pending_id'], $_SESSION['admin_2fa_verified'], $_SESSION['admin_2fa_attempts'], $_SESSION['admin_2fa_reenrollment_required']);
+        if ($adminId > 0) {
+            $this->logger->log('admin', $adminId, 'admin_2fa_verification_blocked', 'Admin two-factor verification was ended.', ['reason' => $reason]);
+        }
+    }
+
+    public function resetAdminTwoFactor(int $targetAdminId, int $actingAdminId): void
+    {
+        $this->db->execute('UPDATE admins SET two_factor_secret = NULL, two_factor_enabled = 0 WHERE id = :id', ['id' => $targetAdminId]);
+        $this->db->execute('DELETE FROM admin_two_factor_recovery_codes WHERE admin_id = :admin_id', ['admin_id' => $targetAdminId]);
+        $this->logger->log('admin', $actingAdminId, 'admin_2fa_reset_by_super_admin', 'Super admin reset an admin two-factor enrollment.', ['target_admin_id' => $targetAdminId]);
+    }
+
+    private function generateAdminRecoveryCodes(int $adminId): array
+    {
+        $this->db->execute('DELETE FROM admin_two_factor_recovery_codes WHERE admin_id = :admin_id', ['admin_id' => $adminId]);
+        $codes = [];
+        for ($index = 0; $index < 10; $index++) {
+            $plain = strtoupper(bin2hex(random_bytes(5)));
+            $codes[] = substr($plain, 0, 5) . '-' . substr($plain, 5, 5);
+            $this->db->execute(
+                'INSERT INTO admin_two_factor_recovery_codes (admin_id, code_hash) VALUES (:admin_id, :code_hash)',
+                ['admin_id' => $adminId, 'code_hash' => password_hash($plain, PASSWORD_DEFAULT)]
+            );
+        }
+        return $codes;
     }
 
     public function logoutUser(): void
